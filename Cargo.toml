@@ -1,0 +1,13 @@
+[package]
+name = "xmlhub-indexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ahtml = { path = "../website/libs/ahtml" }
+xmltree = "0.11.0"
+xml-rs = "0.8.24"
+anyhow = "=1.0.65"
+clap = { version = "3", features = ["derive"] }
+chrono = "0.4"
+lazy_static = "1.5.0"
