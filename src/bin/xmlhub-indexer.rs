@@ -820,7 +820,7 @@ impl FileErrors {
 // Parsing and printing functionality, including the main function (the program
 // entry point) at the bottom.
 
-/// Parse all XML comments from above the first XML opening element 
+/// Parse all XML comments from above the first XML opening element
 /// out of one file as `Metadata`.
 fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: HashMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
@@ -1109,8 +1109,8 @@ fn main() -> Result<()> {
     // by `enumerate`ing the values (the enumeration number value is
     // passed as the `id` argument to the function given to `map`).
     // The id is used to refer to each item in the index data structure
-    // built from the `fileinfo_or_errors` further below (could also 
-    // store `&` references in an index; but need some kind of id anyway 
+    // built from the `fileinfo_or_errors` further below (could also
+    // store `&` references in an index; but need some kind of id anyway
     // for the document-local links in the HTML formatting).
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = paths
         .into_iter()
