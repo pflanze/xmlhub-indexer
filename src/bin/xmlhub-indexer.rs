@@ -180,9 +180,9 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
             key: "Keywords",
-            need: AttributeNeed::Optional,
+            need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
-                separator: " ",
+                separator: ",",
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -201,7 +201,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             key: "Packages",
             need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
-                separator: " ",
+                separator: ",",
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
