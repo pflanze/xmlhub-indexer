@@ -147,6 +147,8 @@ enum AttributeKind {
         /// formatting; for that, see the `to_html` method on
         /// AttributeValue.
         separator: &'static str,
+
+        take_first_word: bool,
         /// Whether to automatically link http and https URLs
         autolink: bool,
     },
@@ -183,6 +185,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
                 separator: ",",
+                take_first_word: false,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -202,6 +205,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
                 separator: ",",
+                take_first_word: true,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -264,8 +268,15 @@ lazy_static! {
 /// present.
 #[derive(Debug)]
 enum AttributeValue {
-    String { value: String, autolink: bool },
-    StringList { value: Vec<String>, autolink: bool },
+    String {
+        value: String,
+        autolink: bool,
+    },
+    StringList {
+        value: Vec<String>,
+        autolink: bool,
+        take_first_word: bool,
+    },
     NA,
 }
 
@@ -295,6 +306,7 @@ impl AttributeValue {
                 }),
                 AttributeKind::StringList {
                     separator,
+                    take_first_word,
                     autolink,
                 } => {
                     // (Note: there is no need to replace '\n' with ' '
@@ -318,6 +330,7 @@ impl AttributeValue {
                         }
                     } else {
                         Ok(AttributeValue::StringList {
+                            take_first_word,
                             value: vals,
                             autolink,
                         })
@@ -332,9 +345,24 @@ impl AttributeValue {
     /// allows both sharing of existing vectors as well as holding new
     /// ones; that's just a performance feature, they can be used
     /// wherever a Vec or [] is required.)
-    fn as_string_list(&self) -> Cow<[String]> {
+    /// TODO rename which makes it clear, that it drops everything, if take_first_word is set
+    fn as_string_list_for_indexing(&self) -> Cow<[String]> {
         match self {
-            AttributeValue::StringList { value, autolink: _ } => Cow::from(value.as_slice()),
+            AttributeValue::StringList {
+                value,
+                autolink: _,
+                take_first_word: false,
+            } => Cow::from(value.as_slice()),
+            AttributeValue::StringList {
+                value,
+                autolink: _,
+                take_first_word: true,
+            } => Cow::from(
+                value
+                    .iter()
+                    .map(|x| x.split_whitespace().next().unwrap().into())
+                    .collect::<Vec<_>>(),
+            ),
             AttributeValue::NA => Cow::from(&[]),
             AttributeValue::String { value, autolink: _ } => Cow::from(vec![value.clone()]),
         }
@@ -352,7 +380,11 @@ impl AttributeValue {
                     html.text(value)?.to_aslice(html)
                 }
             }
-            AttributeValue::StringList { value, autolink } => {
+            AttributeValue::StringList {
+                value,
+                autolink,
+                take_first_word: _,
+            } => {
                 let mut body = html.new_vec();
                 let mut need_comma = false;
                 for s in value {
@@ -900,7 +932,7 @@ fn build_index_section(
     for fileinfo_or_error in fileinfo_or_errors {
         if let Ok(fileinfo) = fileinfo_or_error {
             if let Some(attribute_value) = fileinfo.metadata.get(attribute_key) {
-                for keyvalue in attribute_value.as_string_list().iter() {
+                for keyvalue in attribute_value.as_string_list_for_indexing().iter() {
                     id_by_keyvalue.insert_value(
                         if use_lowercase {
                             keyvalue.to_lowercase()
