@@ -14,7 +14,9 @@ changes are uploaded (TODO: do that?).
 
 ### Downloads
 
-You can download pre-built binaries for MacOS and Linux from XXX.
+You can download pre-built binaries (currently for MacOS, built
+manually) from
+[xmlhub-indexer-binaries](https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer-binaries).
 
 ### From source
 
