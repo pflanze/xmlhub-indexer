@@ -63,20 +63,21 @@ struct Opts {
     /// are written in a section at the top of the index files,
     /// though. The same errors are still printed to stderr, and
     /// reported as exit code 1, too, though--see
-    /// `--ok-on-written-errors`-
+    /// `--ok-on-written-errors` to change that.
     #[clap(long, short)]
     write_errors: bool,
 
     /// If used together with `--write-errors`, does use exit code 0
     /// even if there were errors that were written to the index
     /// files. Errors are still also written to stderr, though--see
-    /// `--silent-on-written-errors`.
+    /// `--silent-on-written-errors` to change that.
     #[clap(long, short)]
     ok_on_written_errors: bool,
 
     /// If used together with `--write-errors`, exits with exit code 0
     /// and does not print any errors to stderr if there are errros
-    /// that are written to the index files.
+    /// that are written to the index files (it can still give some
+    /// other errors, though, like being unable to run Git).
     #[clap(long, short)]
     silent_on_written_errors: bool,
 
@@ -92,11 +93,12 @@ struct Opts {
 
     /// Same as `--open` but only opens a browser if the file has
     /// changed since the last Git commit. (You may want to use this
-    /// together with `--commit`.)
+    /// together with `--commit` so that on the next run it will not
+    /// open the browser again.)
     #[clap(long)]
     open_if_changed: bool,
 
-    /// Pull into the local Git checkout from the default remote
+    /// Git pull from the default remote into the local Git checkout
     /// before creating the index files.
     #[clap(long)]
     pull: bool,
@@ -123,18 +125,19 @@ struct Opts {
 // Description of the valid metadata attributes and how they are
 // parsed and displayed
 
-/// Whether an attribute is required
+/// Specifies whether an attribute is required
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeNeed {
     Optional,
     NonEmpty,
 }
 
-/// How an attribute value should be treated
+/// Specifies how an attribute value should be treated
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeKind {
     String {
-        /// Whether to automatically link http and https URLs
+        /// Whether to automatically create links of http and https
+        /// URLs
         autolink: bool,
     },
     StringList {
@@ -254,9 +257,9 @@ lazy_static! {
 }
 
 // =============================================================================
-// Data structures to hold an attribute value and the whole set of
-// values for a file, and operations including formatting those as
-// HTML.
+// Data structures to hold an attribute value, and the whole set of
+// values for a file after their extraction from it, as well as
+// operations including formatting that information as HTML.
 
 /// An attribute value: either a string, a list of strings, or not
 /// present.
@@ -268,8 +271,11 @@ enum AttributeValue {
 }
 
 impl AttributeValue {
-    /// Returns None if it couldn't parse, which happens if no value
-    /// was given *and* the value is required.
+    /// Parse an input into the representation required by the given
+    /// AttributeSpecification (like, a single string or
+    /// lists). Returns an error if it couldn't do that, which happens
+    /// if the input is only whitespace but a value is required by the
+    /// spec.
     fn from_str_and_spec(val: &str, spec: &AttributeSpecification) -> Result<Self> {
         if val.is_empty() || val == "NA" {
             match spec.need {
@@ -292,10 +298,10 @@ impl AttributeValue {
                     separator,
                     autolink,
                 } => {
-                    // (Note: there is no need to replace '\n' with '
-                    // ' in `val` first, because the trim will remove
-                    // those, and normalize_whitespace will get rid of
-                    // those within keys, too.)
+                    // (Note: there is no need to replace '\n' with ' '
+                    // in `val` first, because the trim will remove
+                    // those around values, and normalize_whitespace will
+                    // replace those within keys, too.)
                     let vals: Vec<String> = val
                         .split(separator)
                         .map(|s| normalize_whitespace(s.trim()))
@@ -323,7 +329,10 @@ impl AttributeValue {
     }
 
     /// Also works for single-value and unavailable attributes,
-    /// returning a vector of one or no entries, respectively.
+    /// returning a list of one or no entries, respectively. (`Cow`
+    /// allows both sharing of existing vectors as well as holding new
+    /// ones; that's just a performance feature, they can be used
+    /// wherever a Vec or [] is required.)
     fn as_string_list(&self) -> Cow<[String]> {
         match self {
             AttributeValue::StringList { value, autolink: _ } => Cow::from(value.as_slice()),
@@ -332,6 +341,9 @@ impl AttributeValue {
         }
     }
 
+    /// Convert to HTML, this is used for both .html and .md files. An
+    /// ASlice<Node> is a list of elements (nodes), usable as the body
+    /// (child elements) for another element.
     fn to_html(&self, html: &HtmlAllocator) -> Result<ASlice<Node>> {
         match self {
             AttributeValue::String { value, autolink } => {
@@ -371,7 +383,7 @@ struct Metadata(HashMap<&'static str, AttributeValue>);
 impl Metadata {
     /// Retrieve the value for a key. Panics if `key` is not defined
     /// in `METADATA_SPECIFICATION` (it is a program bug if this can
-    /// happen XXX replace with a type, AttributeName?).
+    /// happen; XXX replace with a type `AttributeName`?).
     fn get(&self, key: &str) -> Option<&AttributeValue> {
         self.0.get(key).or_else(|| {
             if get_by_key(METADATA_SPECIFICATION, |spec| &spec.key, &key).is_none() {
@@ -406,7 +418,8 @@ impl Metadata {
                 attval.to_html(html)?
             } else {
                 // Entry is missing in the file; show that fact. XX
-                // also report that top-level as a warning?
+                // also report that top-level as a warning? That would
+                // be a bit ugly to implement.
                 html.i([att("style", "color: red;")], html.text("entry missing")?)?
                     .to_aslice(html)?
             };
@@ -416,7 +429,7 @@ impl Metadata {
                     html.td(
                         [
                             att("class", "metadata_key"),
-                            // CSS is lost via markdown, so also try:
+                            // The above CSS is lost via Markdown, thus also try:
                             att("valign", "top"),
                             att("align", "right"),
                         ],
@@ -493,11 +506,12 @@ impl FileInfo {
 }
 
 // =============================================================================
-// An abstraction of document sections that:
+// An abstraction of document sections:
 //
-// * can be formatted for an HTML file or for a Markdown file
+// * that can be formatted for an HTML file or for a Markdown file
 //   with embedded HTML;
-// * a table of contents can be built from
+// * that a table of contents can be built from (showing and linking the
+//   (possibly nested) subsections).
 
 /// A section consists of a (optional) section title, an optional
 /// intro (that could be the only content), and a list of subsections
@@ -509,8 +523,9 @@ struct Section {
     subsections: Vec<Section>,
 }
 
-/// The list of section numbers to reach a particular subsection, used
-/// for naming them and linking from the table of contents.
+/// The list of section numbers (like "1.3.2") to identify a
+/// particular subsection, used for naming them and linking from the
+/// table of contents.
 struct NumberPath {
     numbers: Vec<usize>,
 }
@@ -527,11 +542,11 @@ impl NumberPath {
         numbers.push(number);
         Self { numbers }
     }
-    /// e.g. `3` for a 3-level deep path
+    /// Gives e.g. `3` for a 3-level deep path
     fn level(&self) -> usize {
         self.numbers.len()
     }
-    /// e.g. `"1.3.2"`
+    /// Gives e.g. `"1.3.2"`
     fn to_string(&self) -> String {
         self.numbers
             .iter()
@@ -601,7 +616,8 @@ impl Section {
             vec.push(element(
                 html,
                 [att("id", section_id)],
-                // XX add number_path_string via CSS instead?
+                // Prefix the path to the title; don't try to use CSS
+                // as it won't make it through Markdown.
                 html.text(format!("{number_path_string} {title}"))?,
             )?)?;
         }
@@ -665,12 +681,12 @@ impl Section {
 
 // =============================================================================
 /// An abstraction for folders and files, to collect the paths
-/// reported by Git into and then to map to nested
+/// reported by Git into, and then to map to nested
 /// `Section`s. Contained files/folders are stored sorted by the name
 /// of the file/folder inside this Folder; files and folders are
-/// stored separatedly, because their formatting will also end up
-/// separately in a `Section` (files go to the intro, folders to the
-/// subsections).
+/// stored in separate struct fields, because their formatting will
+/// also end up separately in a `Section` (files go to the intro,
+/// folders to the subsections).
 struct Folder<'f> {
     files: BTreeMap<String, &'f FileInfo>,
     folders: BTreeMap<String, Folder<'f>>,
@@ -684,13 +700,16 @@ impl<'f> Folder<'f> {
         }
     }
 
+    // This is just a helper method that recursively calls itself; see
+    // `add` for the relevant wrapper method.
     fn add_(&mut self, segments: &[&str], file: &'f FileInfo) -> Result<()> {
         match segments {
             [] => unreachable!(),
             [segment, rest @ ..] => {
                 if rest.is_empty() {
-                    // `segment` is the last of the segments, hence
-                    // represents the file name of the XML file itself
+                    // `segment` being the last of the segments means
+                    // that it represents the file name of the XML
+                    // file itself
                     if let Some(oldfile) = self.files.get(*segment) {
                         bail!("duplicate file: {file:?} already entered as {oldfile:?}")
                     } else {
@@ -748,11 +767,12 @@ impl<'f> Folder<'f> {
 }
 
 // =============================================================================
-// Error reporting: this program collects and then reports all errors
-// (both on the command line and in the output page), instead of
-// stopping on the first error.
+// Error reporting: this program does not stop but continues
+// processing when it encounters errors, collecting them and then in
+// the end reporting them all (both on the command line and in the
+// output page).
 
-/// An error report with all errors that happend when processing a
+/// An error report with all errors that happened while processing a
 /// particular file.
 #[derive(Debug)]
 struct FileErrors {
@@ -761,7 +781,7 @@ struct FileErrors {
 }
 
 impl FileErrors {
-    /// Returns <dt><dd> pairs be used in a <dl> </dl>.
+    /// Returns <dt><dd> pairs to be used in a <dl> </dl>.
     fn to_html(&self, html: &HtmlAllocator) -> Result<Flat<Node>> {
         let mut ul_body = html.new_vec();
         for error in &self.errors {
@@ -797,11 +817,11 @@ impl FileErrors {
 }
 
 // =============================================================================
-// Parsing and printing, including the main function (program entry
-// point) at the bottom.
+// Parsing and printing functionality, including the main function (the program
+// entry point) at the bottom.
 
-/// Parse all XML comments (only those above the first XML opening
-/// element) from one file as `Metadata`.
+/// Parse all XML comments from above the first XML opening element 
+/// out of one file as `Metadata`.
 fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: HashMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
@@ -864,7 +884,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     }
 }
 
-/// Build an index over all files for one particular attribute name.
+/// Build an index over all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
     html: &HtmlAllocator,
     attribute_key: &str,
@@ -1074,7 +1094,7 @@ fn main() -> Result<()> {
             .collect()
     };
 
-    // Carry out the `git pull` if requested
+    // Carry out `git pull` if requested
     if let Some(base_path) = &opts.base_path {
         if opts.pull {
             if !git(base_path, &["pull"])? {
@@ -1088,10 +1108,10 @@ fn main() -> Result<()> {
     // `FileInfo` struct. Generate the ids on the go for each of them
     // by `enumerate`ing the values (the enumeration number value is
     // passed as the `id` argument to the function given to `map`).
-    // The id is used to refer to each item from the indices built
-    // from the `fileinfo_or_errors` further below (could also index
-    // via `&` references; but need some kind of id anyway for the
-    // document-local links in the HTML formatting).
+    // The id is used to refer to each item in the index data structure
+    // built from the `fileinfo_or_errors` further below (could also 
+    // store `&` references in an index; but need some kind of id anyway 
+    // for the document-local links in the HTML formatting).
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = paths
         .into_iter()
         .enumerate()
@@ -1099,7 +1119,7 @@ fn main() -> Result<()> {
             // We're currently doing nothing with the `xmldoc` value
             // from `parse_xml_file` (which is the tree of all
             // elements, excluding the comments), thus prefixed with
-            // an underscore.
+            // an underscore to avoid the compiler warning about that.
             let (comments, _xmldoc) =
                 parse_xml_file(&path.full_path()).map_err(|e| FileErrors {
                     path: path.clone(),
@@ -1114,10 +1134,10 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    // Build the HTML page, or HTML fragments to use in the markdown
+    // Build the HTML fragments to use in the HTML page and the Markdown
     // file.
 
-    // This is an allocator for HTML elements (it manages memory
+    // `HtmlAllocator` is an allocator for HTML elements (it manages memory
     // efficiently, and provides a method for each HTML element by its
     // name, e.g. `html.p(...)` creates a <p>...</p> element). The
     // number passed to `new` is the limit on the number of

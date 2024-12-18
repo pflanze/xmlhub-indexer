@@ -225,7 +225,10 @@ reference of the expected type.
 
 Identifiers followed by a `!` are macro calls; those can do fancier
 things than function calls, like destructuring format strings during
-compilation to safely embed values.
+compilation to safely embed values. `#[derive ..]` syntax are another
+kind of macros that implement features on the following data structure
+(Debug is the ability to be formatted in debugging contexts, Clone to
+allow clone() to be called, PartialEq for equality comparison etc.)
 
 ## Help
 

@@ -4,7 +4,10 @@ use std::{
 };
 
 pub trait InsertValue<K, V> {
-    /// Returns whether the value was newly added.
+    /// Insert a value into a collection of value that `key` maps to,
+    /// creating the collection and the mapping from key if it doesn't
+    /// exist yet. Returns whether the value was newly added (false
+    /// means `val` was already in there).
     fn insert_value(&mut self, key: K, val: V) -> bool;
 }
 
@@ -27,6 +30,7 @@ impl<K: Ord + PartialEq + Eq + Clone, V: Hash + PartialEq + Eq> InsertValue<K, V
     for BTreeMap<K, HashSet<V>>
 {
     fn insert_value(&mut self, key: K, val: V) -> bool {
+        // copy-paste
         if let Some(vals) = self.get_mut(&key) {
             vals.insert(val)
         } else {
@@ -38,7 +42,8 @@ impl<K: Ord + PartialEq + Eq + Clone, V: Hash + PartialEq + Eq> InsertValue<K, V
     }
 }
 
-/// Try to get the value for a key in a list of (key, value) pairings.
+/// From a list of values, try to get the one for which an extracted
+/// value matches `key`.
 pub fn get_by_key<'t, K: Eq, T>(
     vals: &'t [T],
     get_key: impl Fn(&T) -> &K,
@@ -47,7 +52,8 @@ pub fn get_by_key<'t, K: Eq, T>(
     vals.iter().find(|item| get_key(item) == key)
 }
 
-/// Create a new vector that contains copies of the elements of both.
+/// Create a new vector that contains copies of the elements of both
+/// arguments.
 pub fn append<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
     let mut vec = Vec::new();
     for v in a {
