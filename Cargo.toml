@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ahtml = { path = "../website/libs/ahtml" }
+ahtml = "0.1"
 xmltree = "0.11.0"
 xml-rs = "0.8"
 anyhow = "=1.0.65"
