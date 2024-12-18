@@ -147,6 +147,9 @@ enum AttributeKind {
         /// formatting; for that, see the `to_html` method on
         /// AttributeValue.
         separator: &'static str,
+        /// Whether after splitting the list on the separator, only the first
+        /// word should be picked (useful for package names given with version)
+        pick_first_word_only: bool,
         /// Whether to automatically link http and https URLs
         autolink: bool,
     },
@@ -183,6 +186,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
                 separator: ",",
+                pick_first_word_only: false,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -202,6 +206,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::NonEmpty,
             kind: AttributeKind::StringList {
                 separator: ",",
+                pick_first_word_only: true,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -295,17 +300,32 @@ impl AttributeValue {
                 }),
                 AttributeKind::StringList {
                     separator,
+                    pick_first_word_only,
                     autolink,
                 } => {
                     // (Note: there is no need to replace '\n' with ' '
                     // in `val` first, because the trim will remove
                     // those around values, and normalize_whitespace will
                     // replace those within keys, too.)
-                    let vals: Vec<String> = val
+                    let mut vals: Vec<String> = val
                         .split(separator)
                         .map(|s| normalize_whitespace(s.trim()))
                         .filter(|s| !s.is_empty())
                         .collect();
+                    if pick_first_word_only {
+                        vals = vals
+                            .into_iter()
+                            .map(|s| {
+                                s.split(" ")
+                                    .next()
+                                    .expect(
+                                        "always at least one element because we filtered \
+                                             away the empty string",
+                                    )
+                                    .to_owned()
+                            })
+                            .collect();
+                    }
                     if vals.is_empty() {
                         match spec.need {
                             AttributeNeed::Optional => Ok(AttributeValue::NA),
