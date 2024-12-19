@@ -887,7 +887,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
             }
             Ok(())
         })()
-        .with_context(|| anyhow!("comment no. {}", i + 1));
+        .with_context(|| anyhow!("XML comment no. {}", i + 1));
         if let Err(e) = result {
             errors.push(format!("{e:#}"));
         }
