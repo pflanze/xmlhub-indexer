@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 ahtml = "0.1"
 xmltree = "0.11.0"
-xml-rs = "0.8"
+xml-rs = "0.8.20"
 anyhow = "=1.0.65"
 clap = { version = "3", features = ["derive"] }
 chrono = "0.4"
