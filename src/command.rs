@@ -104,6 +104,17 @@ pub enum AvailableCaptures {
     None,
 }
 
+impl AvailableCaptures {
+    pub fn from_output(output: &Output) -> Self {
+        match (output.stdout.is_empty(), output.stderr.is_empty()) {
+            (true, true) => Self::None,
+            (true, false) => Self::Stderr,
+            (false, true) => Self::Stdout,
+            (false, false) => Self::Both,
+        }
+    }
+}
+
 /// Wrapper around `Output` that dereferences to it, but also offers a
 /// `truthy` field, and implements `Display` to show a multi-line message
 /// with both process status and its outputs.
@@ -126,13 +137,20 @@ impl<'t> Deref for Outputs<'t> {
     }
 }
 
+const ONLY_SHOW_NON_EMPTY_CAPTURES: bool = true;
+
 fn display_output(
     output: &Output,
     available_captures: AvailableCaptures,
     f: &mut std::fmt::Formatter<'_>,
     indent: &str,
 ) -> std::fmt::Result {
-    match available_captures {
+    let captures = if ONLY_SHOW_NON_EMPTY_CAPTURES {
+        AvailableCaptures::from_output(output)
+    } else {
+        available_captures
+    };
+    match captures {
         AvailableCaptures::Stdout => f.write_fmt(format_args!(
             "{},\n{indent}stdout: {}",
             output.status,
