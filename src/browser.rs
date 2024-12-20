@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
-    command::{run, spawn},
+    command::{run, spawn, Capturing},
     util::append,
 };
 
@@ -69,7 +69,7 @@ pub fn spawn_browser_linux(in_directory: &Path, arguments: &[&OsStr]) -> Result<
 
     let mut errors = Vec::new();
     for browser in &browsers {
-        match spawn(in_directory, browser, arguments, &[]) {
+        match spawn(in_directory, browser, arguments, &[], Capturing::none()) {
             Ok(handle) => return Ok(handle),
             Err(e) => errors.push(format!("{e:#}")),
         }
@@ -122,7 +122,7 @@ pub fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<
         }
 
         // Try as path or program name via $PATH instead
-        match spawn(in_directory, browser, arguments, &[]) {
+        match spawn(in_directory, browser, arguments, &[], Capturing::none()) {
             Ok(_handle) => return Ok(()),
             Err(e) => errors.push(format!("error when executed directly: {e:#}")),
         }
