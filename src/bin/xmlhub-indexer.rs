@@ -82,12 +82,14 @@ struct Opts {
     silent_on_written_errors: bool,
 
     /// Open the generated `file_index.html` file in a web browser.
-    /// Tries `sensible-browser`, the browsers specified in the
-    /// `BROWSER` environment variable, which is split on ':' into
-    /// program names or paths that are tried in order, `firefox`,
-    /// `chromium` or `chrome`. Fails if none worked. Note: only opens
-    /// the file if it was actually written to (i.e. when there were
-    /// no errors or `--write-errors` was given).
+    /// Tries the browsers specified in the `BROWSER` environment
+    /// variable (split on ':' into program names or paths (on macOS
+    /// don't pass paths into `/Applications`, just give the
+    /// application name; you could use paths to scripts)), otherwise
+    /// `sensile-browser`, `firefox`, `chromium`, `chrome`, and on
+    /// macOS `safari`. Fails if none worked. Note: only opens the
+    /// file if it was actually written to (i.e. when there were no
+    /// errors or `--write-errors` was given).
     #[clap(long)]
     open: bool,
 
@@ -1509,9 +1511,10 @@ fn main() -> Result<()> {
     if opts.open || (opts.open_if_changed && html_file_has_changed) {
         if write_files {
             if let Some(base_path) = &opts.base_path {
-                // Hopefully all browsers take relative paths?
-                // Otherwise would have to resolve base_path with
-                // HTML_FILENAME pushed-on as an absolute path:
+                // Hopefully all browsers take relative paths? Firefox
+                // on Linux and macOS are OK, Safari (via open -a) as
+                // well.  Otherwise would have to resolve base_path
+                // with HTML_FILENAME pushed-on as an absolute path:
                 // let mut path = base_path.clone();
                 // path.push(HTML_FILENAME);
                 // path.canonicalize().as_os_str()
