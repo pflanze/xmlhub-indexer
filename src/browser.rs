@@ -88,9 +88,7 @@ pub fn spawn_browser_linux(in_directory: &Path, arguments: &[&OsStr]) -> Result<
     )
 }
 
-/// Find a web browser and run it with the given arguments, working on
-/// MacOS. Tries a few other browsers than Safari first.
-pub fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> {
+fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> {
     let (browsers_source, mut browsers) = get_browsers()?;
     match browsers_source {
         BrowsersSource::Env => (),
@@ -148,10 +146,14 @@ pub fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<
 
 /// Find a web browser and run it with the given arguments. If the
 /// `BROWSER` environment variable is set, splits it on ':' into
-/// browser names or paths and tries executing those (if names, on
-/// MacOS via `open -a`). Otherwise tries "sensible-browser",
-/// "firefox", "chromium", "chrome" in turn. Fails if none could be
-/// started or an env variable could not be decoded as UTF-8.
+/// browser names or paths (when containing at least one '/') and
+/// tries executing those. Otherwise tries "sensible-browser",
+/// "firefox", "chromium", "chrome" in turn.  Fails if none could be
+/// started or an env variable could not be decoded as UTF-8. On
+/// macOS, browser names are opened via `open -a`, paths directly (but
+/// note that passing a path to an executable in
+/// `/Applications/$appname.app/..somewhere..` may ignore arguments,
+/// instead use just $appname).
 pub fn spawn_browser(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> {
     match std::env::consts::OS {
         "macos" => spawn_browser_macos(in_directory, arguments),
