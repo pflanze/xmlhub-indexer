@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
-    command::{run, spawn, Capturing},
+    command::{run_outputs, spawn, Capturing},
     util::append,
 };
 
@@ -71,6 +71,9 @@ pub fn spawn_browser_linux(in_directory: &Path, arguments: &[&OsStr]) -> Result<
     for browser in &browsers {
         match spawn(in_directory, browser, arguments, &[], Capturing::none()) {
             Ok(handle) => return Ok(handle),
+            // I wish I could split the anyhow into separate parts,
+            // increasingly indented, but "{e:#}" is the best we can
+            // do here (short of writing a custom formatter?)
             Err(e) => errors.push(format!("{e:#}")),
         }
     }
@@ -79,7 +82,7 @@ pub fn spawn_browser_linux(in_directory: &Path, arguments: &[&OsStr]) -> Result<
         browsers_source.to_str(),
         errors
             .iter()
-            .map(|e| format!("\t{e}"))
+            .map(|e| format!("\t{}", e.trim_end()))
             .collect::<Vec<_>>()
             .join("\n")
     )
@@ -113,18 +116,23 @@ pub fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<
         };
 
         if may_be_gui_program_name {
-            if run(in_directory, "open", &all_arguments, &[], &[0, 1]).with_context(|| {
-                anyhow!("starting a browser, trying 'open' with argument {all_arguments:?}")
-            })? {
+            let mut outputs = run_outputs(in_directory, "open", &all_arguments, &[], &[0, 1])
+                .with_context(|| {
+                    anyhow!("starting a browser, trying 'open' with argument {all_arguments:?}")
+                })?;
+            if outputs.truthy {
                 return Ok(());
             }
-            errors.push(format!("not found when executed via open -a"));
+            outputs.indent = "\t\t";
+            errors.push(format!(
+                "* {browser:?} failed executed via open -a:\n\t\t{outputs}",
+            ));
         }
 
         // Try as path or program name via $PATH instead
         match spawn(in_directory, browser, arguments, &[], Capturing::none()) {
             Ok(_handle) => return Ok(()),
-            Err(e) => errors.push(format!("error when executed directly: {e:#}")),
+            Err(e) => errors.push(format!("* {browser:?} failed executed directly: {e:#}")),
         }
     }
     bail!(
@@ -132,7 +140,7 @@ pub fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<
         browsers_source.to_str(),
         errors
             .iter()
-            .map(|e| format!("\t{e}"))
+            .map(|e| format!("\t{}", e.trim_end()))
             .collect::<Vec<_>>()
             .join("\n")
     )
