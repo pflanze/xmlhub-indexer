@@ -13,6 +13,7 @@ use chrono::Local;
 use clap::Parser;
 use lazy_static::lazy_static;
 use xmlhub_indexer::{
+    browser::spawn_browser,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
     util::{append, flatten, get_by_key, normalize_whitespace, InsertValue},
@@ -1511,14 +1512,10 @@ fn main() -> Result<()> {
                 // Hopefully all browsers take relative paths?
                 // Otherwise would have to resolve base_path with
                 // HTML_FILENAME pushed-on as an absolute path:
-                let mut path = base_path.clone();
-                path.push(HTML_FILENAME);
-                let canonical_path = path
-                    .canonicalize()
-                    .with_context(|| anyhow!("getting the absolute path of {path:?}"))?;
-                let abs_path = canonical_path.to_string_lossy();
-                webbrowser::open(&abs_path)
-                    .with_context(|| anyhow!("opening file {abs_path:?} in browser"))?;
+                // let mut path = base_path.clone();
+                // path.push(HTML_FILENAME);
+                // path.canonicalize().as_os_str()
+                spawn_browser(base_path, &[HTML_FILENAME.as_ref()])?;
             } else {
                 eprintln!(
                     "Note: not opening browser because no file was written because \
