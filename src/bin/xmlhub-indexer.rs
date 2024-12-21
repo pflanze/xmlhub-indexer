@@ -7,7 +7,7 @@ use std::{
     process::exit,
 };
 
-use ahtml::{att, flat::Flat, AId, ASlice, HtmlAllocator, Node, Print, ToASlice};
+use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, Node, Print, ToASlice};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
@@ -817,9 +817,14 @@ struct FileErrors {
 impl FileErrors {
     /// Returns <dt><dd> pairs to be used in a <dl> </dl>.
     fn to_html(&self, html: &HtmlAllocator) -> Result<Flat<Node>> {
+        const SOFT_PRE: SoftPre = SoftPre {
+            tabs_to_nbsp: Some(4),
+            autolink: true,
+            line_separator: "\n",
+        };
         let mut ul_body = html.new_vec();
         for error in &self.errors {
-            ul_body.push(html.li([], html.pre([], html.text(error)?)?)?)?;
+            ul_body.push(html.li([], SOFT_PRE.format(error, html)?)?)?;
         }
         let dt = html.dt(
             [],
