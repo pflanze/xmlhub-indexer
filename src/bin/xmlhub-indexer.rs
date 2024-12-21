@@ -690,7 +690,7 @@ impl Section {
             result.push_str(
                 &html
                     .a([att("name", &section_id), att("id", &section_id)], [])?
-                    .to_html_string(html)?,
+                    .to_html_fragment_string(html)?,
             );
             result.push_str(&number_path_string);
             result.push(' ');
@@ -699,7 +699,7 @@ impl Section {
         }
 
         if let Some(node) = self.intro {
-            result.push_str(&node.to_html_string(html)?);
+            result.push_str(&node.to_html_fragment_string(html)?);
             result.push_str("\n\n");
         }
 
@@ -1367,18 +1367,18 @@ fn main() -> Result<()> {
             vec![
                 format!("<!-- NOTE: {generated_message}, do not edit manually! -->"),
                 format!("# {title}"),
-                intro(true)?.to_html_string(&html)?,
+                intro(true)?.to_html_fragment_string(&html)?,
             ],
             if let Some(errors_section) = &errors_section {
                 vec![errors_section
                     .to_html(NumberPath::empty(), &html)?
-                    .to_html_string(&html)?]
+                    .to_html_fragment_string(&html)?]
             } else {
                 vec![]
             },
             vec![
                 format!("## Contents"),
-                toc_html.to_html_string(&html)?,
+                toc_html.to_html_fragment_string(&html)?,
                 toplevel_section.to_markdown(NumberPath::empty(), &html)?,
             ],
             if opts.timestamp {
@@ -1445,7 +1445,7 @@ fn main() -> Result<()> {
                 path.push(HTML_FILENAME);
                 written_files.push(HTML_FILENAME);
                 let mut out = BufWriter::new(File::create(&path)?);
-                html.print_html(htmldocument, &mut out)?;
+                html.print_html_document(htmldocument, &mut out)?;
                 out.flush()?;
 
                 if opts.open_if_changed {
@@ -1503,7 +1503,7 @@ fn main() -> Result<()> {
                 }
             }
         } else {
-            html.print_html(htmldocument, &mut stdout().lock())?;
+            html.print_html_document(htmldocument, &mut stdout().lock())?;
         }
     }
 
