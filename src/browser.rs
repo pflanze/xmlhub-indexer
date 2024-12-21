@@ -95,8 +95,10 @@ fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> 
         BrowsersSource::HardCoded => {
             // First try the default action? But that will presumably
             // always succeed, but "worse", that may be a text editor
-            // or so. Thus instead try the normal alternative browser
-            // names first, then also Safari:
+            // or other application. Thus instead try the normal
+            // alternative browser names first, then also Safari--ah,
+            // and Chrome is called Google Chrome on macOS:
+            browsers.push("google chrome".into());
             browsers.push("safari".into());
         }
     }
