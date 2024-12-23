@@ -8,7 +8,7 @@ Hub Git repository, or existing files are removed or changed. It can
 be run manually on a checkout of the XML Hub repository, or it could
 be integrated into CI (continuous integration) of the Git hosting
 platform (GitLab / GitHub) so that it is automatically run when
-changes are uploaded (TODO: do that?).
+changes are uploaded.
 
 ## Installation
 
