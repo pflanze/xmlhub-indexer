@@ -65,6 +65,45 @@ xmlhub-indexer do that itself:
 (It should also be possible to have xmlhub-indexer run automatically
 whenever xmlhub receives changes; TODO?)
 
+## Details
+
+### Parsing
+
+  - Every attribute in an XML file is expected to be in another XML
+    comment. This makes it unambiguous where one starts and ends, and
+    obviates the need for another more complicated format. No escaping
+    or anything is done (other than what XML itself requires) (this
+    means that the string "-->" cannot be part of an attribute value).
+    
+  - Spaces (really any kind of whitespace, including newlines) are
+    trimmed off values on both ends, and space in the middle is
+    normalized to a single space for each block of whitespace.
+  
+  - The string "NA" is treated the same as the empty string, both are
+    treated as not available, leading to an error report if the value
+    is required.
+    
+  - Attribute keys (names) are case insensitive. They should be
+    specified in the program source code (in `METADATA_SPECIFICATION`)
+    in proper spelling, since that is what is used for display in the
+    index pages.
+    
+  - Attribute order in the XML file doesn't matter; for display, the
+    one given in `METADATA_SPECIFICATION` is used.
+    
+  - Attributes that take lists of values can be split on whatever one
+    configures in the `separator` field of
+    `AttributeKind::StringList`, but the "," makes most sense as
+    splitting on space doesn't work when values can also have version
+    numbers like for the "Packages" attribute--if space is used both
+    to separate package names from package version but also to split
+    between package entries, it would be ambiguous.
+    
+  - Attribute indexing can lowercase the values for uniformity; this
+    is useful for keywords, not so much for package names and other
+    things where casing is more relevant; it can be changed via the
+    `use_lowercase` field of `AttributeIndexing::Index`.
+
 ## Maintaining and changing the program
 
 This program is written in the [Rust](https://rust-lang.org)
