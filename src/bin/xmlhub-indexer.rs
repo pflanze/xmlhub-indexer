@@ -475,8 +475,20 @@ impl Metadata {
                 // Entry is missing in the file; show that fact. XX
                 // also report that top-level as a warning? That would
                 // be a bit ugly to implement.
-                html.i([att("style", "color: red;")], html.text("entry missing")?)?
-                    .to_aslice(html)?
+                html.i(
+                    [
+                        att("style", "color: red;"),
+                        att(
+                            "title",
+                            format!(
+                                "The XML comment for {key:?} is completely missing in this file,\n\
+                                 perhaps because of an oversight."
+                            ),
+                        ),
+                    ],
+                    html.text("entry missing")?,
+                )?
+                .to_aslice(html)?
             };
             table_body.push(html.tr(
                 [],
