@@ -131,7 +131,10 @@ struct Opts {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeNeed {
     Optional,
-    NonEmpty,
+    /// Not "NA", nor the empty string / space only, and for lists not
+    /// the empty list (even a list of empty elements like ", , ," is
+    /// not OK)
+    Required,
 }
 
 /// Specifies how an attribute value should be treated
@@ -198,7 +201,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
             key: "Keywords",
-            need: AttributeNeed::NonEmpty,
+            need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
                 take_first_word: false,
@@ -210,7 +213,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: "Version",
-            need: AttributeNeed::NonEmpty,
+            need: AttributeNeed::Required,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
                 use_lowercase: false,
@@ -218,7 +221,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: "Packages",
-            need: AttributeNeed::NonEmpty,
+            need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
                 take_first_word: true,
@@ -256,7 +259,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: "Contact",
-            need: AttributeNeed::NonEmpty,
+            need: AttributeNeed::Required,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
                 use_lowercase: false,
@@ -306,7 +309,7 @@ impl AttributeValue {
         if val.is_empty() || val == "NA" {
             match spec.need {
                 AttributeNeed::Optional => Ok(AttributeValue::NA),
-                AttributeNeed::NonEmpty => {
+                AttributeNeed::Required => {
                     bail!(
                         "attribute {:?} requires {}, but none given",
                         spec.key,
@@ -345,7 +348,7 @@ impl AttributeValue {
                     if vals.is_empty() {
                         match spec.need {
                             AttributeNeed::Optional => Ok(AttributeValue::NA),
-                            AttributeNeed::NonEmpty => {
+                            AttributeNeed::Required => {
                                 bail!(
                                     "values for attribute {:?} are required but missing",
                                     spec.key
