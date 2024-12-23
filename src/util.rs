@@ -44,7 +44,7 @@ impl<K: Ord + PartialEq + Eq + Clone, V: Hash + PartialEq + Eq> InsertValue<K, V
 
 /// From a list of values, try to get the one for which an extracted
 /// value matches `key`.
-pub fn get_by_key<'t, K: Eq, T>(
+pub fn list_get_by_key<'t, K: Eq, T>(
     vals: &'t [T],
     get_key: impl Fn(&T) -> &K,
     key: &K,

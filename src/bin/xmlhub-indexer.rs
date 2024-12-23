@@ -16,7 +16,7 @@ use xmlhub_indexer::{
     browser::spawn_browser,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
-    util::{append, flatten, get_by_key, normalize_whitespace, InsertValue},
+    util::{append, flatten, list_get_by_key, normalize_whitespace, InsertValue},
 };
 
 const PROGRAM_NAME: &str = "xmlhub-indexer";
@@ -193,10 +193,10 @@ struct AttributeSpecification {
     indexing: AttributeIndexing,
 }
 
-/// Description of the metadata keys, what they must contain, and how
-/// they are indexed. The order of entries here is also the same order
-/// used for showing the extracted info in the info boxes in the index
-/// pages.
+/// Description of the metadata attributes, what they must contain,
+/// and how they are indexed. The order of entries here is also the
+/// same order used for showing the extracted info in the info boxes
+/// in the index pages.
 const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
@@ -444,7 +444,7 @@ impl Metadata {
     /// happen; XXX replace with a type `AttributeName`?).
     fn get(&self, key: &str) -> Option<&AttributeValue> {
         self.0.get(key).or_else(|| {
-            if get_by_key(METADATA_SPECIFICATION, |spec| &spec.key, &key).is_none() {
+            if list_get_by_key(METADATA_SPECIFICATION, |spec| &spec.key, &key).is_none() {
                 panic!("invalid metadata key {key:?}")
             } else {
                 None
