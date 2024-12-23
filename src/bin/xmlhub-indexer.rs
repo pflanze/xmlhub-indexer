@@ -127,6 +127,22 @@ struct Opts {
 // Description of the valid metadata attributes and how they are
 // parsed and displayed
 
+/// An attribute name is a string that identifies an attribute. The
+/// string is in the canonical casing as it should be shown in
+/// metadata listings in the HTML/Markdown output. To try to avoid
+/// making mistakes, we define a wrapper struct `AttributeName` to
+/// make it clear everywhere whether we're having a string in
+/// canonical casing or not.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+struct AttributeName(&'static str);
+
+impl AttributeName {
+    /// Get the actual attribute name string
+    fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
 /// Specifies whether an attribute is required
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeNeed {
@@ -187,7 +203,7 @@ enum AttributeIndexing {
 /// All metainformation on an
 #[derive(Debug)]
 struct AttributeSpecification {
-    key: &'static str,
+    key: AttributeName,
     need: AttributeNeed,
     kind: AttributeKind,
     indexing: AttributeIndexing,
@@ -200,7 +216,7 @@ struct AttributeSpecification {
 const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
-            key: "Keywords",
+            key: AttributeName("Keywords"),
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
@@ -212,7 +228,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: "Version",
+            key: AttributeName("Version"),
             need: AttributeNeed::Required,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
@@ -220,7 +236,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: "Packages",
+            key: AttributeName("Packages"),
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
@@ -232,25 +248,25 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: "Description",
+            key: AttributeName("Description"),
             need: AttributeNeed::Optional,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
-            key: "Comments",
+            key: AttributeName("Comments"),
             need: AttributeNeed::Optional,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
-            key: "Citation",
+            key: AttributeName("Citation"),
             need: AttributeNeed::Optional,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
-            key: "DOI",
+            key: AttributeName("DOI"),
             need: AttributeNeed::Optional,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
@@ -258,7 +274,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: "Contact",
+            key: AttributeName("Contact"),
             need: AttributeNeed::Required,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
@@ -271,7 +287,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
 lazy_static! {
     // A mapping from a key name to its position; used for sorting the
     // user-provided metadata entries uniformly.
-    static ref METADATA_KEY_POSITION: HashMap<&'static str, usize> = METADATA_SPECIFICATION
+    static ref METADATA_KEY_POSITION: HashMap<AttributeName, usize> = METADATA_SPECIFICATION
         .iter()
         .enumerate()
         .map(|(i, spec)| (spec.key, i))
@@ -436,33 +452,29 @@ impl AttributeValue {
 /// keys are the same as (or a subset of) those in
 /// `METADATA_SPECIFICATION`.
 #[derive(Debug)]
-struct Metadata(HashMap<&'static str, AttributeValue>);
+struct Metadata(HashMap<AttributeName, AttributeValue>);
 
 impl Metadata {
-    /// Retrieve the value for a key. Panics if `key` is not defined
-    /// in `METADATA_SPECIFICATION` (it is a program bug if this can
-    /// happen; XXX replace with a type `AttributeName`?).
-    fn get(&self, key: &str) -> Option<&AttributeValue> {
-        self.0.get(key).or_else(|| {
+    /// Retrieve the value for an attribute name.
+    fn get(&self, key: AttributeName) -> Option<&AttributeValue> {
+        self.0.get(&key).or_else(|| {
             if list_get_by_key(METADATA_SPECIFICATION, |spec| &spec.key, &key).is_none() {
-                panic!("invalid metadata key {key:?}")
-            } else {
-                None
+                panic!("invalid AttributeName value {key:?}")
             }
+            None
         })
     }
 
     /// The entries in the same order as given in
     /// `METADATA_SPECIFICATION`, with gaps where a key wasn't given
     /// in the file.
-    fn sorted_entries(&self) -> Vec<(&'static str, Option<&AttributeValue>)> {
+    fn sorted_entries(&self) -> Vec<(AttributeName, Option<&AttributeValue>)> {
         let mut result: Vec<_> = METADATA_SPECIFICATION
             .iter()
             .map(|spec| (spec.key, None))
             .collect();
         for (key, attval) in &self.0 {
             let i = METADATA_KEY_POSITION[key];
-            assert_eq!(&result[i].0, key);
             result[i].1 = Some(attval);
         }
         result
@@ -503,7 +515,7 @@ impl Metadata {
                             att("valign", "top"),
                             att("align", "right"),
                         ],
-                        html.i([], [html.text(key)?, html.text(":")?])?,
+                        html.i([], [html.text(key.as_str())?, html.text(":")?])?,
                     )?,
                     html.td([att("class", "metadata_value")], attval_html)?,
                 ],
@@ -900,10 +912,10 @@ impl FileErrors {
 fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: HashMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
-        .map(|spec| (spec.key.to_lowercase(), spec))
+        .map(|spec| (spec.key.as_str().to_lowercase(), spec))
         .collect();
     let mut unseen_specs_by_lowercase_key = spec_by_lowercase_key.clone();
-    let mut map: HashMap<&'static str, AttributeValue> = HashMap::new();
+    let mut map: HashMap<AttributeName, AttributeValue> = HashMap::new();
 
     // Collect all errors instead of stopping at the first one.
     let mut errors: Vec<String> = Vec::new();
@@ -917,7 +929,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
 
                 if let Some(spec) = spec_by_lowercase_key.get(&lc_key) {
                     unseen_specs_by_lowercase_key.remove(&lc_key);
-                    if map.contains_key(spec.key) {
+                    if map.contains_key(&spec.key) {
                         bail!("duplicate entry for key {lc_key:?}")
                     } else {
                         let value = AttributeValue::from_str_and_spec(value, spec)?;
@@ -937,7 +949,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
         }
     }
 
-    let missing: Vec<&str> = unseen_specs_by_lowercase_key
+    let missing: Vec<AttributeName> = unseen_specs_by_lowercase_key
         .into_values()
         .filter_map(|spec| {
             // Do not report as missing if it's optional
@@ -949,7 +961,11 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
         })
         .collect();
     if !missing.is_empty() {
-        errors.push(format!("missing keys: {:?}", missing.as_slice()));
+        // Show just the names, not the AttributeName wrappers
+        let missing_strings: Vec<&'static str> = missing.iter().map(|key| key.as_str()).collect();
+        errors.push(format!(
+            "attributes with these names are missing: {missing_strings:?}",
+        ));
     }
 
     if errors.is_empty() {
@@ -962,7 +978,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
 /// Build an index over all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
     html: &HtmlAllocator,
-    attribute_key: &str,
+    attribute_key: AttributeName,
     use_lowercase: bool,
     fileinfo_or_errors: &Vec<Result<FileInfo, FileErrors>>,
 ) -> Result<Section> {
@@ -1058,7 +1074,7 @@ fn build_index_section(
     }
 
     Ok(Section {
-        title: Some(attribute_key.into()),
+        title: Some(attribute_key.as_str().into()),
         intro: Some(html.dl([att("class", "key_dl")], body)?),
         subsections: vec![],
     })
