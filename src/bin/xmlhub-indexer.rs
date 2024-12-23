@@ -157,6 +157,19 @@ enum AttributeKind {
     },
 }
 
+impl AttributeKind {
+    fn is_list(&self) -> bool {
+        match self {
+            AttributeKind::String { autolink: _ } => false,
+            AttributeKind::StringList {
+                separator: _,
+                take_first_word: _,
+                autolink: _,
+            } => true,
+        }
+    }
+}
+
 /// Whether an index should be created
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeIndexing {
@@ -294,7 +307,15 @@ impl AttributeValue {
             match spec.need {
                 AttributeNeed::Optional => Ok(AttributeValue::NA),
                 AttributeNeed::NonEmpty => {
-                    bail!("value for attribute {:?} is required but missing", spec.key)
+                    bail!(
+                        "attribute {:?} requires {}, but none given",
+                        spec.key,
+                        if spec.kind.is_list() {
+                            "values"
+                        } else {
+                            "a value"
+                        }
+                    )
                 }
             }
         } else {
@@ -888,10 +909,10 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
                         map.insert(spec.key, value);
                     }
                 } else {
-                    bail!("unknown key {lc_key:?}")
+                    bail!("unknown key {lc_key:?} given")
                 }
             } else {
-                bail!("comment does not start with a keyword and ':'")
+                bail!("comment does not start with a keyword name and ':'")
             }
             Ok(())
         })()
