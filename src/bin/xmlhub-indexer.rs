@@ -115,6 +115,13 @@ struct Opts {
     #[clap(long)]
     push: bool,
 
+    /// Do not run external processes like git or browsers,
+    /// i.e. ignore all the options asking to do so. Instead just say
+    /// on stderr what would be done. Still writes to the output
+    /// files, though.
+    #[clap(long)]
+    dry_run: bool,
+
     /// The path to the base directory of the Git checkout of the XML
     /// Hub; it is an error if this is omitted and no --paths option
     /// was given. If given, writes the index as `file_index.html` and
@@ -1129,6 +1136,19 @@ fn main() -> Result<()> {
     // Retrieve the command line options / arguments.
     let opts: Opts = Opts::from_args();
 
+    // Define a macro to only run $body if opts.dry_run is false,
+    // otherwise show $message instead.
+    macro_rules! check_dry_run {
+        { message: $message:expr, $body:expr } => {
+            if opts.dry_run {
+                let s: String = $message.into();
+                eprintln!("--dry-run: would run: {s}");
+            } else {
+                $body;
+            }
+        }
+    }
+
     let do_both = (!opts.html) && (!opts.md);
     let do_html = opts.html || do_both;
     let do_md = opts.md || do_both;
@@ -1156,7 +1176,11 @@ fn main() -> Result<()> {
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let paths = git_ls_files(base_path)?;
+        let mut paths = vec![];
+        check_dry_run! {
+            message: "git ls-files",
+            paths = git_ls_files(base_path)?
+        }
         paths
             .into_iter()
             .filter(|path| {
@@ -1172,8 +1196,11 @@ fn main() -> Result<()> {
     // Carry out `git pull` if requested
     if let Some(base_path) = &opts.base_path {
         if opts.pull {
-            if !git(base_path, &["pull"])? {
-                bail!("git pull failed")
+            check_dry_run! {
+                message: "git pull",
+                if !git(base_path, &["pull"])? {
+                    bail!("git pull failed")
+                }
             }
         }
     }
@@ -1497,10 +1524,13 @@ fn main() -> Result<()> {
 
                 if opts.open_if_changed {
                     // Need to remember whether the file has changed
-                    html_file_has_changed = !git(
-                        &base_path,
-                        &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
-                    )?;
+                    check_dry_run! {
+                        message: "git diff",
+                        html_file_has_changed = !git(
+                            &base_path,
+                            &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
+                        )?
+                    }
                 }
             }
             if do_md {
@@ -1515,7 +1545,11 @@ fn main() -> Result<()> {
             // Commit files if requested and any were written
             if opts.commit && !written_files.is_empty() {
                 // First check that there are no uncommitted changes
-                let items = git_status(&base_path)?;
+                let mut items = vec![];
+                check_dry_run! {
+                    message: "git status",
+                    items = git_status(&base_path)?
+                }
                 let changed_items: Vec<_> = items
                     .iter()
                     .filter(|item| !written_files.contains(&item.path.as_str()))
@@ -1527,26 +1561,36 @@ fn main() -> Result<()> {
                     )
                 }
 
-                git(&base_path, &append(&["add", "-f", "--"], &written_files))?;
+                check_dry_run! {
+                    message: "git add",
+                    git(&base_path, &append(&["add", "-f", "--"], &written_files))?
+                }
 
-                let did_commit = git(
-                    &base_path,
-                    &append(
-                        &[
-                            "commit",
-                            "-m",
-                            &format!(
-                                "regenerate index file{} via {PROGRAM_NAME}",
-                                if written_files.len() > 1 { "s" } else { "" }
-                            ),
-                            "--",
-                        ],
-                        &written_files,
-                    ),
-                )?;
+                let mut did_commit = true;
+                check_dry_run! {
+                    message: "git commit",
+                    did_commit = git(
+                        &base_path,
+                        &append(
+                            &[
+                                "commit",
+                                "-m",
+                                &format!(
+                                    "regenerate index file{} via {PROGRAM_NAME}",
+                                    if written_files.len() > 1 { "s" } else { "" }
+                                ),
+                                "--",
+                            ],
+                            &written_files,
+                        ),
+                    )?
+                }
 
                 if did_commit && opts.push {
-                    git(&base_path, &["push"])?;
+                    check_dry_run! {
+                        message: "git push",
+                        git(&base_path, &["push"])?
+                    }
                 }
             }
         } else {
