@@ -7,7 +7,7 @@ use std::{
     process::exit,
 };
 
-use ahtml::{att, AId, ASlice, Flat, HtmlAllocator, Node, Print, ToASlice};
+use ahtml::{att, flat::Flat, AId, ASlice, HtmlAllocator, Node, Print, ToASlice};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
