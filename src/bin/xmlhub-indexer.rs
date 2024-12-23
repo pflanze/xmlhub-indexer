@@ -496,8 +496,8 @@ impl Metadata {
                         att(
                             "title",
                             format!(
-                                "The XML comment for {key:?} is completely missing in this file,\n\
-                                 perhaps because of an oversight."
+                                "The XML comment for {key:?} is completely missing \
+                                 in this file, perhaps because of an oversight."
                             ),
                         ),
                     ],
