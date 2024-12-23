@@ -62,8 +62,30 @@ xmlhub-indexer do that itself:
 
     xmlhub-indexer path/to/your/checkout/of/xmlhub --commit --push
 
-(It should also be possible to have xmlhub-indexer run automatically
-whenever xmlhub receives changes; TODO?)
+There are also `--open` (always open) and `--open-if-changed` options
+which open your browser on the generated `file_index.html` file (see
+the `--help` text for details). I recommend to use one of them as this
+file can more easily be read, and it can show problems like missing
+attributes in red, while GitLab strips the red marking and just shows
+those parts in black. Also you can verify things before committing.
+
+If you want to just run the conversion periodically you could use this
+command line (the order of options doesn't actually matter, the
+program executes them in the sensible order anyway; you can also use
+the short options shown in the `--help` text instead):
+
+    xmlhub-indexer path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --commit --push
+
+Running this will pull, convert, write the output even if there are
+errors, and if there were changes, commit and push them back to the
+Git repository, and open your browser. You could put that into a
+(shell) script that you could run without having to remember the
+arguments.
+
+(It should also be possible to set up a CI pipeline (continuous
+integration) on GitLab to run xmlhub-indexer automatically whenever
+the xmlhub repository receives changes on GitLab, but maybe that's too
+much magic and not worth the additional complexity.)
 
 ## Details
 
@@ -144,7 +166,8 @@ introduce new metadata types simply by adding/changing
 `AttributeSpecification` entries here.
 
 The `main` function, which is the last item in the
-[`src/bin/xmlhub-indexer.rs`](src/bin/xmlhub-indexer.rs) file, is what
+[`src/bin/xmlhub-indexer.rs`](src/bin/xmlhub-indexer.rs) file (search
+for "fn main" if your IDE doesn't make it easy to find), is what
 is called when invoking the program. It's a good idea to start here,
 to see what things the program does in which order. Use IDE
 functionality (try context menu (right mouse click)) to jump to the
