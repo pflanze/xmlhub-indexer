@@ -256,7 +256,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: "Contact",
-            need: AttributeNeed::Optional,
+            need: AttributeNeed::NonEmpty,
             kind: AttributeKind::String { autolink: true },
             indexing: AttributeIndexing::Index {
                 use_lowercase: false,
