@@ -174,7 +174,8 @@ enum AttributeKind {
         /// (useful for package names given with version number after
         /// it, to index the package name without the version).
         index_first_word_only: bool,
-        /// Whether to automatically link http and https URLs
+        /// Whether to automatically create links of http and https
+        /// URLs
         autolink: bool,
     },
 }
