@@ -465,9 +465,9 @@ impl Metadata {
             let attval_html = if let Some(attval) = opt_attval {
                 attval.to_html(html)?
             } else {
-                // Entry is missing in the file; show that fact. XX
-                // also report that top-level as a warning? That would
-                // be a bit ugly to implement.
+                // Entry is missing in the file; show that fact.
+                // (Also report that top-level as a warning? That
+                // would be a bit ugly to implement.)
                 html.i(
                     [
                         att("style", "color: red;"),
@@ -1077,7 +1077,7 @@ fn css_styles() -> String {
 /* a TABLE */
 .fileinfo {
   border-spacing: 0px;
-  margin-bottom: 20px; /* XX should instead use a grid something so that fileinfo is reusable */
+  margin-bottom: 20px; /* should instead use a grid something so that fileinfo is reusable */
 }
 /* a TD */
 .fileinfo_path {
