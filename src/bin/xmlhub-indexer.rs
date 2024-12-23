@@ -169,8 +169,11 @@ enum AttributeKind {
         /// formatting; for that, see the `to_html` method on
         /// AttributeValue.
         separator: &'static str,
-
-        take_first_word: bool,
+        /// Whether (after splitting the list on `separator`), only
+        /// the first word of each entry should be used for indexing
+        /// (useful for package names given with version number after
+        /// it, to index the package name without the version).
+        index_first_word_only: bool,
         /// Whether to automatically link http and https URLs
         autolink: bool,
     },
@@ -182,7 +185,7 @@ impl AttributeKind {
             AttributeKind::String { autolink: _ } => false,
             AttributeKind::StringList {
                 separator: _,
-                take_first_word: _,
+                index_first_word_only: _,
                 autolink: _,
             } => true,
         }
@@ -220,7 +223,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
-                take_first_word: false,
+                index_first_word_only: false,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -240,7 +243,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 separator: ",",
-                take_first_word: true,
+                index_first_word_only: true,
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -349,7 +352,7 @@ impl AttributeValue {
                 }),
                 AttributeKind::StringList {
                     separator,
-                    take_first_word,
+                    index_first_word_only: take_first_word,
                     autolink,
                 } => {
                     // (Note: there is no need to replace '\n' with ' '
