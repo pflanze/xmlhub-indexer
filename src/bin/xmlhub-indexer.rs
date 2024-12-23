@@ -32,12 +32,13 @@ const MD_FILENAME: &str = "file_index.md";
 /// Build an index of the files in the (non-public) XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
-    /// The paths to the individual XML files to index. The output is
-    /// printed as HTML to stdout if only this option is used. This
-    /// option was added just for testing, normally, you would just
-    /// provide the base_path to the repository instead
+    /// A path to an individual XML file to index. The output is
+    /// printed as HTML to stdout if only this option is used. The
+    /// option can be given multiple times, with one path each
+    /// time. This option was added just for testing; normally you
+    /// would just provide the base_path to the repository instead.
     #[clap(long)]
-    paths: Option<Vec<PathBuf>>,
+    path: Option<Vec<PathBuf>>,
 
     /// Generate *only* the `file_index.html` file. This has better
     /// layout but doesn't work for viewing on GitLab (and may not
@@ -1159,7 +1160,7 @@ fn main() -> Result<()> {
     // each of which carries both a path to a base directory
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
-    let paths: Vec<RelPathWithBase> = if let Some(paths) = opts.paths {
+    let paths: Vec<RelPathWithBase> = if let Some(paths) = opts.path {
         paths
             .into_iter()
             .map(|p| RelPathWithBase::new(None, p))
