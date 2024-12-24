@@ -65,18 +65,6 @@ pub fn append<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
     vec
 }
 
-/// Create a new vector that contains copies of the elements of all
-/// vectors/slices. In other words, an n-ary `append`.
-pub fn flatten<T: Clone, V1: AsRef<[T]>, V0: AsRef<[V1]>>(vectors: V0) -> Vec<T> {
-    let mut result = Vec::new();
-    for vec in vectors.as_ref() {
-        for v in vec.as_ref() {
-            result.push(v.clone());
-        }
-    }
-    result
-}
-
 /// Replace groups of whitespace characters with a single space each.
 pub fn normalize_whitespace(s: &str) -> String {
     let mut result = String::new();

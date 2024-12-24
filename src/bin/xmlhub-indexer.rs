@@ -14,9 +14,10 @@ use clap::Parser;
 use lazy_static::lazy_static;
 use xmlhub_indexer::{
     browser::spawn_browser,
+    flattened::Flattened,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
-    util::{append, flatten, list_get_by_key, normalize_whitespace, InsertValue},
+    util::{append, list_get_by_key, normalize_whitespace, InsertValue},
 };
 
 const PROGRAM_NAME: &str = "xmlhub-indexer";
@@ -1457,7 +1458,7 @@ fn main() -> Result<()> {
 
     // The contents for the file_index.md document
     let mddocument = {
-        flatten(&[
+        [
             vec![
                 format!("<!-- NOTE: {generated_message}, do not edit manually! -->"),
                 format!("# {title}"),
@@ -1483,7 +1484,8 @@ fn main() -> Result<()> {
             } else {
                 vec![]
             },
-        ])
+        ]
+        .flattened()
         .join("\n\n")
     };
 
