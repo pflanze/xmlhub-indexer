@@ -584,8 +584,10 @@ impl FileInfo {
 /// A section consists of a (optional) section title, an optional
 /// intro (that could be the only content), and a list of subsections
 /// which could be empty. The toplevel section will not have a title,
-/// but just a list of subsections.
+/// but just a list of subsections. If `in_red` is true, will show the
+/// title in red if possible.
 struct Section {
+    in_red: bool,
     title: Option<String>,
     intro: Option<AId<Node>>,
     subsections: Vec<Section>,
@@ -633,6 +635,11 @@ impl Section {
             html.a(
                 [
                     att("class", "toc_entry"),
+                    if self.in_red {
+                        att("style", "color: red;")
+                    } else {
+                        None
+                    },
                     att("href", format!("#{section_id}")),
                 ],
                 html.text(format!("{number_path_string} {title}"))?,
@@ -683,7 +690,14 @@ impl Section {
             vec.push(html.a([att("name", &section_id)], [])?)?;
             vec.push(element(
                 html,
-                [att("id", section_id)],
+                [
+                    att("id", section_id),
+                    if self.in_red {
+                        att("style", "color: red;")
+                    } else {
+                        None
+                    },
+                ],
                 // Prefix the path to the title; don't try to use CSS
                 // as it won't make it through Markdown.
                 html.text(format!("{number_path_string} {title}"))?,
@@ -827,6 +841,7 @@ impl<'f> Folder<'f> {
         }
 
         Ok(Section {
+            in_red: false,
             title,
             intro: Some(html.div([], fileinfo_boxes)?),
             subsections,
@@ -1066,6 +1081,7 @@ fn build_index_section(
     }
 
     Ok(Section {
+        in_red: false,
         title: Some(attribute_key.as_str().into()),
         intro: Some(html.dl([att("class", "key_dl")], body)?),
         subsections: vec![],
@@ -1298,11 +1314,13 @@ fn main() -> Result<()> {
     // other sections. This way, creating the table of contents and
     // conversion to HTML vs. Markdown works seamlessly.
     let toplevel_section = Section {
+        in_red: false,
         title: None,
         intro: None,
         subsections: vec![
             file_info_boxes_section,
             Section {
+                in_red: false,
                 title: Some("Index by attribute".into()),
                 intro: None,
                 subsections: index_sections,
@@ -1382,6 +1400,7 @@ fn main() -> Result<()> {
             vec.push_flat(file_errors.to_html(&html)?)?;
         }
         Some(Section {
+            in_red: true,
             title: Some("Errors".into()),
             intro: Some(html.dl([], vec)?),
             subsections: vec![],
