@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fs::File,
+    hash::Hash,
     io::{stderr, stdout, BufWriter, Write},
     path::PathBuf,
     process::exit,
@@ -11,10 +12,11 @@ use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, Node, Pr
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use xmlhub_indexer::{
     browser::spawn_browser,
-    flattened::Flattened,
+    flattened::{Flattened, IntoFlattened},
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
     util::{append, list_get_by_key, normalize_whitespace, InsertValue},
@@ -520,6 +522,20 @@ struct FileInfo {
     metadata: Metadata,
 }
 
+// For FileInfo to go into a HashSet (`HashSet<&FileInfo>` further
+// below), it needs to be hashable and have equality comparison.
+impl Hash for FileInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+impl PartialEq for FileInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for FileInfo {}
+
 impl FileInfo {
     /// Show in a box with a table of the metadata
     fn to_box_html(
@@ -743,6 +759,9 @@ impl Section {
             );
             result.push_str(&number_path_string);
             result.push(' ');
+            // Should we use HTML to try to make this red if
+            // `self.in_red`? But GitLab drops it anyway, and there's
+            // risk of messing up the title display.
             result.push_str(title);
             result.push_str("\n\n");
         }
@@ -983,39 +1002,37 @@ fn build_index_section(
     attribute_key: AttributeName,
     first_word_only: bool,
     use_lowercase: bool,
-    fileinfo_or_errors: &Vec<Result<FileInfo, FileErrors>>,
+    file_infos: &[FileInfo],
 ) -> Result<Section> {
     // Build an index by the value for attribute_key (lower-casing the
     // key values for consistency if use_lowercase is true). The index
-    // maps from key value to a set of all FileInfo ids for that
-    // value. The BTreeMap keeps the key values sorted alphabetically
-    // as they are being inserted.
-    let mut id_by_keyvalue: BTreeMap<String, HashSet<usize>> = BTreeMap::new();
+    // maps from key value to a set of all `FileInfo`s for that
+    // value. The BTreeMap keeps the key values sorted alphabetically,
+    // which is nice so we don't have to sort those afterwards.
+    let mut file_infos_by_keyvalue: BTreeMap<String, HashSet<&FileInfo>> = BTreeMap::new();
 
-    for fileinfo_or_error in fileinfo_or_errors {
-        if let Ok(fileinfo) = fileinfo_or_error {
-            if let Some(attribute_value) = fileinfo.metadata.get(attribute_key) {
-                for keyvalue in attribute_value.as_string_list().iter() {
-                    let keyvalue_part = if first_word_only {
-                        keyvalue.split(' ').next().expect("keyvalue is not empty")
+    for file_info in file_infos {
+        if let Some(attribute_value) = file_info.metadata.get(attribute_key) {
+            for keyvalue in attribute_value.as_string_list().iter() {
+                let keyvalue_part = if first_word_only {
+                    keyvalue.split(' ').next().expect("keyvalue is not empty")
+                } else {
+                    keyvalue
+                };
+                file_infos_by_keyvalue.insert_value(
+                    if use_lowercase {
+                        keyvalue_part.to_lowercase()
                     } else {
-                        keyvalue
-                    };
-                    id_by_keyvalue.insert_value(
-                        if use_lowercase {
-                            keyvalue_part.to_lowercase()
-                        } else {
-                            keyvalue_part.into()
-                        },
-                        fileinfo.id,
-                    );
-                }
+                        keyvalue_part.into()
+                    },
+                    file_info,
+                );
             }
         }
     }
 
     let mut body = html.new_vec();
-    for (keyvalue, ids) in &id_by_keyvalue {
+    for (keyvalue, file_infos) in &file_infos_by_keyvalue {
         // Output the key value
         body.push(html.dt(
             // The first list passed to HTML constructor methods like
@@ -1031,28 +1048,21 @@ fn build_index_section(
             html.strong([att("class", "key")], html.text(keyvalue)?)?,
         )?)?;
 
-        // Output all the files for that key value
-        let mut fileinfos_for_keyvalue: Vec<&FileInfo> = ids
-            .iter()
-            .map(|id| {
-                fileinfo_or_errors[*id]
-                    .as_ref()
-                    .expect("was selected to be an OK")
-            })
-            .collect();
-        fileinfos_for_keyvalue.sort_by_key(|fileinfo| fileinfo.path.full_path());
+        // Output all the files for that key value, sorted by path.
+        let mut sorted_fileinfos: Vec<&FileInfo> = file_infos.iter().copied().collect();
+        sorted_fileinfos.sort_by_key(|fileinfo| fileinfo.path.full_path());
         let mut dd_body = html.new_vec();
-        for fileinfo in fileinfos_for_keyvalue {
+        for file_info in sorted_fileinfos {
             // Show the path, and link to the actual XML file, but
             // also provide a link to the box with the extracted
             // metainfo further up the page.
-            let rel_path = fileinfo.path.rel_path();
+            let rel_path = file_info.path.rel_path();
             let path_with_two_links_html = html.div(
                 [att("class", "file_link")],
                 [
                     html.a(
                         [
-                            att("href", format!("#box-{}", fileinfo.id)),
+                            att("href", format!("#box-{}", file_info.id)),
                             att("title", "Jump to info box"),
                         ],
                         html.text("ℹ️")?,
@@ -1065,7 +1075,7 @@ fn build_index_section(
                     html.nbsp()?,
                     html.a(
                         [
-                            att("href", format!("#box-{}", fileinfo.id)),
+                            att("href", format!("#box-{}", file_info.id)),
                             att("title", "Jump to info box"),
                         ],
                         html.text("⤴️")?,
@@ -1228,10 +1238,8 @@ fn main() -> Result<()> {
     // `FileInfo` struct. Generate the ids on the go for each of them
     // by `enumerate`ing the values (the enumeration number value is
     // passed as the `id` argument to the function given to `map`).
-    // The id is used to refer to each item in the index data structure
-    // built from the `fileinfo_or_errors` further below (could also
-    // store `&` references in an index; but need some kind of id anyway
-    // for the document-local links in the HTML formatting).
+    // The id is used to refer to each item in document-local links in
+    // the generated HTML/Markdown files.
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = paths
         .into_iter()
         .enumerate()
@@ -1249,10 +1257,14 @@ fn main() -> Result<()> {
                 path: path.clone(),
                 errors,
             })?;
-            // `id` is also the index into `fileinfo_or_errors`
             Ok(FileInfo { id, path, metadata })
         })
         .collect();
+
+    // Partition fileinfo_or_errors into vectors with only the
+    // successful and only the erroneous results.
+    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) =
+        fileinfo_or_errors.into_iter().partition_result();
 
     // Build the HTML fragments to use in the HTML page and the Markdown
     // file.
@@ -1277,10 +1289,8 @@ fn main() -> Result<()> {
         // then convert it to a Section.
 
         let mut folder = Folder::new();
-        for fileinfo_or_error in &fileinfo_or_errors {
-            if let Ok(fileinfo) = fileinfo_or_error {
-                folder.add(fileinfo).expect("no duplicates");
-            }
+        for file_info in &file_infos {
+            folder.add(file_info).expect("no duplicates");
         }
         // This being the last expression in a { } block returns
         // (moves) its value to the `file_info_boxes_section`
@@ -1303,12 +1313,28 @@ fn main() -> Result<()> {
                     spec.key,
                     first_word_only,
                     use_lowercase,
-                    &fileinfo_or_errors,
+                    &file_infos,
                 )?),
                 AttributeIndexing::NoIndex => (),
             }
         }
         sections
+    };
+
+    // Make a `Section` with all the errors if there are any
+    let errors_section = if file_errorss.is_empty() {
+        None
+    } else {
+        let mut vec = html.new_vec();
+        for file_errors in &file_errorss {
+            vec.push_flat(file_errors.to_html(&html)?)?;
+        }
+        Some(Section {
+            in_red: true,
+            title: Some("Errors".into()),
+            intro: Some(html.dl([], vec)?),
+            subsections: vec![],
+        })
     };
 
     // Create a single section without a title, to enclose all the
@@ -1319,14 +1345,24 @@ fn main() -> Result<()> {
         title: None,
         intro: None,
         subsections: vec![
-            file_info_boxes_section,
-            Section {
-                in_red: false,
-                title: Some("Index by attribute".into()),
-                intro: None,
-                subsections: index_sections,
-            },
-        ],
+            // This converts the optional `errors_section` from an
+            // Option<Section> to a Vec<Section> that contains 0 or 1
+            // sections.
+            errors_section.into_iter().collect::<Vec<_>>(),
+            // Always use the file_info_boxes_section and the index
+            // sections.
+            vec![
+                file_info_boxes_section,
+                Section {
+                    in_red: false,
+                    title: Some("Index by attribute".into()),
+                    intro: None,
+                    subsections: index_sections,
+                },
+            ],
+        ]
+        // flatten the nested vectors above into a Vec<Section>
+        .into_flattened(),
     };
 
     // Some variables used in both the .html and .md documents
@@ -1388,26 +1424,6 @@ fn main() -> Result<()> {
         )
     };
 
-    // Extract all errors, make a `Section` if there are any
-    let file_errorss: Vec<&FileErrors> = fileinfo_or_errors
-        .iter()
-        .filter_map(|v| if let Err(e) = v { Some(e) } else { None })
-        .collect();
-    let errors_section = if file_errorss.is_empty() {
-        None
-    } else {
-        let mut vec = html.new_vec();
-        for file_errors in &file_errorss {
-            vec.push_flat(file_errors.to_html(&html)?)?;
-        }
-        Some(Section {
-            in_red: true,
-            title: Some("Errors".into()),
-            intro: Some(html.dl([], vec)?),
-            subsections: vec![],
-        })
-    };
-
     // The contents for the file_index.html document
     let htmldocument = html.html(
         [],
@@ -1432,11 +1448,6 @@ fn main() -> Result<()> {
                 [
                     html.h1([], html.text(title)?)?,
                     intro(false)?,
-                    if let Some(errors_section) = &errors_section {
-                        html.div([], errors_section.to_html(NumberPath::empty(), &html)?)?
-                    } else {
-                        html.empty_node()?
-                    },
                     html.h2([], html.text("Contents")?)?,
                     toc_html,
                     html.div([], toplevel_section.to_html(NumberPath::empty(), &html)?)?,
@@ -1464,13 +1475,6 @@ fn main() -> Result<()> {
                 format!("# {title}"),
                 intro(true)?.to_html_fragment_string(&html)?,
             ],
-            if let Some(errors_section) = &errors_section {
-                vec![errors_section
-                    .to_html(NumberPath::empty(), &html)?
-                    .to_html_fragment_string(&html)?]
-            } else {
-                vec![]
-            },
             vec![
                 format!("## Contents"),
                 toc_html.to_html_fragment_string(&html)?,
