@@ -175,7 +175,10 @@ definitions of functions or methods that are called. If you want to
 read through the whole code, you should be able to read through the
 file from top to bottom, the code is roughly ordered in a way that
 makes that sensible. The code is split into sections separated with
-`// ====...` to make it clearer what belongs together.
+`// ====...` to make it clearer what belongs together. Some other
+interesting starting points might be searching for `let
+toplevel_section` for all the sections, or `let intro` for the intro
+text.
 
 Thanks to the stringent type checking during compilation, you can be
 rather confident that you didn't break anything when you got it to
