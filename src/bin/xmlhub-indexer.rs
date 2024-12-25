@@ -136,7 +136,9 @@ struct Opts {
 
 // =============================================================================
 // Description of the valid metadata attributes and how they are
-// parsed and displayed
+// parsed and displayed. First, the definition of the data types for
+// the metadata (`struct`, `enum`, `impl`), then, using those, the
+// actual description in `METADATA_SPECIFICATION`.
 
 /// An attribute name is a string that identifies an attribute. The
 /// string is in the canonical casing as it should be shown in
@@ -301,9 +303,12 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     ]
 };
 
+// `lazy_static` sets things up so that the data for the given
+// constant (`METADATA_KEY_POSITION`) is calculated when it is read
+// for the first time.
 lazy_static! {
-    // A mapping from a key name to its position; used for sorting the
-    // user-provided metadata entries uniformly.
+    /// A mapping from an attribute name to its position; used for
+    /// sorting the user-provided metadata entries uniformly.
     static ref METADATA_KEY_POSITION: HashMap<AttributeName, usize> = METADATA_SPECIFICATION
         .iter()
         .enumerate()
@@ -314,7 +319,8 @@ lazy_static! {
 // =============================================================================
 // Data structures to hold an attribute value, and the whole set of
 // values for a file after their extraction from it, as well as
-// operations including formatting that information as HTML.
+// operations (`impl` blocks) including parsing that information from
+// strings and formatting the information as HTML.
 
 /// An attribute value: either a string, a list of strings, or not
 /// present.
