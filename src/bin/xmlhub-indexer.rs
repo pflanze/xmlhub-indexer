@@ -1072,14 +1072,6 @@ fn build_index_section(
                         [att("href", rel_path), att("title", "Open the file")],
                         html.text(rel_path)?,
                     )?,
-                    html.nbsp()?,
-                    html.a(
-                        [
-                            att("href", format!("#box-{}", file_info.id)),
-                            att("title", "Jump to info box"),
-                        ],
-                        html.text("⤴️")?,
-                    )?,
                 ],
             )?;
 
@@ -1352,13 +1344,13 @@ fn main() -> Result<()> {
             // Always use the file_info_boxes_section and the index
             // sections.
             vec![
-                file_info_boxes_section,
                 Section {
                     in_red: false,
                     title: Some("Index by attribute".into()),
                     intro: None,
                     subsections: index_sections,
                 },
+                file_info_boxes_section,
             ],
         ]
         // flatten the nested vectors above into a Vec<Section>
