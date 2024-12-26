@@ -1088,6 +1088,8 @@ fn build_index_section(
         }
     }
 
+    // The contents of the section, i.e. the list of all keyvalues and
+    // the files for the respective keyvalue.
     let mut body = html.new_vec();
     for (keyvalue, file_infos) in &file_infos_by_keyvalue {
         // Output the key value
@@ -1102,7 +1104,10 @@ fn build_index_section(
             // allocator is running against the allocation limit that
             // was provided to `HtmlAllocator::new`.
             [att("class", "key_dt")],
-            html.strong([att("class", "key")], html.text(keyvalue)?)?,
+            html.strong(
+                [att("class", "key")],
+                html.i([], html.q([], html.text(keyvalue)?)?)?,
+            )?,
         )?)?;
 
         // Output all the files for that key value, sorted by path.
