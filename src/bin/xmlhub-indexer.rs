@@ -16,7 +16,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use xmlhub_indexer::{
     browser::spawn_browser,
-    flattened::{Flattened, IntoFlattened},
+    flattened::Flattened,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
     util::{append, list_get_by_key, normalize_whitespace, InsertValue},
@@ -1342,7 +1342,7 @@ fn main() -> Result<()> {
         in_red: false,
         title: None,
         intro: None,
-        subsections: vec![
+        subsections: append(
             // This converts the optional `errors_section` from an
             // Option<Section> to a Vec<Section> that contains 0 or 1
             // sections.
@@ -1358,9 +1358,7 @@ fn main() -> Result<()> {
                 },
                 file_info_boxes_section,
             ],
-        ]
-        // flatten the nested vectors above into a Vec<Section>
-        .into_flattened(),
+        ),
     };
 
     // Some variables used in both the .html and .md documents

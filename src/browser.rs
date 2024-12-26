@@ -106,8 +106,8 @@ fn spawn_browser_macos(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> 
     let mut errors = Vec::new();
     for browser in &browsers {
         let all_arguments = append(
-            &[OsString::from("-a"), OsString::from(browser)],
-            &to_owned_items(arguments),
+            [OsString::from("-a"), OsString::from(browser)],
+            to_owned_items(arguments),
         );
 
         let may_be_gui_program_name = match &browsers_source {
