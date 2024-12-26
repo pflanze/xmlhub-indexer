@@ -132,6 +132,27 @@ the time of writing.
     things where casing is more relevant; it can be changed via the
     `use_lowercase` field of `AttributeIndexing::Index`.
 
+## XML Hub maintenance
+
+If you're the XML Hub maintainer, these are points to look out for:
+
+  * You may want to sign up to get notification emails from GitLab
+    when there are changes to XML Hub. Or run the indexer periodically
+    (see "run the conversion periodically" above), perhaps
+    automatically via some automatic job runner (todo: figure out
+    details).
+
+  * Make sure that there are no errors (nothing in red in the
+    rendering of the local html file).
+
+  * Check the indices for the attributes that can have multiple values
+    (like "Keywords") for entries that have spaces in them: those may
+    be missing a comma where the space is (the writer probably meant
+    the words as individual keywords). You can also check the file
+    info box for the changed file(s) instead, those attributes that
+    can have multiple values shows each individual entry between
+    double quotes, making missing commas obvious.
+
 ## Maintaining and changing the program
 
 This program is written in the [Rust](https://rust-lang.org)
