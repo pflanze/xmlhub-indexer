@@ -55,7 +55,7 @@ or giving it the path to your local git clone of the
 
     xmlhub-indexer path/to/your/checkout/of/xmlhub
 
-which will update the `file_index.md` and `file_index.html` files in
+which will update the `README.md` and `README.html` files in
 the xmlhub directory. You can then commit and "git push" the
 changes. There are also `--commit` and `--push` options that let
 xmlhub-indexer do that itself:
@@ -63,7 +63,7 @@ xmlhub-indexer do that itself:
     xmlhub-indexer path/to/your/checkout/of/xmlhub --commit --push
 
 There are also `--open` (always open) and `--open-if-changed` options
-which open your browser on the generated `file_index.html` file (see
+which open your browser on the generated `README.html` file (see
 the `--help` text for details). I recommend to use one of them as this
 file can more easily be read, and it can show problems like missing
 attributes in red, while GitLab strips the red marking and just shows

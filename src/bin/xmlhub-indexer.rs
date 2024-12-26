@@ -25,8 +25,9 @@ use xmlhub_indexer::{
 
 const PROGRAM_NAME: &str = "xmlhub-indexer";
 const PROGRAM_REPOSITORY: &str = "https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer";
-const HTML_FILENAME: &str = "file_index.html";
-const MD_FILENAME: &str = "file_index.md";
+const HTML_FILENAME: &str = "README.html";
+const MD_FILENAME: &str = "README.md";
+const CONTRIBUTE_FILE_NAME: &str = "CONTRIBUTE"; // without the .md or .html suffix!
 const INFO_SYMBOL: &str = "ℹ️";
 
 // =============================================================================
@@ -45,13 +46,13 @@ struct Opts {
     #[clap(long)]
     path: Option<Vec<PathBuf>>,
 
-    /// Generate *only* the `file_index.html` file. This has better
+    /// Generate *only* the `README.html` file. This has better
     /// layout but doesn't work for viewing on GitLab (and may not
     /// work for GitHub either).The default is to generate both files.
     #[clap(long)]
     html: bool,
 
-    /// Generate *only* the `file_index.md` file. This works for
+    /// Generate *only* the `README.md` file. This works for
     /// viewing on GitLab but has somewhat broken layout. The default
     /// is to generate both files.
     #[clap(long)]
@@ -87,7 +88,7 @@ struct Opts {
     #[clap(long, short)]
     silent_on_written_errors: bool,
 
-    /// Open the generated `file_index.html` file in a web browser.
+    /// Open the generated `README.html` file in a web browser.
     /// Tries the browsers specified in the `BROWSER` environment
     /// variable (split on ':' into program names or paths (on macOS
     /// don't pass paths into `/Applications`, just give the
@@ -130,8 +131,8 @@ struct Opts {
 
     /// The path to the base directory of the Git checkout of the XML
     /// Hub; it is an error if this is omitted and no --paths option
-    /// was given. If given, writes the index as `file_index.html` and
-    /// `file_index.md` files into this directory (otherwise the HTML
+    /// was given. If given, writes the index as `README.html` and
+    /// `README.md` files into this directory (otherwise the HTML
     /// variant is printed to standard output).
     base_path: Option<PathBuf>,
 }
@@ -1460,19 +1461,20 @@ fn main() -> Result<()> {
             [
                 html.p(
                     [],
+                    html.text(
+                        "Welcome to the cEVO XML hub! This is a shared internal (private) \
+                         repository for uploading XML files for BEAST2.",
+                    )?,
+                )?,
+                html.p(
+                    [],
                     [
-                        html.text("Also see the ")?,
+                        html.text("To contribute XML files, see ")?,
                         html.a(
-                            [att(
-                                "href",
-                                if making_md {
-                                    "README.html"
-                                } else {
-                                    "README.md"
-                                },
-                            )],
-                            html.text("README")?,
+                            [att("href", format!("{CONTRIBUTE_FILE_NAME}.md"))],
+                            html.text(CONTRIBUTE_FILE_NAME)?,
                         )?,
+                        html.text(".")?,
                     ],
                 )?,
                 html.p(
@@ -1511,7 +1513,7 @@ fn main() -> Result<()> {
         )
     };
 
-    // The contents for the file_index.html document
+    // The contents for the README.html document
     let htmldocument = html.html(
         [],
         [
@@ -1555,7 +1557,7 @@ fn main() -> Result<()> {
         ],
     )?;
 
-    // The contents for the file_index.md document
+    // The contents for the README.md document
     let mddocument = {
         [
             vec![
