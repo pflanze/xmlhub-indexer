@@ -91,6 +91,9 @@ much magic and not worth the additional complexity.)
 
 ### Parsing
 
+Note: the ultimate truth is the code, but this should be correct at
+the time of writing.
+
   - Every attribute in an XML file is expected to be in another XML
     comment. This makes it unambiguous where one starts and ends, and
     obviates the need for another more complicated format. No escaping
@@ -98,8 +101,11 @@ much magic and not worth the additional complexity.)
     means that the string "-->" cannot be part of an attribute value).
     
   - Spaces (really any kind of whitespace, including newlines) are
-    trimmed off values on both ends, and space in the middle is
-    normalized to a single space for each block of whitespace.
+    trimmed off values on both ends.  Space in the middle is
+    normalized to a single space for each block of whitespace, except
+    for single-item attributes (`AttributeKind::String`) if the
+    `normalize_whitespace` setting is `false` (which is actually the
+    setting used for all such attributes at the time of this writing).
   
   - The string "NA" is treated the same as the empty string, both are
     treated as not available, leading to an error report if the value

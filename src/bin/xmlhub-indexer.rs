@@ -14,12 +14,13 @@ use chrono::Local;
 use clap::Parser;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use xmlhub_indexer::util;
 use xmlhub_indexer::{
     browser::spawn_browser,
     flattened::Flattened,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
-    util::{append, list_get_by_key, normalize_whitespace, InsertValue},
+    util::{append, list_get_by_key, InsertValue},
 };
 
 const PROGRAM_NAME: &str = "xmlhub-indexer";
@@ -171,6 +172,13 @@ enum AttributeNeed {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeKind {
     String {
+        /// Whether to convert groups of any kind of whitespace
+        /// (spaces, tabs, newlines) to a single space. I.e. this
+        /// strips space based "markup" if true. Note that in indexes,
+        /// values are normalized anyway, so this matters only for the
+        /// display in the file info boxes. (StringList items (the
+        /// case below) are always normalized btw.)
+        normalize_whitespace: bool,
         /// Whether to automatically create links of http and https
         /// URLs
         autolink: bool,
@@ -192,7 +200,10 @@ enum AttributeKind {
 impl AttributeKind {
     fn is_list(&self) -> bool {
         match self {
-            AttributeKind::String { autolink: _ } => false,
+            AttributeKind::String {
+                normalize_whitespace: _,
+                autolink: _,
+            } => false,
             AttributeKind::StringList {
                 separator: _,
                 autolink: _,
@@ -247,7 +258,10 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         AttributeSpecification {
             key: AttributeName("Version"),
             need: AttributeNeed::Required,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -268,25 +282,37 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         AttributeSpecification {
             key: AttributeName("Description"),
             need: AttributeNeed::Optional,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
             key: AttributeName("Comments"),
             need: AttributeNeed::Optional,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
             key: AttributeName("Citation"),
             need: AttributeNeed::Optional,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
             need: AttributeNeed::Optional,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -295,7 +321,10 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         AttributeSpecification {
             key: AttributeName("Contact"),
             need: AttributeNeed::Required,
-            kind: AttributeKind::String { autolink: true },
+            kind: AttributeKind::String {
+                normalize_whitespace: false,
+                autolink: true,
+            },
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -356,14 +385,18 @@ impl AttributeValue {
             }
         } else {
             match spec.kind {
-                AttributeKind::String { autolink } => Ok(AttributeValue::String {
-                    // Calling `normalize_whitespace` should only be
-                    // useful for values used as index keys; but it
-                    // also shouldn't hurt, as long as the text is not
-                    // parsed as markdown or something.
-                    value: normalize_whitespace(val.trim()),
+                AttributeKind::String {
+                    normalize_whitespace,
                     autolink,
-                }),
+                } => {
+                    let value = val.trim();
+                    let value = if normalize_whitespace {
+                        util::normalize_whitespace(value)
+                    } else {
+                        value.into()
+                    };
+                    Ok(AttributeValue::String { value, autolink })
+                }
                 AttributeKind::StringList {
                     separator,
                     autolink,
@@ -374,7 +407,7 @@ impl AttributeValue {
                     // replace those within keys, too.)
                     let vals: Vec<String> = val
                         .split(separator)
-                        .map(|s| normalize_whitespace(s.trim()))
+                        .map(|s| util::normalize_whitespace(s.trim()))
                         .filter(|s| !s.is_empty())
                         .collect();
                     if vals.is_empty() {
@@ -411,17 +444,20 @@ impl AttributeValue {
         }
     }
 
-    /// Convert to HTML, this is used for both .html and .md files. An
-    /// ASlice<Node> is a list of elements (nodes), usable as the body
-    /// (child elements) for another element.
+    /// Convert the value, or whole value list in the case of
+    /// StringList, to HTML. This is used for the file info boxes for
+    /// both .html and .md files. An ASlice<Node> is a list of
+    /// elements (nodes), directly usable as the body (child elements)
+    /// for another element.
     fn to_html(&self, html: &HtmlAllocator) -> Result<ASlice<Node>> {
         match self {
             AttributeValue::String { value, autolink } => {
-                if *autolink {
-                    ahtml::util::autolink(html, value)
-                } else {
-                    html.text(value)?.to_aslice(html)
-                }
+                let softpre = SoftPre {
+                    tabs_to_nbsp: Some(8),
+                    autolink: *autolink,
+                    line_separator: "\n",
+                };
+                softpre.format(value, html)?.to_aslice(html)
             }
             AttributeValue::StringList { value, autolink } => {
                 let mut body = html.new_vec();
@@ -431,6 +467,8 @@ impl AttributeValue {
                         body.push(html.text(", ")?)?;
                     }
                     need_comma = true;
+                    // Do not do SoftPre for string list items, only
+                    // autolink if requested. Wrap in <q></q>.
                     if *autolink {
                         body.push(html.q([], ahtml::util::autolink(html, s)?)?)?;
                     } else {
@@ -1003,12 +1041,35 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     }
 }
 
+struct KeyvaluePreparation {
+    first_word_only: bool,
+    use_lowercase: bool,
+}
+
+impl KeyvaluePreparation {
+    fn prepare_keyvalue(&self, keyvalue: &str) -> String {
+        let mut keyvalue_prepared: String = util::normalize_whitespace(keyvalue.trim());
+        // ^ Should we keep newlines instead, and then SoftPre for the
+        // display? Probably not.
+        if self.first_word_only {
+            keyvalue_prepared = keyvalue_prepared
+                .split(' ')
+                .next()
+                .expect("keyvalue is not empty")
+                .into();
+        }
+        if self.use_lowercase {
+            keyvalue_prepared = keyvalue_prepared.to_lowercase()
+        }
+        keyvalue_prepared
+    }
+}
+
 /// Build an index over all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
     html: &HtmlAllocator,
     attribute_key: AttributeName,
-    first_word_only: bool,
-    use_lowercase: bool,
+    keyvalue_normalization: KeyvaluePreparation,
     file_infos: &[FileInfo],
 ) -> Result<Section> {
     // Build an index by the value for attribute_key (lower-casing the
@@ -1021,19 +1082,8 @@ fn build_index_section(
     for file_info in file_infos {
         if let Some(attribute_value) = file_info.metadata.get(attribute_key) {
             for keyvalue in attribute_value.as_string_list().iter() {
-                let keyvalue_part = if first_word_only {
-                    keyvalue.split(' ').next().expect("keyvalue is not empty")
-                } else {
-                    keyvalue
-                };
-                file_infos_by_keyvalue.insert_value(
-                    if use_lowercase {
-                        keyvalue_part.to_lowercase()
-                    } else {
-                        keyvalue_part.into()
-                    },
-                    file_info,
-                );
+                file_infos_by_keyvalue
+                    .insert_value(keyvalue_normalization.prepare_keyvalue(keyvalue), file_info);
             }
         }
     }
@@ -1324,8 +1374,10 @@ fn main() -> Result<()> {
                 } => sections.push(build_index_section(
                     &html,
                     spec.key,
-                    first_word_only,
-                    use_lowercase,
+                    KeyvaluePreparation {
+                        first_word_only,
+                        use_lowercase,
+                    },
                     &file_infos,
                 )?),
                 AttributeIndexing::NoIndex => (),
