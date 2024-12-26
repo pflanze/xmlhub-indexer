@@ -1494,14 +1494,15 @@ fn main() -> Result<()> {
                 if making_md {
                     html.p(
                         [],
-                        html.text(format!(
-                            "Note: GitLab limits what formatting a .md file can show. \
-                             There is also the file {HTML_FILENAME:?} \
-                             with the same information, \
-                             if you clone this repository you could open \
-                             that file directly in \
-                             your browser to get better formatting."
-                        ))?,
+                        html.small(
+                            [],
+                            html.text(format!(
+                                "Note: if you \"git clone\" this repository, open the file \
+                                 {HTML_FILENAME:?} instead, it has the same info already \
+                                 formatted as HTML (and in fact has better formatting than \
+                                 the view you're seeing here)."
+                            ))?,
+                        )?,
                     )?
                 } else {
                     html.empty_node()?
