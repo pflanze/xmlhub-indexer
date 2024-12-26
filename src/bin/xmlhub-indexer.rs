@@ -26,6 +26,7 @@ const PROGRAM_NAME: &str = "xmlhub-indexer";
 const PROGRAM_REPOSITORY: &str = "https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer";
 const HTML_FILENAME: &str = "file_index.html";
 const MD_FILENAME: &str = "file_index.md";
+const INFO_SYMBOL: &str = "ℹ️";
 
 // =============================================================================
 // Specification of the command line interface, using the `clap`
@@ -1071,7 +1072,7 @@ fn build_index_section(
                             att("href", format!("#box-{}", file_info.id)),
                             att("title", "Jump to info box"),
                         ],
-                        html.text("ℹ️")?,
+                        html.text(INFO_SYMBOL)?,
                     )?,
                     html.nbsp()?,
                     html.a(
@@ -1414,6 +1415,14 @@ fn main() -> Result<()> {
                         html.a([att("href", PROGRAM_REPOSITORY)], html.text(PROGRAM_NAME)?)?,
                         html.text(".")?,
                     ],
+                )?,
+                html.p(
+                    [],
+                    [html.text(format!(
+                        "Click on the {INFO_SYMBOL} symbols to jump to the \
+                         info box about that file, or on the link to open \
+                         the XML file itself."
+                    ))?],
                 )?,
                 if making_md {
                     html.p(
