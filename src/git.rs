@@ -65,8 +65,9 @@ pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
             let rel_path = std::str::from_utf8(bytes)
                 .with_context(|| {
                     anyhow!(
-                        "decoding git ls-files output as unicode from directory {:?}: {bytes:?}",
-                        base_path.to_string_lossy()
+                        "decoding git ls-files output as unicode from directory {:?}: {:?}",
+                        base_path.to_string_lossy(),
+                        String::from_utf8_lossy(bytes)
                     )
                 })?
                 .into();
@@ -96,8 +97,9 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
             }
             let line = std::str::from_utf8(bytes).with_context(|| {
                 anyhow!(
-                    "decoding git status output as unicode from directory {:?}: {bytes:?}",
-                    base_path.to_string_lossy()
+                    "decoding git status output as unicode from directory {:?}: {:?}",
+                    base_path.to_string_lossy(),
+                    String::from_utf8_lossy(bytes)
                 )
             })?;
             let mut cs = line.chars();
@@ -113,8 +115,9 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
             })()
             .with_context(|| {
                 anyhow!(
-                    "decoding git status output from directory {:?}: {bytes:?}",
-                    base_path.to_string_lossy()
+                    "decoding git status output from directory {:?}: {:?}",
+                    base_path.to_string_lossy(),
+                    String::from_utf8_lossy(bytes)
                 )
             })
         })
