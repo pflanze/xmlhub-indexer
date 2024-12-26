@@ -53,14 +53,18 @@ pub fn list_get_by_key<'t, K: Eq, T>(
 }
 
 /// Create a new vector that contains copies of the elements of both
-/// arguments.
-pub fn append<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
+/// argument vectors or slices.
+pub fn append<T, V1, V2>(a: V1, b: V2) -> Vec<T>
+where
+    V1: IntoIterator<Item = T>,
+    V2: IntoIterator<Item = T>,
+{
     let mut vec = Vec::new();
     for v in a {
-        vec.push(v.clone());
+        vec.push(v);
     }
     for v in b {
-        vec.push(v.clone());
+        vec.push(v);
     }
     vec
 }
