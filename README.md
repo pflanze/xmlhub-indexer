@@ -159,7 +159,7 @@ This program is written in the [Rust](https://rust-lang.org)
 programming language, which is geared towards making programs that are
 largely bug free and stable for a long time. Chances are that no fixes
 will be needed for many years. But even if true, of course XML Hub
-might have new requirements requiring changes to the program anyway.
+might have new requirements requiring changes to the program, too.
 
 To change the program, you need to first be able to build it from
 source, as per the [From source](#from-source) section above.
