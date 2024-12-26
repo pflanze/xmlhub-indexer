@@ -1097,6 +1097,20 @@ fn build_index_section(
     })
 }
 
+/// Create a <div>&nbsp;<br>...</div> occupying some amount of
+/// whitespace; useful at the end of the document to ensure that
+/// document-internal links (e.g. from the table of contents) always
+/// allows the document to be moved so that the link target is at the
+/// top of the window.
+fn empty_space_element(number_of_br_elements: usize, html: &HtmlAllocator) -> Result<AId<Node>> {
+    let mut brs = html.new_vec();
+    for _ in 0..number_of_br_elements {
+        brs.push(html.nbsp()?)?;
+        brs.push(html.br([], [])?)?;
+    }
+    html.div([], brs)
+}
+
 /// CSS style information; only useful for the .html file, not
 /// included in the .md file as GitLab will ignore it anyway when
 /// formatting that file.
@@ -1458,6 +1472,7 @@ fn main() -> Result<()> {
                     } else {
                         html.empty_node()?
                     },
+                    empty_space_element(40, &html)?,
                 ],
             )?,
         ],
@@ -1475,6 +1490,7 @@ fn main() -> Result<()> {
                 format!("## Contents"),
                 toc_html.to_html_fragment_string(&html)?,
                 toplevel_section.to_markdown(NumberPath::empty(), &html)?,
+                empty_space_element(40, &html)?.to_html_fragment_string(&html)?,
             ],
             if opts.timestamp {
                 vec![
