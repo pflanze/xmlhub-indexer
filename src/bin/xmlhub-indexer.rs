@@ -1172,6 +1172,16 @@ const FILEINFO_METADATA_BGCOLOR: &str = "#e3e7ff";
 fn css_styles() -> String {
     [
         "
+/* make sections/subsections stand out more */
+h2 {
+  margin-top: 40px;
+}
+
+h3 {
+  border-bottom: 2px solid #407cd9;
+  margin-top: 40px;
+}
+
 /* a TABLE */
 .fileinfo {
   border-spacing: 0px;
