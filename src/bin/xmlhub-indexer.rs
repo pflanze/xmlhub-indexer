@@ -853,9 +853,9 @@ impl<'f> Folder<'f> {
         // space from the `HtmlAllocator` in `html`, that's why we
         // allocate it via the `new_vec` method and not via
         // `Vec::new()`.
-        let mut fileinfo_boxes = html.new_vec();
-        for (file_name, fileinfo) in &self.files {
-            fileinfo_boxes.push(fileinfo.to_box_html(&html, "box", file_name)?)?;
+        let mut file_info_boxes = html.new_vec();
+        for (file_name, file_info) in &self.files {
+            file_info_boxes.push(file_info.to_box_html(&html, "box", file_name)?)?;
         }
 
         // Using a normal vector here.
@@ -869,7 +869,7 @@ impl<'f> Folder<'f> {
         Ok(Section {
             in_red: false,
             title,
-            intro: Some(html.div([], fileinfo_boxes)?),
+            intro: Some(html.div([], file_info_boxes)?),
             subsections,
         })
     }
@@ -1055,10 +1055,10 @@ fn build_index_section(
         )?)?;
 
         // Output all the files for that key value, sorted by path.
-        let mut sorted_fileinfos: Vec<&FileInfo> = file_infos.iter().copied().collect();
-        sorted_fileinfos.sort_by_key(|fileinfo| fileinfo.path.full_path());
+        let mut sorted_file_infos: Vec<&FileInfo> = file_infos.iter().copied().collect();
+        sorted_file_infos.sort_by_key(|fileinfo| fileinfo.path.full_path());
         let mut dd_body = html.new_vec();
-        for file_info in sorted_fileinfos {
+        for file_info in sorted_file_infos {
             // Show the path, and link to the actual XML file, but
             // also provide a link to the box with the extracted
             // metainfo further up the page.
