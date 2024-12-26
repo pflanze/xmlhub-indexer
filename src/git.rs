@@ -85,46 +85,72 @@ pub struct GitStatusItem {
     pub y: char,
     /// Could include "->" for symlinks
     pub path: String,
+    pub target_path: Option<String>,
+}
+
+fn parse_git_status_record(line: &str) -> Result<GitStatusItem> {
+    let mut cs = line.chars();
+    let x = cs.next().ok_or_else(|| anyhow!("can't parse c0"))?;
+    let y = cs.next().ok_or_else(|| anyhow!("can't parse c1"))?;
+    let c2 = cs.next().ok_or_else(|| anyhow!("can't parse c2"))?;
+    if c2 != ' ' {
+        bail!("c2 {c2:?} is not space, x={x:?}, y={y:?}")
+    }
+    let path: String = cs.collect();
+    Ok(GitStatusItem {
+        x,
+        y,
+        path,
+        target_path: None,
+    })
 }
 
 pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
+    let decode_line = |line_bytes| {
+        std::str::from_utf8(line_bytes).with_context(|| {
+            anyhow!(
+                "decoding git status output as unicode from directory {:?}: {:?}",
+                base_path.to_string_lossy(),
+                String::from_utf8_lossy(line_bytes)
+            )
+        })
+    };
     let stdout = git_stdout(base_path, &["status", "-z"])?;
-    stdout
-        .split(|b| *b == b'\0')
-        .map(|bytes| -> Result<Option<GitStatusItem>> {
-            if bytes.is_empty() {
-                return Ok(None);
-            }
-            let line = std::str::from_utf8(bytes).with_context(|| {
+    let mut output = Vec::new();
+    let mut lines = stdout.split(|b| *b == b'\0');
+    while let Some(line_bytes) = lines.next() {
+        if line_bytes.is_empty() {
+            // Happens if stdout is empty!
+            continue;
+        }
+        let line = decode_line(line_bytes)?;
+        let record = parse_git_status_record(&line).with_context(|| {
+            anyhow!(
+                "decoding git status output from directory {:?}: {:?}",
+                base_path.to_string_lossy(),
+                String::from_utf8_lossy(line_bytes)
+            )
+        })?;
+        if record.x == 'R' {
+            let line_bytes = lines.next().ok_or_else(|| {
                 anyhow!(
-                    "decoding git status output as unicode from directory {:?}: {:?}",
+                    "missing git status target path entry after 'R' \
+                     for record {record:?}, \
+                     from directory {:?}: {:?}",
                     base_path.to_string_lossy(),
-                    String::from_utf8_lossy(bytes)
+                    String::from_utf8_lossy(line_bytes)
                 )
             })?;
-            let mut cs = line.chars();
-            (|| -> Result<Option<GitStatusItem>> {
-                let x = cs.next().ok_or_else(|| anyhow!("can't parse c0"))?;
-                let y = cs.next().ok_or_else(|| anyhow!("can't parse c1"))?;
-                let c2 = cs.next().ok_or_else(|| anyhow!("can't parse c2"))?;
-                if c2 != ' ' {
-                    bail!("c2 is not space")
-                }
-                let path: String = cs.collect();
-                Ok(Some(GitStatusItem { x, y, path }))
-            })()
-            .with_context(|| {
-                anyhow!(
-                    "decoding git status output from directory {:?}: {:?}",
-                    base_path.to_string_lossy(),
-                    String::from_utf8_lossy(bytes)
-                )
-            })
-        })
-        .filter(|v| match v {
-            Ok(None) => false,
-            _ => true,
-        })
-        .map(|r| r.map(|v| v.unwrap()))
-        .collect::<Result<Vec<_>>>()
+            let line2 = decode_line(line_bytes)?;
+            output.push(GitStatusItem {
+                x: record.x,
+                y: record.y,
+                path: record.path,
+                target_path: Some(line2.into()),
+            });
+        } else {
+            output.push(record);
+        }
+    }
+    Ok(output)
 }
