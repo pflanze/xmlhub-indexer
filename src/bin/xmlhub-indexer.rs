@@ -447,7 +447,7 @@ impl AttributeValue {
 
     /// Convert the value, or whole value list in the case of
     /// StringList, to HTML. This is used for the file info boxes for
-    /// both .html and .md files. An ASlice<Node> is a list of
+    /// both .html and .md files. An `ASlice<Node>` is a list of
     /// elements (nodes), directly usable as the body (child elements)
     /// for another element.
     fn to_html(&self, html: &HtmlAllocator) -> Result<ASlice<Node>> {
@@ -930,7 +930,8 @@ struct FileErrors {
 }
 
 impl FileErrors {
-    /// Returns <dt><dd> pairs to be used in a <dl> </dl>.
+    /// Returns `<dt>..<dd>..` (definition term / definition data)
+    /// pairs to be used in a `<dl>..</dl>` (definition list).
     fn to_html(&self, html: &HtmlAllocator) -> Result<Flat<Node>> {
         const SOFT_PRE: SoftPre = SoftPre {
             tabs_to_nbsp: Some(4),
