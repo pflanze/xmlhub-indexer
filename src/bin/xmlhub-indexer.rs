@@ -1,3 +1,4 @@
+// From the standard library
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
@@ -8,6 +9,7 @@ use std::{
     process::exit,
 };
 
+// From external dependencies
 use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, Node, Print, ToASlice};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
@@ -16,12 +18,13 @@ use git_version::git_describe;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 
-use xmlhub_indexer::util;
+// From src/*.rs
 use xmlhub_indexer::{
     browser::spawn_browser,
     flattened::Flattened,
     git::{git, git_ls_files, git_status, RelPathWithBase},
     parse_xml::parse_xml_file,
+    util,
     util::{append, list_get_by_key, InsertValue},
 };
 
