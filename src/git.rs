@@ -1,13 +1,16 @@
 use std::{
     ffi::OsStr,
     fmt::Debug,
+    io::{BufRead, BufReader},
+    os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
+    process::{Child, ChildStdout},
     sync::Arc,
 };
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::command::{run, run_stdout};
+use crate::command::{run, run_stdout, spawn, Capturing};
 
 #[derive(Debug, Clone)]
 pub struct RelPathWithBase {
@@ -153,4 +156,162 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
         }
     }
     Ok(output)
+}
+
+/// Do not pattern-match fully on this struct, as fields may be added
+/// at any time!
+#[derive(Debug)]
+pub struct GitLogEntry {
+    pub commit: String, // [u8; 20] ?,
+    pub author: String,
+    pub date: String,
+    pub message: String,
+    // files? Ignore for now
+}
+
+pub struct GitLogIterator {
+    child: Child,
+    stdout: BufReader<ChildStdout>,
+    // The "commit " line if it was read in the previous iteration
+    left_over: Option<String>,
+}
+
+impl Iterator for GitLogIterator {
+    type Item = Result<GitLogEntry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut line = String::new();
+        const NUM_PARTS: usize = 4; // one for each field
+        let mut parts: [Option<String>; NUM_PARTS] = Default::default();
+        let parts_to_entry = |mut parts: [Option<String>; NUM_PARTS]| {
+            Some(Ok(GitLogEntry {
+                commit: parts[0].take().unwrap(),
+                author: parts[1].take().unwrap(),
+                date: parts[2].take().unwrap(),
+                message: parts[3].take().unwrap(),
+            }))
+        };
+        let mut parts_i = 0;
+        let try_finish = |parts_i: usize, parts: [Option<String>; NUM_PARTS]| {
+            if parts_i == NUM_PARTS {
+                return parts_to_entry(parts);
+            } else if parts_i == 0 {
+                return None;
+            } else {
+                return Some(Err(anyhow!("unfinished entry reading from git log")));
+            }
+        };
+        loop {
+            let is_eof = if let Some(left_over) = self.left_over.take() {
+                line = left_over;
+                false
+            } else {
+                match self.stdout.read_line(&mut line) {
+                    Ok(num_bytes) => num_bytes == 0,
+                    Err(e) => return Some(Err(e).with_context(|| anyhow!("reading from git log"))),
+                }
+            };
+            if is_eof {
+                match (|| {
+                    let status = self.child.wait()?;
+                    if !status.success() {
+                        bail!("exited with non-success status {status:?}")
+                    }
+                    Ok(())
+                })() {
+                    Ok(()) => return try_finish(parts_i, parts),
+                    Err(e) => return Some(Err(e).with_context(|| anyhow!("finishing git log"))),
+                }
+            }
+            if line.starts_with("commit ") {
+                if parts_i == 0 {
+                    parts[parts_i] = Some(line["commit ".as_bytes().len()..].trim().to_string());
+                } else {
+                    self.left_over = Some(line);
+                    return try_finish(parts_i, parts);
+                }
+                parts_i += 1;
+            } else {
+                match parts_i {
+                    0 => unreachable!(),
+                    1 | 2 => {
+                        // Author and Date
+                        if let Some((key, val)) = line.split_once(':') {
+                            let (expected_key, valref) = match parts_i {
+                                1 => ("Author", &mut parts[parts_i]),
+                                2 => ("Date", &mut parts[parts_i]),
+                                _ => unreachable!(),
+                            };
+                            if key != expected_key {
+                                return Some(Err(anyhow!(
+                                    "expected key {expected_key:?}, but got \
+                                     {key:?} from git log on line {parts_i}: {line:?}"
+                                )));
+                            }
+                            *valref = Some(val.trim().into());
+                        } else {
+                            return Some(Err(anyhow!(
+                                "expected `Key: val` on line {parts_i} \
+                                 of git log entry, got: {line:?}"
+                            )));
+                        }
+                        parts_i += 1;
+                    }
+                    3 => {
+                        // Commit message
+                        if line == "\n" {
+                            // ignore; sigh
+                        } else if line.starts_with("    ") {
+                            if parts[parts_i].is_none() {
+                                parts[parts_i] = Some(String::new());
+                            }
+                            let message = parts[parts_i].as_mut().unwrap();
+                            message.push_str(&line[4..]);
+                        } else if line.starts_with(':') {
+                            // ignore for now; but switch forward
+                            parts_i += 1;
+                        } else {
+                            return Some(Err(anyhow!(
+                                "expected commit message or `:...` on line {parts_i} \
+                                 of git log entry, got: {line:?}"
+                            )));
+                        }
+                    }
+                    4 => {
+                        // in ":" file part, ignore
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            line.clear();
+        }
+    }
+}
+
+/// Git log will already receive appropriate formatting options
+/// (`--raw` or `--format..`), don't give any!
+pub fn git_log<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+) -> Result<GitLogIterator> {
+    let mut all_arguments: Vec<&OsStr> = vec![
+        OsStr::from_bytes("log".as_bytes()),
+        OsStr::from_bytes("--raw".as_bytes()),
+    ];
+    for arg in arguments {
+        all_arguments.push(arg.as_ref());
+    }
+    let mut child = spawn(
+        base_path,
+        "git",
+        &all_arguments,
+        &[("PAGER", "")],
+        Capturing::stdout(),
+    )?;
+    let stdout = BufReader::new(child.stdout.take().expect("specified"));
+    Ok(GitLogIterator {
+        child,
+        stdout,
+        left_over: None,
+    })
 }
