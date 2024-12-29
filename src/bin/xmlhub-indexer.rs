@@ -12,8 +12,10 @@ use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, Node, Pr
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
+use git_version::git_describe;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+
 use xmlhub_indexer::util;
 use xmlhub_indexer::{
     browser::spawn_browser,
@@ -1240,6 +1242,11 @@ h3 {
     .join("")
 }
 
+// Passing "--tags" to git_describe! to also respect non-annotated
+// (light-weight) git tags, just in case someone accidentally creates
+// them. OK?
+const GIT_VERSION: &str = git_describe!();
+
 fn main() -> Result<()> {
     // Retrieve the command line options / arguments.
     let opts: Opts = Opts::from_args();
@@ -1694,8 +1701,9 @@ fn main() -> Result<()> {
                                 "commit",
                                 "-m",
                                 &format!(
-                                    "regenerate index file{} via {PROGRAM_NAME}",
-                                    if written_files.len() > 1 { "s" } else { "" }
+                                    "regenerate index file{} via {PROGRAM_NAME}\n\nversion: {}",
+                                    if written_files.len() > 1 { "s" } else { "" },
+                                    GIT_VERSION
                                 ),
                                 "--",
                             ],
