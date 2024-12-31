@@ -82,6 +82,17 @@ pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
         .collect::<Result<Vec<_>>>()
 }
 
+pub fn git_branch_show_current(base_path: &Path) -> Result<Option<String>> {
+    let bytes: Vec<u8> = git_stdout(base_path, &["branch", "--show-current"])?;
+    let x = String::from_utf8(bytes)?;
+    let branch_name = x.trim();
+    Ok(if branch_name.is_empty() {
+        None
+    } else {
+        Some(branch_name.into())
+    })
+}
+
 #[derive(Debug)]
 pub struct GitStatusItem {
     pub x: char,
