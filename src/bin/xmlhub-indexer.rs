@@ -43,6 +43,13 @@ const INFO_SYMBOL: &str = "ℹ️";
 /// Build an index of the files in the (non-public) XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
+    /// Show the program version. The string is taken from `git
+    /// describe` at compile time.
+    // Note: can't name this field `version` as that's special-cased
+    // in Clap.
+    #[clap(short, long = "version")]
+    v: bool,
+
     /// A path to an individual XML file to index. The output is
     /// printed as HTML to stdout if only this option is used. The
     /// option can be given multiple times, with one path each
@@ -1253,6 +1260,11 @@ const GIT_VERSION: &str = git_describe!();
 fn main() -> Result<()> {
     // Retrieve the command line options / arguments.
     let opts: Opts = Opts::from_args();
+
+    if opts.v {
+        println!("{PROGRAM_NAME} {GIT_VERSION}");
+        return Ok(());
+    }
 
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead.
