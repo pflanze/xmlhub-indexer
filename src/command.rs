@@ -390,3 +390,29 @@ pub fn run_stderr<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
         indent: "\t\t",
     })
 }
+
+/// Same as `run_stdout` but returns stdout as a utf-8 decoded string.
+pub fn run_stdout_string<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: &Path,
+    cmd: P,
+    arguments: &[A],
+    set_env: &[(&str, &str)],
+    acceptable_status_codes: &[i32],
+    trim_ending_newline: bool,
+) -> Result<String> {
+    let outputs = run_stdout(
+        in_directory,
+        cmd,
+        arguments,
+        set_env,
+        acceptable_status_codes,
+    )?;
+    let mut stdout = String::from_utf8(outputs.output.stdout)?;
+    if trim_ending_newline {
+        let end = "\n";
+        if stdout.ends_with(end) {
+            stdout = stdout[0..stdout.len() - end.len()].into();
+        }
+    }
+    Ok(stdout)
+}
