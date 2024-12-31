@@ -10,12 +10,8 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
     command::{run_outputs, spawn, Capturing},
-    util::append,
+    util::{append, to_owned_items},
 };
-
-fn to_owned_items<O, T: ToOwned<Owned = O> + ?Sized>(vals: &[&T]) -> Vec<O> {
-    vals.iter().map(|s| (*s).to_owned()).collect::<Vec<O>>()
-}
 
 const LINUX_BROWSERS: &[&str] = &["sensible-browser", "firefox", "chromium", "chrome"];
 

@@ -98,3 +98,9 @@ fn t_normalize_whitespace() {
     assert_eq!(t("Hi  !"), "Hi !");
     assert_eq!(t("  Hi  !\n\n\n"), " Hi ! ");
 }
+
+/// Convert a slice of references to a vector that owns the owned
+/// versions of the items.
+pub fn to_owned_items<O, T: ToOwned<Owned = O> + ?Sized>(vals: &[&T]) -> Vec<O> {
+    vals.iter().map(|s| (*s).to_owned()).collect::<Vec<O>>()
+}
