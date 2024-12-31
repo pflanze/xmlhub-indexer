@@ -1,5 +1,5 @@
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fmt::Debug,
     io::{BufRead, BufReader},
     os::unix::prelude::OsStrExt,
@@ -10,7 +10,10 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::command::{run, run_stdout, spawn, Capturing};
+use crate::{
+    command::{run, run_stdout, spawn, Capturing},
+    flattened::Flattened,
+};
 
 #[derive(Debug, Clone)]
 pub struct RelPathWithBase {
@@ -84,6 +87,13 @@ pub fn git_stdout_optional_string_trimmed<S: AsRef<OsStr> + Debug>(
 /// Get the name of the checked-out branch, if any.
 pub fn git_branch_show_current(base_path: &Path) -> Result<Option<String>> {
     git_stdout_optional_string_trimmed(base_path, &["branch", "--show-current"])
+}
+
+/// Get the name of the checked-out branch, if any.
+pub fn git_describe<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) -> Result<String> {
+    let arguments: Vec<OsString> = arguments.iter().map(|v| v.as_ref().to_owned()).collect();
+    let all_args = [vec![OsString::from("describe")], arguments].flattened();
+    git_stdout_string_trimmed(base_path, &all_args)
 }
 
 pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
