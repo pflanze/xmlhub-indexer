@@ -181,6 +181,56 @@ fn t_git_version_string() {
 #[derive(Debug, PartialEq, Clone)]
 pub struct SemVersion(Vec<u32>);
 
+impl SemVersion {
+    pub fn next_major(&self) -> Self {
+        Self(vec![
+            self.0.get(0).copied().expect("major always present") + 1,
+        ])
+    }
+
+    pub fn next_minor(&self) -> Self {
+        let mut ns: Vec<u32> = self.0[0..1].iter().copied().collect();
+        ns.push(self.0.get(1).copied().unwrap_or(0) + 1);
+        Self(ns)
+    }
+
+    pub fn next_patch(&self) -> Self {
+        let mut ns: Vec<u32> = self.0.iter().take(2).copied().collect();
+        if ns.len() < 2 {
+            ns.push(0)
+        }
+        ns.push(self.0.get(2).copied().unwrap_or(0) + 1);
+        Self(ns)
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn t_semversion_increment() {
+    let p = |s: &str| SemVersion::from_str(s).unwrap();
+    assert_eq!(p("0").next_major(), p("1"));
+    assert_eq!(p("1").next_major(), p("2"));
+    assert_eq!(p("0.1").next_major(), p("1"));
+    assert_eq!(p("0.1.3").next_major(), p("1"));
+    assert_eq!(p("0.1.3").next_minor(), p("0.2"));
+    assert_eq!(p("2.1.3").next_minor(), p("2.2"));
+    assert_eq!(p("2.1.3").next_patch(), p("2.1.4"));
+    assert_eq!(p("2.1.0").next_patch(), p("2.1.1"));
+    assert_eq!(p("2.1").next_patch(), p("2.1.1"));
+    assert_eq!(p("2").next_patch(), p("2.0.1"));
+}
+
+impl TryFrom<Vec<u32>> for SemVersion {
+    type Error = &'static str;
+
+    fn try_from(value: Vec<u32>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err("need a vector with at least one element to make a SemVersion");
+        }
+        Ok(Self(value))
+    }
+}
+
 impl Display for SemVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut need_dot = false;
