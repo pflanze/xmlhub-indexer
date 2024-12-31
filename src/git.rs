@@ -56,7 +56,7 @@ pub fn git<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) -> Result
 
 /// Only succeeds if Git exited with code 0.
 pub fn git_stdout<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) -> Result<Vec<u8>> {
-    run_stdout(base_path, "git", arguments, &[], &[0]).map(|o| o.output.stdout)
+    run_stdout(base_path, "git", arguments, &[("PAGER", "")], &[0]).map(|o| o.output.stdout)
 }
 
 pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
