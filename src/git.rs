@@ -59,6 +59,33 @@ pub fn git_stdout<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) ->
     run_stdout(base_path, "git", arguments, &[("PAGER", "")], &[0]).map(|o| o.output.stdout)
 }
 
+/// Retrieve the output from a Git command as utf-8 decoded string,
+/// with leading and trailing whitespace removed.
+pub fn git_stdout_string_trimmed<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+) -> Result<String> {
+    let bytes: Vec<u8> = git_stdout(base_path, arguments)?;
+    let x = String::from_utf8(bytes)?;
+    Ok(x.trim().into())
+}
+
+/// Retrieve the output from a Git command as utf-8 decoded string,
+/// with leading and trailing whitespace removed; return the empty
+/// string as None.
+pub fn git_stdout_optional_string_trimmed<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+) -> Result<Option<String>> {
+    let x = git_stdout_string_trimmed(base_path, arguments)?;
+    Ok(if x.is_empty() { None } else { Some(x) })
+}
+
+/// Get the name of the checked-out branch, if any.
+pub fn git_branch_show_current(base_path: &Path) -> Result<Option<String>> {
+    git_stdout_optional_string_trimmed(base_path, &["branch", "--show-current"])
+}
+
 pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
     let stdout = git_stdout(base_path, &["ls-files", "-z"])?;
     let base_path = Arc::new(base_path.to_owned());
@@ -80,17 +107,6 @@ pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
             })
         })
         .collect::<Result<Vec<_>>>()
-}
-
-pub fn git_branch_show_current(base_path: &Path) -> Result<Option<String>> {
-    let bytes: Vec<u8> = git_stdout(base_path, &["branch", "--show-current"])?;
-    let x = String::from_utf8(bytes)?;
-    let branch_name = x.trim();
-    Ok(if branch_name.is_empty() {
-        None
-    } else {
-        Some(branch_name.into())
-    })
 }
 
 #[derive(Debug)]
