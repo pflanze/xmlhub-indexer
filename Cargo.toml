@@ -12,8 +12,6 @@ clap = { version = "3", features = ["derive"] }
 chrono = "0.4"
 lazy_static = "1.4"
 itertools = "0.11.0"
-# older versions to avoid compiling `syn` twice
-git-version = "=0.3.5"
 thiserror = "=1.0.37"
 # use older version to avoid additional, unknown, dependencies
 # (separate newer versions of the windows dependencies)
