@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     ffi::{OsStr, OsString},
     fmt::Debug,
     io::{BufRead, BufReader},
@@ -11,8 +12,9 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
-    command::{run, run_stdout, spawn, Capturing},
+    command::{run, run_outputs, run_stdout, spawn, Capturing},
     flattened::Flattened,
+    util::contains_bytes,
 };
 
 #[derive(Debug, Clone)]
@@ -382,7 +384,40 @@ pub fn git_log<S: AsRef<OsStr> + Debug>(
     })
 }
 
-/// Create an annotated or signed Git tag.
+/// Resolve the given reference. If `to_commit` is true, resolves to a
+/// commit id. Returns None if the reference doesn't exist / can't be
+/// resolved (details?).
+pub fn git_rev_parse(base_path: &Path, name: &str, to_commit: bool) -> Result<Option<String>> {
+    let full_name: Cow<str> = if to_commit {
+        format!("{name}^{{commit}}").into()
+    } else {
+        name.into()
+    };
+    let outputs = run_outputs(
+        base_path,
+        "git",
+        &["rev-parse", &full_name],
+        &[("PAGER", "")],
+        &[0, 128],
+    )?;
+    if outputs.truthy {
+        let stdout = std::str::from_utf8(&outputs.stdout)?;
+        let commit = stdout.trim();
+        if commit.is_empty() {
+            bail!("`git rev-parse {full_name:?}` returned the empty string")
+        }
+        Ok(Some(commit.into()))
+    } else if contains_bytes(&outputs.stderr, b": unknown revision") {
+        Ok(None)
+    } else {
+        bail!("`git rev-parse {full_name:?}`: {outputs}")
+    }
+}
+
+/// Create an annotated or signed Git tag. Returns whether the tag has
+/// been created, `false` means the tag already exists on the same
+/// commit (an error is returned if it exists on another commit). Does
+/// not check whether the tag message is the same, though!
 pub fn git_tag(
     base_path: &Path,
     tag_name: &str,
@@ -405,20 +440,54 @@ pub fn git_tag(
     if let Some(revision) = revision {
         args.push(revision);
     }
-    match git(base_path, &args) {
-        Err(e) => {
-            if local_user.is_none() {
-                Err(e).with_context(|| {
-                    anyhow!(
-                        "if you get 'gpg failed to sign the data', try \
-                     giving the local-user argument"
-                    )
-                })
+
+    let explain = |e| {
+        if local_user.is_none() {
+            Err(e).with_context(|| {
+                anyhow!(
+                    "if you get 'gpg failed to sign the data', try \
+                         giving the local-user argument"
+                )
+            })
+        } else {
+            Err(e)
+        }
+    };
+    match run_outputs(base_path, "git", &args, &[("PAGER", "")], &[0, 128]) {
+        Err(e) => explain(e),
+        Ok(outputs) => {
+            if outputs.truthy {
+                Ok(true)
             } else {
-                Err(e)
+                if contains_bytes(&outputs.stderr, b"already exists") {
+                    let want_revision = revision.unwrap_or("HEAD");
+                    let want_commitid =
+                        git_rev_parse(base_path, want_revision, true)?.ok_or_else(|| {
+                            anyhow!("given revision {want_revision:?} does not resolve")
+                        })?;
+                    let existing_commitid =
+                        git_rev_parse(base_path, tag_name, true)?.ok_or_else(|| {
+                            anyhow!(
+                                "`git tag ..` said tag {tag_name:?} already exists, \
+                                 but that name does not resolve"
+                            )
+                        })?;
+                    if want_commitid == existing_commitid {
+                        Ok(false)
+                    } else {
+                        bail!(
+                            "asked to create tag {tag_name:?} to commit {want_commitid:?}, \
+                             but that tag name already exists for commit {existing_commitid:?}"
+                        )
+                    }
+                } else {
+                    // (How to make a proper error? Ideally `Outputs`
+                    // would hold it, created by the function that
+                    // returns it?) Hack:
+                    explain(anyhow!("{outputs}"))
+                }
             }
         }
-        Ok(b) => Ok(b),
     }
 }
 
