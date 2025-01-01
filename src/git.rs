@@ -62,6 +62,35 @@ pub fn git_stdout<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) ->
     run_stdout(base_path, "git", arguments, &[("PAGER", "")], &[0]).map(|o| o.output.stdout)
 }
 
+/// Only succeeds if Git exited with one of the given exit codes,
+/// returning truthy, too.
+pub fn git_stdout_accepting<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+    acceptable_status_codes: &[i32],
+) -> Result<(bool, Vec<u8>)> {
+    let o = run_stdout(
+        base_path,
+        "git",
+        arguments,
+        &[("PAGER", "")],
+        acceptable_status_codes,
+    )?;
+    Ok((o.truthy, o.output.stdout))
+}
+
+/// Retrieve the output from a Git command as utf-8 decoded string,
+/// with leading and trailing whitespace removed.
+pub fn git_stdout_string_trimmed_accepting<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+    acceptable_status_codes: &[i32],
+) -> Result<(bool, String)> {
+    let (truthy, bytes) = git_stdout_accepting(base_path, arguments, acceptable_status_codes)?;
+    let x = String::from_utf8(bytes)?;
+    Ok((truthy, x.trim().into()))
+}
+
 /// Retrieve the output from a Git command as utf-8 decoded string,
 /// with leading and trailing whitespace removed.
 pub fn git_stdout_string_trimmed<S: AsRef<OsStr> + Debug>(
@@ -351,4 +380,66 @@ pub fn git_log<S: AsRef<OsStr> + Debug>(
         stdout,
         left_over: None,
     })
+}
+
+/// Create an annotated or signed Git tag.
+pub fn git_tag(
+    base_path: &Path,
+    tag_name: &str,
+    revision: Option<&str>,
+    message: &str,
+    sign: bool,
+    local_user: Option<&str>,
+) -> Result<bool> {
+    let mut args = vec![
+        "tag",
+        if sign { "-s" } else { "-a" },
+        tag_name,
+        "-m",
+        message,
+    ];
+    if let Some(local_user) = local_user {
+        args.push("--local-user");
+        args.push(local_user);
+    }
+    if let Some(revision) = revision {
+        args.push(revision);
+    }
+    match git(base_path, &args) {
+        Err(e) => {
+            if local_user.is_none() {
+                Err(e).with_context(|| {
+                    anyhow!(
+                        "if you get 'gpg failed to sign the data', try \
+                     giving the local-user argument"
+                    )
+                })
+            } else {
+                Err(e)
+            }
+        }
+        Ok(b) => Ok(b),
+    }
+}
+
+/// Get the name of the remote for the given branch
+pub fn git_remote_get_default_for_branch(
+    base_path: &Path,
+    branch_name: &str,
+) -> Result<Option<String>> {
+    let config_key = format!("branch.{branch_name}.remote");
+    let (truthy, string) =
+        git_stdout_string_trimmed_accepting(base_path, &["config", "--get", &config_key], &[0, 1])?;
+    if truthy {
+        if string.is_empty() {
+            bail!(
+                "the string returned by `git config --get {config_key:?}` \
+                 in {base_path:?} is empty"
+            )
+        } else {
+            Ok(Some(string))
+        }
+    } else {
+        Ok(None)
+    }
 }
