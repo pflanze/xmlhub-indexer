@@ -75,19 +75,7 @@ where
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.split('-').collect();
-        let parse_version = || {
-            parts[0]
-                .parse()
-                .map_err(anyhow::Error::from)
-                .with_context(|| {
-                    anyhow!(
-                        "expecting a version number string consisting of the optional \
-                         letter 'v' followed by 1-3 non-negative integer numbers \
-                         with '.' inbetween, got {:?}",
-                        parts[0]
-                    )
-                })
-        };
+        let parse_version = || parts[0].parse();
         let parse = |modified| {
             let depth = parts[1]
                 .parse()
@@ -245,23 +233,35 @@ impl Display for SemVersion {
     }
 }
 
+fn parse_semversion_without_context(s: &str) -> Result<SemVersion> {
+    let versionstring = if s.starts_with("v") { &s[1..] } else { s };
+    if versionstring.is_empty() {
+        bail!("missing version number after optional 'v' character")
+    }
+    let mut parts: Vec<u32> = Vec::new();
+    for (i, part) in versionstring.split('.').enumerate() {
+        let n = part.parse().with_context(|| {
+            anyhow!(
+                "expecting part {} of the version string to be an integer: {part:?}",
+                i + 1
+            )
+        })?;
+        parts.push(n);
+    }
+    Ok(SemVersion(parts))
+}
+
 impl FromStr for SemVersion {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let versionstring = if s.starts_with("v") { &s[1..] } else { s };
-        let mut parts: Vec<u32> = Vec::new();
-        for (i, part) in versionstring.split('.').enumerate() {
-            let n = part.parse().with_context(|| {
-                anyhow!(
-                    "expecting part {} of the version string {s:?} to be \
-                     an integer: {part:?}",
-                    i + 1
-                )
-            })?;
-            parts.push(n);
-        }
-        Ok(Self(parts))
+        parse_semversion_without_context(s).with_context(|| {
+            anyhow!(
+                "expecting a version number string consisting of the optional \
+                 letter 'v' followed by 1-3 non-negative integer numbers \
+                 with '.' inbetween, got {s:?}"
+            )
+        })
     }
 }
 
@@ -363,16 +363,16 @@ impl SemVerOrd for SemVersion {
 #[test]
 fn t_version() {
     let t = |s: &str| SemVersion::from_str(s).unwrap();
-    let t_err = |s: &str| SemVersion::from_str(s).err().unwrap().to_string();
+    let t_err = |s: &str| format!("{:#}", SemVersion::from_str(s).err().unwrap());
     assert_eq!(t("2.3.4").0, [2, 3, 4]);
     assert_eq!(t("v2").0, [2]);
     assert_eq!(
         t_err("w2"),
-        "expecting part 1 of the version string \"w2\" to be an integer: \"w2\""
+        "expecting a version number string consisting of the optional letter 'v' followed by 1-3 non-negative integer numbers with '.' inbetween, got \"w2\": expecting part 1 of the version string to be an integer: \"w2\": invalid digit found in string"
     );
     assert_eq!(
         t_err("2.4r5"),
-        "expecting part 2 of the version string \"2.4r5\" to be an integer: \"4r5\""
+        "expecting a version number string consisting of the optional letter 'v' followed by 1-3 non-negative integer numbers with '.' inbetween, got \"2.4r5\": expecting part 2 of the version string to be an integer: \"4r5\": invalid digit found in string"
     );
     assert!(t("2.3.4") == t("2.3.4"));
     assert!(t("2.3.5") > t("2.3.4"));
