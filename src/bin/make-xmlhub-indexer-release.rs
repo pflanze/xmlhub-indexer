@@ -1,5 +1,6 @@
 use std::{
     env::current_dir,
+    ffi::OsStr,
     fmt::Debug,
     path::{Path, PathBuf},
 };
@@ -187,7 +188,12 @@ impl Effect for CreateTag {
         // tag. We want that both for subsequent usage, but especially
         // so that it is up to date when copied off via
         // `ReleaseBinary`.
-        build_binary()?;
+        cargo(&[
+            "build",
+            "--release",
+            "--bin",
+            file_name(XMLHUB_INDEXER_BINARY_FILE),
+        ])?;
 
         Ok(())
     }
@@ -283,19 +289,8 @@ impl Effect for ReleaseBinary {
     }
 }
 
-fn build_binary() -> Result<bool> {
-    run(
-        SOURCE_CHECKOUT.working_dir_path(),
-        "cargo",
-        &[
-            "build",
-            "--release",
-            "--bin",
-            file_name(XMLHUB_INDEXER_BINARY_FILE),
-        ],
-        &[],
-        &[0],
-    )
+fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
+    run(SOURCE_CHECKOUT.working_dir_path(), "cargo", args, &[], &[0])
 }
 
 fn main() -> Result<()> {
@@ -318,17 +313,11 @@ fn main() -> Result<()> {
     // Check that everything is committed
     SOURCE_CHECKOUT.check_status()?;
 
-    // Run the test suite and build the binary to make sure we are
+    // Check everything and run the test suite to make sure we are
     // ready for release.
     {
-        run(
-            SOURCE_CHECKOUT.working_dir_path(),
-            "cargo",
-            &["test"],
-            &[],
-            &[0],
-        )?;
-        build_binary()?;
+        cargo(&["check"])?;
+        cargo(&["test"])?;
     }
 
     let mut effects: Vec<Box<dyn Effect>> = Vec::new();
