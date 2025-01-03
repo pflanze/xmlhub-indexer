@@ -75,7 +75,7 @@ struct Opts {
     /// files. Note: this causes every run to create modified files
     /// that will be commited even when there were no actual changes,
     /// thus probably not what you want!
-    #[clap(long, short)]
+    #[clap(long)]
     timestamp: bool,
 
     /// Write the index files (and commit them if requested) even if
@@ -83,9 +83,19 @@ struct Opts {
     /// are written in a section at the top of the index files,
     /// though. The same errors are still printed to stderr, and
     /// reported as exit code 1, too, though--see
-    /// `--ok-on-written-errors` to change that.
+    /// `--ok-on-written-errors` to change that. Those errors are also
+    /// committed (and pushed if `--push` was given), unless
+    /// `--no-commit-errors` is also given.
     #[clap(long, short)]
     write_errors: bool,
+
+    /// If you want to see errors in the browser and hence are using
+    /// `--write-errors`, but don't want those to be committed (and
+    /// pushed if `--push` was given), this option will prevent those
+    /// latter steps (meaning errors are written to the files, but not
+    /// committed).
+    #[clap(long)]
+    no_commit_errors: bool,
 
     /// If used together with `--write-errors`, does use exit code 0
     /// even if there were errors that were written to the index
@@ -127,8 +137,9 @@ struct Opts {
     /// repository. It's better to let xmlhub-indexer do that (the
     /// default) rather than doing it manually, since it adds its
     /// version information to the commit message and later
-    /// invocations of it check whether it needs upgrading.
-    #[clap(long, short)]
+    /// invocations of it check whether it needs upgrading. So this
+    /// option should only be used temporarily during development.
+    #[clap(long)]
     no_commit: bool,
 
     /// Push the local Git changes to the default remote after
@@ -1656,6 +1667,8 @@ fn main() -> Result<()> {
         .join("\n\n")
     };
 
+    let have_errors = !file_errorss.is_empty();
+
     // The behaviour of the program in the face of errors depends on 3
     // command line options. Here's the logic that derives 3
     // behaviours from the 3 options (it's not 1:1). The Rust compiler
@@ -1663,7 +1676,7 @@ fn main() -> Result<()> {
     let exit_code;
     let write_errors_to_stderr;
     let write_files;
-    if file_errorss.is_empty() {
+    if !have_errors {
         exit_code = 0;
         write_errors_to_stderr = false;
         write_files = true;
@@ -1734,8 +1747,14 @@ fn main() -> Result<()> {
                 out.flush()?;
             }
 
-            // Commit files if not prevented by --no-commit, and any were written
-            if (!opts.no_commit) && (!written_files.is_empty()) {
+            // Commit files if not prevented by --no-commit, and any
+            // were written, and --no-commit-errors was not given or
+            // there were no errors. I.e. reasons not to commit:
+            let no_commit_files = opts.no_commit
+                || written_files.is_empty()
+                || (have_errors && opts.no_commit_errors);
+            let do_commit_files = !no_commit_files;
+            if do_commit_files {
                 // First check that there are no uncommitted changes
                 let mut items = vec![];
                 check_dry_run! {

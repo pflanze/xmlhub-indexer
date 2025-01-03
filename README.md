@@ -68,15 +68,19 @@ file, first run `git add path/to/your.xml` before running
 
 If there are errors in any of the XML files, `xmlhub-indexer` will not
 overwrite the files by default, and instead just writes the errors to
-he terminal. If you wish to proceed, give the `--write-errors` (or the
-short variant, `-w`) option.
+he terminal. If you wish to proceed anyway (because you want to see
+the errors in the browser, or even push them to the repo for others to
+see), give the `--write-errors` (or the short variant, `-w`)
+option. This will commit (and push) the errors by default, give
+`--no-commit-errors` if you don't want that.
 
 There are also `--open` (always open) and `--open-if-changed` options
-which open your browser on the generated `README.html` file (see
-the `--help` text for details). I recommend to use one of them as this
-file can more easily be read, and it can show problems like missing
-attributes in red, while GitLab strips the red marking and just shows
-those parts in black. Also you can verify things before committing.
+which open your browser on the generated `README.html` file (see the
+`--help` text for details). I recommend to use one of them as this
+file can more easily be read than the view on GitLab, and it can show
+problems like missing attributes in red, while GitLab strips the red
+marking and just shows those parts in black. Also you can verify
+things before committing if you give `--no-commit-errors`.
 
 If you want to just run the conversion periodically you could use this
 command line (the order of options doesn't actually matter, the
