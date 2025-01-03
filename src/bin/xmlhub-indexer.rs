@@ -1,9 +1,8 @@
 // From the standard library
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     fs::File,
-    hash::Hash,
     io::{stderr, stdout, BufWriter, Write},
     path::PathBuf,
     process::exit,
@@ -171,7 +170,7 @@ struct Opts {
 /// making mistakes, we define a wrapper struct `AttributeName` to
 /// make it clear everywhere whether we're having a string in
 /// canonical casing or not.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 struct AttributeName(&'static str);
 
 impl AttributeName {
@@ -362,7 +361,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
 lazy_static! {
     /// A mapping from an attribute name to its position; used for
     /// sorting the user-provided metadata entries uniformly.
-    static ref METADATA_KEY_POSITION: HashMap<AttributeName, usize> = METADATA_SPECIFICATION
+    static ref METADATA_KEY_POSITION: BTreeMap<AttributeName, usize> = METADATA_SPECIFICATION
         .iter()
         .enumerate()
         .map(|(i, spec)| (spec.key, i))
@@ -509,7 +508,7 @@ impl AttributeValue {
 /// keys are the same as (or a subset of) those in
 /// `METADATA_SPECIFICATION`.
 #[derive(Debug)]
-struct Metadata(HashMap<AttributeName, AttributeValue>);
+struct Metadata(BTreeMap<AttributeName, AttributeValue>);
 
 impl Metadata {
     /// Retrieve the value for an attribute name.
@@ -590,11 +589,18 @@ struct FileInfo {
     metadata: Metadata,
 }
 
-// For FileInfo to go into a HashSet (`HashSet<&FileInfo>` further
-// below), it needs to be hashable and have equality comparison.
-impl Hash for FileInfo {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
+// For FileInfo to go into a BTreeSet (`BTreeSet<&FileInfo>` further
+// below), it needs to be orderable. Only `id` is relevant for that
+// (and the other types have no Ord implementation), thus write
+// implementations manually:
+impl PartialOrd for FileInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+impl Ord for FileInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
     }
 }
 impl PartialEq for FileInfo {
@@ -1000,12 +1006,12 @@ impl FileErrors {
 /// Parse all XML comments from above the first XML opening element
 /// out of one file as `Metadata`.
 fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
-    let spec_by_lowercase_key: HashMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
+    let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
         .map(|spec| (spec.key.as_str().to_lowercase(), spec))
         .collect();
     let mut unseen_specs_by_lowercase_key = spec_by_lowercase_key.clone();
-    let mut map: HashMap<AttributeName, AttributeValue> = HashMap::new();
+    let mut map: BTreeMap<AttributeName, AttributeValue> = BTreeMap::new();
 
     // Collect all errors instead of stopping at the first one.
     let mut errors: Vec<String> = Vec::new();
@@ -1052,9 +1058,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
         .collect();
     if !missing.is_empty() {
         // Show just the names, not the AttributeName wrappers
-        let mut missing_strings: Vec<&'static str> =
-            missing.iter().map(|key| key.as_str()).collect();
-        missing_strings.sort();
+        let missing_strings: Vec<&'static str> = missing.iter().map(|key| key.as_str()).collect();
         errors.push(format!(
             "attributes with these names are missing: {missing_strings:?}",
         ));
@@ -1103,7 +1107,7 @@ fn build_index_section(
     // maps from key value to a set of all `FileInfo`s for that
     // value. The BTreeMap keeps the key values sorted alphabetically,
     // which is nice so we don't have to sort those afterwards.
-    let mut file_infos_by_keyvalue: BTreeMap<String, HashSet<&FileInfo>> = BTreeMap::new();
+    let mut file_infos_by_keyvalue: BTreeMap<String, BTreeSet<&FileInfo>> = BTreeMap::new();
 
     for file_info in file_infos {
         if let Some(attribute_value) = file_info.metadata.get(attribute_key) {

@@ -1,10 +1,9 @@
 use anyhow::{anyhow, bail, Context, Result};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     ffi::OsStr,
     fmt::Display,
     fs::{create_dir, OpenOptions},
-    hash::Hash,
     io::BufReader,
     io::{BufRead, Write},
     path::{Path, PathBuf},
@@ -20,30 +19,12 @@ pub trait InsertValue<K, V> {
     fn insert_value(&mut self, key: K, val: V) -> bool;
 }
 
-impl<K: Hash + PartialEq + Eq + Clone, V: Hash + PartialEq + Eq> InsertValue<K, V>
-    for HashMap<K, HashSet<V>>
-{
+impl<K: Ord + Clone, V: Ord> InsertValue<K, V> for BTreeMap<K, BTreeSet<V>> {
     fn insert_value(&mut self, key: K, val: V) -> bool {
         if let Some(vals) = self.get_mut(&key) {
             vals.insert(val)
         } else {
-            let mut vals = HashSet::new();
-            vals.insert(val);
-            self.insert(key.clone(), vals);
-            true
-        }
-    }
-}
-
-impl<K: Ord + PartialEq + Eq + Clone, V: Hash + PartialEq + Eq> InsertValue<K, V>
-    for BTreeMap<K, HashSet<V>>
-{
-    fn insert_value(&mut self, key: K, val: V) -> bool {
-        // copy-paste
-        if let Some(vals) = self.get_mut(&key) {
-            vals.insert(val)
-        } else {
-            let mut vals = HashSet::new();
+            let mut vals = BTreeSet::new();
             vals.insert(val);
             self.insert(key.clone(), vals);
             true
