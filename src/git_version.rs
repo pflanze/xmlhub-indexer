@@ -170,18 +170,21 @@ fn t_git_version_string() {
 pub struct SemVersion(Vec<u32>);
 
 impl SemVersion {
+    /// Increment the first part.
     pub fn next_major(&self) -> Self {
         Self(vec![
             self.0.get(0).copied().expect("major always present") + 1,
         ])
     }
 
+    /// Increment the second part.
     pub fn next_minor(&self) -> Self {
         let mut ns: Vec<u32> = self.0[0..1].iter().copied().collect();
         ns.push(self.0.get(1).copied().unwrap_or(0) + 1);
         Self(ns)
     }
 
+    /// Increment the third part.
     pub fn next_patch(&self) -> Self {
         let mut ns: Vec<u32> = self.0.iter().take(2).copied().collect();
         if ns.len() < 2 {
@@ -189,6 +192,24 @@ impl SemVersion {
         }
         ns.push(self.0.get(2).copied().unwrap_or(0) + 1);
         Self(ns)
+    }
+
+    // Next compatible version (1.2.1 => 1.3, 0.2.1 => 0.2.2)
+    pub fn next_compatible(&self) -> Self {
+        if self.0[0] < 1 {
+            self.next_patch()
+        } else {
+            self.next_minor()
+        }
+    }
+
+    // Next incompatible version (1.2.1 => 2, 0.2.1 => 0.3)
+    pub fn next_incompatible(&self) -> Self {
+        if self.0[0] < 1 {
+            self.next_minor()
+        } else {
+            self.next_major()
+        }
     }
 }
 
@@ -206,6 +227,13 @@ fn t_semversion_increment() {
     assert_eq!(p("2.1.0").next_patch(), p("2.1.1"));
     assert_eq!(p("2.1").next_patch(), p("2.1.1"));
     assert_eq!(p("2").next_patch(), p("2.0.1"));
+
+    assert_eq!(p("2").next_compatible(), p("2.1"));
+    assert_eq!(p("1.2.1").next_compatible(), p("1.3"));
+    assert_eq!(p("0.2.1").next_compatible(), p("0.2.2"));
+    assert_eq!(p("2").next_incompatible(), p("3"));
+    assert_eq!(p("1.2.1").next_incompatible(), p("2"));
+    assert_eq!(p("0.2.1").next_incompatible(), p("0.3"));
 }
 
 impl TryFrom<Vec<u32>> for SemVersion {
