@@ -73,8 +73,8 @@ struct Opts {
 
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
-    /// that will be commited via `--commit` even when there were no
-    /// actual changes!
+    /// that will be commited even when there were no actual changes,
+    /// thus probably not what you want!
     #[clap(long, short)]
     timestamp: bool,
 
@@ -114,9 +114,7 @@ struct Opts {
     open: bool,
 
     /// Same as `--open` but only opens a browser if the file has
-    /// changed since the last Git commit. (You may want to use this
-    /// together with `--commit` so that on the next run it will not
-    /// open the browser again.)
+    /// changed since the last Git commit to it.
     #[clap(long)]
     open_if_changed: bool,
 
@@ -125,12 +123,16 @@ struct Opts {
     #[clap(long)]
     pull: bool,
 
-    /// Add and commit the output files to the Git repository.
+    /// Do not add and commit the output files to the Git
+    /// repository. It's better to let xmlhub-indexer do that (the
+    /// default) rather than doing it manually, since it adds its
+    /// version information to the commit message and later
+    /// invocations of it check whether it needs upgrading.
     #[clap(long, short)]
-    commit: bool,
+    no_commit: bool,
 
     /// Push the local Git changes to the default remote after
-    /// committing. Does nothing if the `--commit` option wasn't
+    /// committing. Does nothing if the `--no-commit` option was
     /// given, or if there were no changes.
     #[clap(long)]
     push: bool,
@@ -1722,8 +1724,8 @@ fn main() -> Result<()> {
                 out.flush()?;
             }
 
-            // Commit files if requested and any were written
-            if opts.commit && !written_files.is_empty() {
+            // Commit files if not prevented by --no-commit, and any were written
+            if (!opts.no_commit) && (!written_files.is_empty()) {
                 // First check that there are no uncommitted changes
                 let mut items = vec![];
                 check_dry_run! {
@@ -1736,8 +1738,8 @@ fn main() -> Result<()> {
                     .collect();
                 if !changed_items.is_empty() {
                     bail!(
-                        "won't carry out --commit request due to uncommitted \
-                         changes in {base_path:?}: {changed_items:?}"
+                        "won't run git commit due to uncommitted changes in {base_path:?} \
+                         (you could use the --no-commit option): {changed_items:?}"
                     )
                 }
 

@@ -56,14 +56,9 @@ or giving it the path to your local git clone of the
     xmlhub-indexer path/to/your/checkout/of/xmlhub
 
 which will update the `README.md` and `README.html` files in the
-xmlhub directory. You can then commit and "git push" the
-changes. There are also `--commit` and `--push` options that let
-xmlhub-indexer do that itself, and it is indeed recommended to use
-`--commit` at least, as then the version number of the xmlhub-indexer
-binary is stored (later invocations check those to see if it needs
-upgrading):
-
-    xmlhub-indexer path/to/your/checkout/of/xmlhub --commit --push
+xmlhub directory and commit any changes to those. You can then "git
+push" the changes. There is also a `--push` option that lets
+xmlhub-indexer do the latter, too.
 
 There are also `--open` (always open) and `--open-if-changed` options
 which open your browser on the generated `README.html` file (see
@@ -77,7 +72,7 @@ command line (the order of options doesn't actually matter, the
 program executes them in the sensible order anyway; you can also use
 the short options shown in the `--help` text instead):
 
-    xmlhub-indexer path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --commit --push
+    xmlhub-indexer path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
 Running this will pull, convert, write the output even if there are
 errors, and if there were changes, commit and push them back to the
@@ -169,9 +164,10 @@ source, as per the [From source](#from-source) section above.
 
 While working on it, it's more practical to build and run it in one
 go. Run it e.g. like this (the `--` are needed to stop processing of
-options by `cargo` itself):
+options by `cargo` itself; `--no-commit` if you want to verify the
+output before committing to it):
 
-    cargo run -- ~/tmp/xmlhub/ --commit
+    cargo run -- ~/tmp/xmlhub/ --no-commit
 
 You will also want to use an IDE for editing Rust code. The standard
 recommendation is VSCode with the Rust-Analyzer extension (see [Rust
