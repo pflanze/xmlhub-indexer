@@ -4,15 +4,16 @@ This is a tool to build an index of the files in the (non-public) "XML
 Hub" Git repository of the cEvo group at the D-BSSE, ETH Zurich.
 
 It is meant to be run after new XML files are uploaded into the XML
-Hub Git repository, or existing files are removed or changed. It can
-be run manually on a checkout of the XML Hub repository, or it could
-be integrated into CI (continuous integration) of the Git hosting
-platform (GitLab / GitHub) so that it is automatically run when
-changes are uploaded.
+Hub Git repository, or existing files are removed or changed. It is
+designed to be run manually on a checkout of the XML Hub repository,
+or periodically via a service that allows to do that (e.g.`launchd` on
+macOS). It might also be possible to integrate into CI (continuous
+integration) of the Git hosting platform (GitLab / GitHub) so that it
+is automatically run immediately when xmlhub receives changes.
 
 ## Installation
 
-### Downloads
+### Download
 
 You can download pre-built binaries (currently for macOS, built
 manually) from
@@ -56,9 +57,19 @@ or giving it the path to your local git clone of the
     xmlhub-indexer path/to/your/checkout/of/xmlhub
 
 which will update the `README.md` and `README.html` files in the
-xmlhub directory and commit any changes to those. You can then "git
-push" the changes. There is also a `--push` option that lets
+xmlhub directory and commit any changes to those. You can then `git
+push` the changes. There is also a `--push` option that lets
 xmlhub-indexer do the latter, too.
+
+Note that `xmlhub-indexer` only reads files that have the suffix
+`.xml` *and are added to the repository*. If you create a new XML
+file, first run `git add path/to/your.xml` before running
+`xmlhub-indexer`.
+
+If there are errors in any of the XML files, `xmlhub-indexer` will not
+overwrite the files by default, and instead just writes the errors to
+he terminal. If you wish to proceed, give the `--write-errors` (or the
+short variant, `-w`) option.
 
 There are also `--open` (always open) and `--open-if-changed` options
 which open your browser on the generated `README.html` file (see
@@ -167,7 +178,7 @@ go. Run it e.g. like this (the `--` are needed to stop processing of
 options by `cargo` itself; `--no-commit` if you want to verify the
 output before committing to it):
 
-    cargo run -- ~/tmp/xmlhub/ --no-commit
+    cargo run --bin xmlhub-indexer -- ~/tmp/xmlhub/ --no-commit
 
 You will also want to use an IDE for editing Rust code. The standard
 recommendation is VSCode with the Rust-Analyzer extension (see [Rust
@@ -212,6 +223,83 @@ compile. You can also check whether the Git diff of the resulting
 output files written to the xmlhub repository looks sensible (you need
 to use a program that is good at showing changes within the long lines
 of HTML code that the files contain).
+
+By default, errors are shown without a backtrace. If you want to know
+which location an error originates from, run the default debug build
+(i.e. do *not* use the `--release` option) with the environment
+variable setting `RUST_BACKTRACE=1`, e.g.
+
+    RUST_BACKTRACE=1 cargo run --bin xmlhub-indexer -- ~/tmp/xmlhub
+
+### Release process
+
+After making changes to xmlhub-indexer (or its dependencies), the
+changes should be published back to GitLab so that others can get
+them. This entails the following--*but note the next subsection*, you
+don't have to do this manually!:
+
+- Deciding on the new version name. Semantic versioning is used, which
+  means that the first digit in the version number is incremented when
+  incompatible changes were made. Changing the generated output is
+  understood as incompatible here: if two maintainers used two
+  different versions that produce different output, and they
+  alternatively run xmlhub-indexer, then the xmlhub repository would
+  receive changed index files each time, even when the inputs (the XML
+  files) didn't change (i.e. they would overwrite each other's outputs
+  and create new Git commits every time, spamming the Git
+  history). `xmlhub-indexer`, when it commits changes to the xmlhub
+  repo, automatically adds version information to the commit message,
+  and before indexing verifies that the version of the last commit is
+  lower or compatible, to prevent that situation. Version numbers
+  should start with the letter "v" (but that's optional) then 1 to 3
+  non-negative integers joined with a "."
+
+- Creating a git tag with the new version name, and "git push"-ing
+  back both the tag and the current branch (master) to the
+  xmlhub-indexer repository on GitLab. Git tags can be created with
+  PGP signatures to allow others to verify the authenticity of a
+  release.
+
+- Rebuilding the binary, copying it from the `target/release/` directory into
+  the correct folder in the checkout of the xmlhub-indexer-binaries
+  repository, adding and committing it there (preferably with
+  information about where it was built), and if signing, also adding a
+  git tag, then pushing that also back to GitLab.
+
+#### `make-xmlhub-indexer-release`
+
+The xmlhub-indexer repository contains a `make-xmlhub-indexer-release`
+program, which carries out all of the above steps automatically. It
+runs tests and collects information, then shows a summary of the
+changes that will be carried out and asks for confirmation before
+acting.
+
+Use the `--help` option for more information. It is recommended to use
+both the `--push` and `--sign` options.
+
+Caveats:
+
+- Unlike `xmlhub-indexer`, it does not currently have a `--pull`
+  option; if you use the `--push` option and the "git push" step fails
+  due to the remote (GitLab) having been updated by someone else in
+  the meantime, you're expected to pull (and verify) the changes
+  yourself, then re-run the `make-xmlhub-indexer-release` program.
+
+- It currently only publishes binaries when run on macOS or Linux, and
+  it has not been tested on Windows at all.
+
+For making signed tags (using the `--sign` option), you need a PGP/gpg
+key. If you don't have one, in a terminal, run `gpg --generate-key`,
+then follow the instructions. When done, `cd` into your checkout of
+the `xmlhub-indexer-binaries` repository, then run `gpg --export -a >
+keys/your-name.asc`, `git add .`, `git commit -m "add key"`, `git
+push`, so that others can then run `git --import key/your-name.asc`
+from their checkout once and then run `git tag -v v123` to verify the
+authenticity of the v123 version. To know whether the key is actually
+yours, both people can run `gpg --fingerprint "your name"` (or leave
+away the name string and get all keys) and then compare the
+fingerprint on the screen.
+
 
 ### Quick Rust primer
 
