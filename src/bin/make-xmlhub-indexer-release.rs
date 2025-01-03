@@ -79,9 +79,17 @@ struct CheckoutContext {
     /// The name of the branch used in the remote repository, also
     /// expected to be the same in the local checkout
     branch_name: &'static str,
+    /// Where the upstream repository should be, for `git clone` (and
+    /// push) purposes. Currently only used for error message.
+    supposed_upstream_git_url: &'static str,
 }
 
 impl CheckoutContext {
+    fn checkout_dir_exists(&self) -> bool {
+        let path : &Path = self.working_dir_path.as_ref();
+        path.exists()
+    }
+
     fn working_dir_path(&self) -> &Path {
         self.working_dir_path.as_ref()
     }
@@ -130,11 +138,13 @@ const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-indexer";
 const SOURCE_CHECKOUT: CheckoutContext = CheckoutContext {
     working_dir_path: ".",
     branch_name: "master",
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git"
 };
 
 const BINARIES_CHECKOUT: CheckoutContext = CheckoutContext {
     working_dir_path: "../xmlhub-indexer-binaries/",
     branch_name: "master",
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git"
 };
 
 // Don't need to store tag_name String in here since it's constant and
@@ -463,6 +473,13 @@ fn main() -> Result<()> {
                 "not publishing binary because --no-publish-binary option was given",
             )
         } else {
+            if ! BINARIES_CHECKOUT.checkout_dir_exists() {
+                bail!("missing the git working directory at {:?}; \
+                       please run: `cd ..; git clone {}; cd -`",
+                      BINARIES_CHECKOUT.working_dir_path,
+                      BINARIES_CHECKOUT.supposed_upstream_git_url
+                )
+            }
             BINARIES_CHECKOUT.check_current_branch()?;
             BINARIES_CHECKOUT.check_status()?;
 
