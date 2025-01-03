@@ -107,11 +107,11 @@ much magic and not worth the additional complexity.)
 Note: the ultimate truth is the code, but this should be correct at
 the time of writing.
 
-  - Every attribute in an XML file is expected to be in another XML
-    comment. This makes it unambiguous where one starts and ends, and
-    obviates the need for another more complicated format. No escaping
-    or anything is done (other than what XML itself requires) (this
-    means that the string "-->" cannot be part of an attribute value).
+  - Every attribute in an XML file is expected to be in a separate XML
+    comment. This makes it unambiguous where one attribute starts and
+    ends, and obviates the need for any other more complicated
+    format. No escaping is needed or possible; but the string "-->" or
+    already "--" cannot be part of an attribute value.
     
   - Spaces (really any kind of whitespace, including newlines) are
     trimmed off values on both ends.  Space in the middle is
@@ -152,19 +152,20 @@ If you're the XML Hub maintainer, these are points to look out for:
   * You may want to sign up to get notification emails from GitLab
     when there are changes to XML Hub. Or run the indexer periodically
     (see "run the conversion periodically" above), perhaps
-    automatically via some automatic job runner (todo: figure out
-    details).
+    automatically via some automatic job runner (e.g.`launchd` on
+    macOS, todo: test).
 
-  * Make sure that there are no errors (nothing in red in the
-    rendering of the local html file).
+  * Verify that there are no errors (nothing in red in the rendering
+    of the local README.html file).
 
   * Check the indices for the attributes that can have multiple values
     (like "Keywords") for entries that have spaces in them: those may
     be missing a comma where the space is (the writer probably meant
     the words as individual keywords). You can also check the file
     info box for the changed file(s) instead, those attributes that
-    can have multiple values shows each individual entry between
-    double quotes, making missing commas obvious.
+    can have multiple values show each individual value between double
+    quotes (like `“base”, “BDSKY”, “feast”`), making missing commas
+    obvious (the same would be shown as `“base BDSKY feast”`).
 
 ## Maintaining and changing the program
 
@@ -264,22 +265,26 @@ don't have to do this manually!:
   PGP signatures to allow others to verify the authenticity of a
   release.
 
-- Rebuilding the binary, copying it from the `target/release/` directory into
-  the correct folder in the checkout of the xmlhub-indexer-binaries
-  repository, adding and committing it there (preferably with
-  information about where it was built), and if signing, also adding a
-  git tag, then pushing that also back to GitLab.
+- Rebuilding the binary, then copying it from the `target/release/`
+  directory into the correct folder in the checkout of the
+  `xmlhub-indexer-binaries` repository, adding and committing it there
+  (preferably with information about the host and environment in which
+  it was built), and if signing, also adding a git tag, then pushing
+  branch and tag also back to GitLab.
 
 #### `make-xmlhub-indexer-release`
 
-The xmlhub-indexer repository contains a `make-xmlhub-indexer-release`
-program, which carries out all of the above steps automatically. It
-runs tests and collects information, then shows a summary of the
-changes that will be carried out and asks for confirmation before
-acting.
+In addition to `xmlhub-indexer` itself, the xmlhub-indexer repository
+contains a `make-xmlhub-indexer-release` program which carries out all
+of the above steps automatically. It runs tests and collects
+information, then shows a summary of the changes that will be carried
+out and asks for confirmation before acting.
 
 Use the `--help` option for more information. It is recommended to use
-both the `--push` and `--sign` options.
+both the `--push` and `--sign` options. From within the
+"xmlhub-indexer" directory run:
+
+    cargo run --bin make-xmlhub-indexer-release -- --sign --push
 
 Caveats:
 
@@ -302,8 +307,12 @@ from their checkout once and then run `git tag -v v123` to verify the
 authenticity of the v123 version. To know whether the key is actually
 yours, both people can run `gpg --fingerprint "your name"` (or leave
 away the name string and get all keys) and then compare the
-fingerprint on the screen.
+fingerprints (hex number string with spaces) on the screen.
 
+While care has been taken to try to make the `xmlhub-indexer` source
+code easy to understand (newbie-friendly), for
+`make-xmlhub-indexer-release` that goal has been dropped; it does use
+some advanced Rust features.
 
 ### Quick Rust primer
 
@@ -417,12 +426,14 @@ allow clone() to be called, PartialEq for equality comparison etc.)
 
 ## Help
 
-You can get formatted documentation for this program and all of its
-dependencies except for the standard library (which is at [standard
-library docs](https://doc.rust-lang.org/std/) instead) via running
-`cargo doc --open`. (You can also use the IDE functionality to see a
-function's docs, or follow from a function call to the function's
-source code.)
+You can get formatted documentation for the libraries this program
+uses except for the standard library (which is at [standard library
+docs](https://doc.rust-lang.org/std/) instead) via running `cargo doc
+--open` (which should open your web browser, alternatively find the
+generated html files in `target/doc/`).
+
+You can also use the IDE functionality to see a function's docs, or
+follow from a function call to the function's source code.
 
 The original author of this program, Christian Jaeger
 <ch@christianjaeger.ch>, is happy to help if you have questions.
