@@ -22,6 +22,8 @@ use xmlhub_indexer::{
     browser::spawn_browser,
     flattened::Flattened,
     git::{git, git_ls_files, git_status, RelPathWithBase},
+    git_check_version::GitLogVersionChecker,
+    git_version::{GitVersion, SemVersion},
     parse_xml::parse_xml_file,
     util,
     util::{append, list_get_by_key, InsertValue},
@@ -42,8 +44,8 @@ const INFO_SYMBOL: &str = "ℹ️";
 /// Build an index of the files in the (non-public) XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
-    /// Show the program version. The string is taken from `git
-    /// describe` at compile time.
+    /// Show the program version. It was copied from `git describe
+    /// --tags` at compile time.
     // Note: can't name this field `version` as that's special-cased
     // in Clap.
     #[clap(short, long = "version")]
@@ -139,6 +141,12 @@ struct Opts {
     /// files, though.
     #[clap(long)]
     dry_run: bool,
+
+    /// Do not check the program version against versions specified in
+    /// the automatic commit messages in the xmlhub repo. Only use if
+    /// you know what you're doing.
+    #[clap(long)]
+    no_version_check: bool,
 
     /// The path to the base directory of the Git checkout of the XML
     /// Hub; it is an error if this is omitted and no --paths option
@@ -1260,10 +1268,19 @@ fn main() -> Result<()> {
     // Retrieve the command line options / arguments.
     let opts: Opts = Opts::from_args();
 
+    let program_version: GitVersion<SemVersion> = GIT_VERSION
+        .parse()
+        .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
+
     if opts.v {
-        println!("{PROGRAM_NAME} {GIT_VERSION}");
+        println!("{PROGRAM_NAME} {program_version}");
         return Ok(());
     }
+
+    let git_log_version_checker = GitLogVersionChecker {
+        program_name: PROGRAM_NAME.into(),
+        program_version,
+    };
 
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead.
@@ -1302,6 +1319,30 @@ fn main() -> Result<()> {
                  option). Run with --help for details."
             )
         })?;
+
+        if !opts.no_version_check {
+            // Verify that this is not an outdated version of the program.
+            let found = git_log_version_checker
+                .check_git_log(base_path, &[HTML_FILENAME, MD_FILENAME])
+                .with_context(|| {
+                    anyhow!(
+                        "you should update your copy of the {PROGRAM_NAME} program. \
+                     If you're sure you want to proceed anyway, use the \
+                     --no-version-check option."
+                    )
+                })?;
+            if found.is_none() {
+                println!(
+                    "Warning: could not find or parse {PROGRAM_NAME} version statements \
+                 in the git log on the output files; this may mean that \
+                 this is a fresh xmlhub Git repository, or something is messed up. \
+                 This means that if {PROGRAM_NAME} is used from another computer, \
+                 if its version is producing different output from this version \
+                 then each will overwrite the changes from the other endlessly."
+                );
+            }
+        }
+
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
@@ -1715,9 +1756,9 @@ fn main() -> Result<()> {
                                 "commit",
                                 "-m",
                                 &format!(
-                                    "regenerate index file{} via {PROGRAM_NAME}\n\nversion: {}",
+                                    "regenerate index file{} via {}",
                                     if written_files.len() > 1 { "s" } else { "" },
-                                    GIT_VERSION
+                                    git_log_version_checker.program_name_and_version()
                                 ),
                                 "--",
                             ],

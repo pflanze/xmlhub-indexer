@@ -55,10 +55,13 @@ or giving it the path to your local git clone of the
 
     xmlhub-indexer path/to/your/checkout/of/xmlhub
 
-which will update the `README.md` and `README.html` files in
-the xmlhub directory. You can then commit and "git push" the
+which will update the `README.md` and `README.html` files in the
+xmlhub directory. You can then commit and "git push" the
 changes. There are also `--commit` and `--push` options that let
-xmlhub-indexer do that itself:
+xmlhub-indexer do that itself, and it is indeed recommended to use
+`--commit` at least, as then the version number of the xmlhub-indexer
+binary is stored (later invocations check those to see if it needs
+upgrading):
 
     xmlhub-indexer path/to/your/checkout/of/xmlhub --commit --push
 
