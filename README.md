@@ -416,10 +416,9 @@ allow clone() to be called, PartialEq for equality comparison etc.)
 You can get formatted documentation for this program and all of its
 dependencies except for the standard library (which is at [standard
 library docs](https://doc.rust-lang.org/std/) instead) via running
-`cargo doc` and then opening the `target/doc` folder in your browser
-(e.g. `firefox target/doc/`). (You can also use the IDE functionality
-to see a function's docs, or follow from a function call to the
-function's source code.)
+`cargo doc --open`. (You can also use the IDE functionality to see a
+function's docs, or follow from a function call to the function's
+source code.)
 
 The original author of this program, Christian Jaeger
 <ch@christianjaeger.ch>, is happy to help if you have questions.
