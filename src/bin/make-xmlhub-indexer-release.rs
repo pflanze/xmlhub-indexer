@@ -22,6 +22,7 @@ use xmlhub_indexer::{
 };
 
 #[derive(clap::Parser, Debug)]
+#[clap(next_line_help = true)]
 /// Produce a new release of the xmlhub-indexer program, both the
 /// source code as well as a binary if on macOS. Also creates a new
 /// version tag if necessary.

@@ -41,6 +41,7 @@ const INFO_SYMBOL: &str = "ℹ️";
 // library crate.
 
 #[derive(clap::Parser, Debug)]
+#[clap(next_line_help = true)]
 /// Build an index of the files in the (non-public) XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
