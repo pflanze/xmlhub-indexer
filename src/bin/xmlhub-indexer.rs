@@ -1052,7 +1052,9 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
         .collect();
     if !missing.is_empty() {
         // Show just the names, not the AttributeName wrappers
-        let missing_strings: Vec<&'static str> = missing.iter().map(|key| key.as_str()).collect();
+        let mut missing_strings: Vec<&'static str> =
+            missing.iter().map(|key| key.as_str()).collect();
+        missing_strings.sort();
         errors.push(format!(
             "attributes with these names are missing: {missing_strings:?}",
         ));
