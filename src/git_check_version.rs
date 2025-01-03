@@ -1,9 +1,14 @@
-use std::{cmp::Ordering, ffi::OsStr, fmt::Debug, path::Path};
+use std::{
+    cmp::Ordering,
+    ffi::OsStr,
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
 
 use thiserror::Error;
 
 use crate::{
-    git::{git_log, GitLogEntry},
+    git::git_log,
     git_version::{GitVersion, SemVerOrd, SemVerOrdResult, SemVersion, UndecidabilityReason},
 };
 
@@ -88,14 +93,23 @@ pub enum GitCheckVersionError {
     OtherError(#[from] anyhow::Error),
 }
 
+impl GitCheckVersionError {
+    pub fn with_base_path(self, base_path: &Path) -> GitCheckVersionErrorWithContext {
+        GitCheckVersionErrorWithContext {
+            base_path: base_path.to_owned(),
+            error: self,
+        }
+    }
+}
+
 fn check_version(
     program_version: &GitVersion<SemVersion>,
     data_version: &GitVersion<SemVersion>,
-) -> Result<Option<Ordering>, GitCheckVersionError> {
+) -> Result<Ordering, GitCheckVersionError> {
     macro_rules! decide_on_ord {
         {$ord:ident, {$($reason:tt)*}, $($err_constructor:tt)*} => {
             match $ord {
-                Ordering::Greater | Ordering::Equal => Ok(Some($ord)),
+                Ordering::Greater | Ordering::Equal => Ok($ord),
                 Ordering::Less => Err($($err_constructor)* {
                     $($reason)*
                     program_version: program_version.clone(),
@@ -107,13 +121,13 @@ fn check_version(
 
     match program_version.semver_cmp(&data_version) {
         // XX so, equivalent only happens when there is no wip right?
-        SemVerOrdResult::Equivalent(ord) => return Ok(Some(ord)),
+        SemVerOrdResult::Equivalent(ord) => return Ok(ord),
         SemVerOrdResult::Upgrade(ord) => {
             return decide_on_ord!(ord, {}, GitCheckVersionError::ProgramTooOld)
         }
         // XX so, we can't reconstruct if semantic version was same ?
         SemVerOrdResult::Undecidable(reason, ord) => {
-            let ok = || Ok(Some(ord));
+            let ok = || Ok(ord);
             let potentially_too_old = || {
                 decide_on_ord!(ord, {reason: reason,},
                                   GitCheckVersionError::ProgramPotentiallyTooOld)
@@ -155,16 +169,16 @@ fn t_check_version() {
         check_version(&program, &data).err().unwrap().to_string()
     };
     use Ordering::*;
-    assert_eq!(t("0.2.3", "0.2.3"), Some(Equal));
+    assert_eq!(t("0.2.3", "0.2.3"), Equal);
 
-    assert_eq!(t("0.2.3", "0.1"), Some(Greater));
-    assert_eq!(t("0.2.3", "0.2.2"), Some(Greater));
-    assert_eq!(t("0.2.2", "0.2.3"), Some(Less));
-    assert_eq!(t("2", "0.2"), Some(Greater));
-    assert_eq!(t("2", "1"), Some(Greater));
-    assert_eq!(t("2.2", "2.3"), Some(Less));
-    assert_eq!(t("2.3", "2.2"), Some(Greater));
-    assert_eq!(t("1.1", "1.2.3"), Some(Less));
+    assert_eq!(t("0.2.3", "0.1"), Greater);
+    assert_eq!(t("0.2.3", "0.2.2"), Greater);
+    assert_eq!(t("0.2.2", "0.2.3"), Less);
+    assert_eq!(t("2", "0.2"), Greater);
+    assert_eq!(t("2", "1"), Greater);
+    assert_eq!(t("2.2", "2.3"), Less);
+    assert_eq!(t("2.3", "2.2"), Greater);
+    assert_eq!(t("1.1", "1.2.3"), Less);
     assert_eq!(
         t_err("0.1", "0.2.3"),
         "this program's version (0.1) is too old: it is below the version of the program that produced the existing output (0.2.3) and outside of the shared SemVer-compatible range"
@@ -177,7 +191,7 @@ fn t_check_version() {
         t_err("0.2.3", "0.2.3-5-g2343"),
         "this program is potentially too old: the version of the running program (0.2.3) is below the version of the program that produced the data (0.2.3-5-g2343, which is also an unreleased version), hence likely too old"
     );
-    assert_eq!(t("0.2.3-5-g2343", "0.2.3-4-g18881"), Some(Greater));
+    assert_eq!(t("0.2.3-5-g2343", "0.2.3-4-g18881"), Greater);
     assert_eq!(
         t_err("0.2.2-5-g2343", "0.2.3-4-g18881"),
         "this program is potentially too old: both the version of the running program (0.2.2-5-g2343) and the program that produced the data (0.2.3-4-g18881) are unreleased versions in the same SemVer range"
@@ -191,36 +205,81 @@ fn t_check_version() {
         "this program's version (0.2.2-5-g2343) is too old: it is below the version of the program that produced the existing output (1.2-4-g18881) and outside of the shared SemVer-compatible range"
     );
     // Why is this OK? See below.
-    assert_eq!(t("0.2.4", "0.2.3-5-g2343"), Some(Greater));
-    assert_eq!(t("0.3", "0.2.3-5-g2343"), Some(Greater));
-    assert_eq!(t("0.2.3-5-g2343", "0.2.3"), Some(Greater));
+    assert_eq!(t("0.2.4", "0.2.3-5-g2343"), Greater);
+    assert_eq!(t("0.3", "0.2.3-5-g2343"), Greater);
+    assert_eq!(t("0.2.3-5-g2343", "0.2.3"), Greater);
     // Is this OK? If people don't work on multiple parallel versions,
     // then "1.5" is presumably releaste after that wip on "1", and
     // hence incorporates the work, and is hence OK.
-    assert_eq!(t("1.5", "1-5-g1234"), Some(Greater));
+    assert_eq!(t("1.5", "1-5-g1234"), Greater);
     // Yes that's ok, definitely released new version should take care
     // of these changes; sure, not guaranteed with parallel version
     // branches, but good enough:
-    assert_eq!(t("2", "1-5-g1234"), Some(Greater));
+    assert_eq!(t("2", "1-5-g1234"), Greater);
 }
 
-/// Check a Git log for written-down version numbers, when found, do a
-/// SemVer comparison with the given version, if our_version is less
-/// than the version found, report an error. Returns the ordering
-/// comparison from the program version to the found version, which
-/// might be `Less`, if both versions are still semver
-/// compatible. Returns None if nothing was found.
-pub fn git_check_version<S: AsRef<OsStr> + Debug>(
-    base_path: &Path,
-    git_log_arguments: &[S],
-    parse: impl Fn(&GitLogEntry) -> Option<GitVersion<SemVersion>>,
-    program_version: &GitVersion<SemVersion>,
-) -> Result<Option<Ordering>, GitCheckVersionError> {
-    for entry in git_log(base_path, git_log_arguments)? {
-        let entry = entry?;
-        if let Some(found_version) = parse(&entry) {
-            return check_version(program_version, &found_version);
-        }
+#[derive(Debug, Error)]
+#[error("checking the git log at {base_path:?}: {error}")]
+pub struct GitCheckVersionErrorWithContext {
+    pub base_path: PathBuf,
+    pub error: GitCheckVersionError,
+}
+
+pub struct GitLogVersionChecker {
+    pub program_name: String,
+    pub program_version: GitVersion<SemVersion>,
+}
+
+impl GitLogVersionChecker {
+    /// Give program name and version split over 3 lines, in a format
+    /// that can be parsed back by `parse_version_from_message` /
+    /// `check_git_log`.
+    pub fn program_name_and_version(&self) -> String {
+        format!("{}\n\nversion: {}", self.program_name, self.program_version)
     }
-    Ok(None)
+
+    pub fn parse_version_from_message(&self, message: &str) -> Option<GitVersion<SemVersion>> {
+        let mut lines = message.split('\n');
+        while let Some(line) = lines.next() {
+            if line.contains(&self.program_name) {
+                // Loop for the version number in the next 2 lines.
+                for line in lines.clone().take(2) {
+                    let body_key = "version:";
+                    if line.starts_with(body_key) {
+                        let version_str = line[body_key.as_bytes().len()..].trim();
+                        if let Ok(version) = version_str.parse() {
+                            return Some(version);
+                        }
+                    }
+                }
+                // Otherwise backtrack and continue.
+            }
+        }
+        None
+    }
+
+    /// Check a Git log for written-down version numbers, when found,
+    /// do a SemVer comparison with the given version, if the
+    /// `program_name` is less than the version found, report an
+    /// error. Returns the ordering comparison from the program
+    /// version to the found version, which might be `Less`, if both
+    /// versions are still semver compatible, and the found version,
+    /// or `None` if nothing was found.
+    pub fn check_git_log<S: AsRef<OsStr> + Debug>(
+        &self,
+        base_path: &Path,
+        git_log_arguments: &[S],
+    ) -> Result<Option<(Ordering, GitVersion<SemVersion>)>, GitCheckVersionErrorWithContext> {
+        (|| {
+            for entry in git_log(base_path, git_log_arguments)? {
+                let entry = entry?;
+                if let Some(found_version) = self.parse_version_from_message(&entry.message) {
+                    let ordering = check_version(&self.program_version, &found_version)?;
+                    return Ok(Some((ordering, found_version)));
+                }
+            }
+            Ok(None)
+        })()
+        .map_err(|e: GitCheckVersionError| e.with_base_path(base_path))
+    }
 }
