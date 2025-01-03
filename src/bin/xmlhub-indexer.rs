@@ -981,12 +981,12 @@ impl FileErrors {
 
     /// Print as plaintext, for error reporting to stderr.
     fn print_plain<O: Write>(&self, out: &mut O) -> Result<()> {
-        writeln!(out, "For {:?}:", self.path.rel_path())?;
+        writeln!(out, "    For {:?}:", self.path.rel_path())?;
         for error in &self.errors {
             let lines: Vec<&str> = error.split('\n').collect();
-            writeln!(out, "  * {}", lines[0])?;
+            writeln!(out, "      * {}", lines[0])?;
             for line in &lines[1..] {
-                writeln!(out, "    {}", line)?;
+                writeln!(out, "        {}", line)?;
             }
         }
         Ok(())
@@ -1684,11 +1684,14 @@ fn main() -> Result<()> {
 
     if write_errors_to_stderr {
         let mut out = stderr().lock();
-        for file_errors in file_errorss {
-            file_errors
-                .print_plain(&mut out)
-                .context("writing to stderr")?;
-        }
+        (|| -> Result<()> {
+            write!(&mut out, "Indexing errors:\n")?;
+            for file_errors in file_errorss {
+                file_errors.print_plain(&mut out)?
+            }
+            Ok(())
+        })()
+        .context("writing to stderr")?;
     }
 
     let mut html_file_has_changed = false;
