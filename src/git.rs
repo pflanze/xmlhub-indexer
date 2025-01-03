@@ -512,3 +512,20 @@ pub fn git_remote_get_default_for_branch(
         Ok(None)
     }
 }
+
+/// Push the given refspecs (like branch or tag names) to the given
+/// repository (like remote name).
+pub fn git_push<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    repository: &str,
+    refspecs: &[S],
+) -> Result<()> {
+    let mut args: Vec<&OsStr> = vec!["push".as_ref(), repository.as_ref()];
+    for v in refspecs {
+        args.push(v.as_ref());
+    }
+    if !git(base_path, &args)? {
+        bail!("git {args:?} in {base_path:?} failed")
+    }
+    Ok(())
+}

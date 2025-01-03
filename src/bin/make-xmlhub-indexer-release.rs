@@ -346,14 +346,18 @@ impl Effect for ReleaseBinary {
         }
 
         if let Some(remote_name) = &self.push_to_remote {
-            // (Calculate this beforehand and show as effect? Ah
-            // can't, tag_name_if_signed can only be calculated in
+            // (Calculate this command beforehand and show as effect?
+            // Ah can't, tag_name_if_signed can only be calculated in
             // this effect.)
-            let mut args = vec!["push", remote_name, BINARIES_CHECKOUT.branch_name];
+            let mut branches_and_tags = vec![BINARIES_CHECKOUT.branch_name];
             if self.sign {
-                args.push(&tag_name_if_signed)
+                branches_and_tags.push(&tag_name_if_signed)
             }
-            git(BINARIES_CHECKOUT.working_dir_path(), &args)?;
+            git_push(
+                BINARIES_CHECKOUT.working_dir_path(),
+                remote_name,
+                &branches_and_tags,
+            )?;
         }
         Ok(Done)
     }
