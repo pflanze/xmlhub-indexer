@@ -36,11 +36,11 @@ You can build the program yourself:
  3. Go to the top level directory of your Git checkout, i.e. `cd
     xmlhub-indexer` after you ran the above command. Then run `cargo
     install --path .`. You should now be able to call the program via
-    `xmlhub-indexer`.
+    `xmlhub-build-index`.
 
     Alternatively, if the above fails for some reason, you can run
     `cargo build --release` (still from the xmlhub-indexer directory),
-    and then copy the file at `target/release/xmlhub-indexer` to a
+    and then copy the file at `target/release/xmlhub-build-index` to a
     place where you can reach it (either to a directory that's listed
     in your `PATH` environment variable, or some other place convenient
     to you).
@@ -49,24 +49,24 @@ You can build the program yourself:
 
 Once installed, you should be able to run the program via
 
-    xmlhub-indexer --help
+    xmlhub-build-index --help
     
 or giving it the path to your local git clone of the
 [xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub) repository
 
-    xmlhub-indexer path/to/your/checkout/of/xmlhub
+    xmlhub-build-index path/to/your/checkout/of/xmlhub
 
 which will update the `README.md` and `README.html` files in the
 xmlhub directory and commit any changes to those. You can then `git
 push` the changes. There is also a `--push` option that lets
-xmlhub-indexer do the latter, too.
+`xmlhub-build-index` do the latter, too.
 
-Note that `xmlhub-indexer` only reads files that have the suffix
+Note that `xmlhub-build-index` only reads files that have the suffix
 `.xml` *and are added to the repository*. If you create a new XML
 file, first run `git add path/to/your.xml` before running
-`xmlhub-indexer`.
+`xmlhub-build-index`.
 
-If there are errors in any of the XML files, `xmlhub-indexer` will not
+If there are errors in any of the XML files, `xmlhub-build-index` will not
 overwrite the files by default, and instead just writes the errors to
 he terminal. If you wish to proceed anyway (because you want to see
 the errors in the browser, or even push them to the repo for others to
@@ -87,7 +87,7 @@ command line (the order of options doesn't actually matter, the
 program executes them in the sensible order anyway; you can also use
 the short options shown in the `--help` text instead):
 
-    xmlhub-indexer path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
+    xmlhub-build-index path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
 Running this will pull, convert, write the output even if there are
 errors, and if there were changes, commit and push them back to the
@@ -96,7 +96,7 @@ Git repository, and open your browser. You could put that into a
 arguments.
 
 (It should also be possible to set up a CI pipeline (continuous
-integration) on GitLab to run xmlhub-indexer automatically whenever
+integration) on GitLab to run `xmlhub-build-index` automatically whenever
 the xmlhub repository receives changes on GitLab, but maybe that's too
 much magic and not worth the additional complexity.)
 
@@ -183,7 +183,7 @@ go. Run it e.g. like this (the `--` are needed to stop processing of
 options by `cargo` itself; `--no-commit` if you want to verify the
 output before committing to it):
 
-    cargo run --bin xmlhub-indexer -- ~/tmp/xmlhub/ --no-commit
+    cargo run --bin xmlhub-build-index -- ~/tmp/xmlhub/ --no-commit
 
 You will also want to use an IDE for editing Rust code. The standard
 recommendation is VSCode with the Rust-Analyzer extension (see [Rust
@@ -198,7 +198,7 @@ if you want to do larger changes, you should definitely use an editor
 with good Rust development support.
 
 The main program file is
-[`src/bin/xmlhub-indexer.rs`](src/bin/xmlhub-indexer.rs). It shouldn't be
+[`src/bin/xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs). It shouldn't be
 necessary to change anything in the other files.
 
 The thing you most likely want to update is the
@@ -208,7 +208,7 @@ introduce new metadata types simply by adding/changing
 `AttributeSpecification` entries here.
 
 The `main` function, which is the last item in the
-[`src/bin/xmlhub-indexer.rs`](src/bin/xmlhub-indexer.rs) file (search
+[`src/bin/xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs) file (search
 for "fn main" if your IDE doesn't make it easy to find), is what
 is called when invoking the program. It's a good idea to start here,
 to see what things the program does in which order. Use IDE
@@ -234,11 +234,11 @@ which location an error originates from, run the default debug build
 (i.e. do *not* use the `--release` option) with the environment
 variable setting `RUST_BACKTRACE=1`, e.g.
 
-    RUST_BACKTRACE=1 cargo run --bin xmlhub-indexer -- ~/tmp/xmlhub
+    RUST_BACKTRACE=1 cargo run --bin xmlhub-build-index -- ~/tmp/xmlhub
 
 ### Release process
 
-After making changes to xmlhub-indexer (or its dependencies), the
+After making changes to the xmlhub-indexer, the
 changes should be published back to GitLab so that others can get
 them. This entails the following--*but note the next subsection*, you
 don't have to do this manually!:
@@ -248,11 +248,11 @@ don't have to do this manually!:
   incompatible changes were made. Changing the generated output is
   understood as incompatible here: if two maintainers used two
   different versions that produce different output, and they
-  alternatively run xmlhub-indexer, then the xmlhub repository would
+  alternatively run `xmlhub-build-index`, then the xmlhub repository would
   receive changed index files each time, even when the inputs (the XML
   files) didn't change (i.e. they would overwrite each other's outputs
   and create new Git commits every time, spamming the Git
-  history). `xmlhub-indexer`, when it commits changes to the xmlhub
+  history). `xmlhub-build-index`, when it commits changes to the xmlhub
   repo, automatically adds version information to the commit message,
   and before indexing verifies that the version of the last commit is
   lower or compatible, to prevent that situation. Version numbers
@@ -274,7 +274,7 @@ don't have to do this manually!:
 
 #### `make-xmlhub-indexer-release`
 
-In addition to `xmlhub-indexer` itself, the xmlhub-indexer repository
+In addition to `xmlhub-build-index`, the xmlhub-indexer repository
 contains a `make-xmlhub-indexer-release` program which carries out all
 of the above steps automatically. It runs tests and collects
 information, then shows a summary of the changes that will be carried
@@ -288,7 +288,7 @@ both the `--push` and `--sign` options. From within the
 
 Caveats:
 
-- Unlike `xmlhub-indexer`, it does not currently have a `--pull`
+- Unlike `xmlhub-build-index`, it does not currently have a `--pull`
   option; if you use the `--push` option and the "git push" step fails
   due to the remote (GitLab) having been updated by someone else in
   the meantime, you're expected to pull (and verify) the changes
@@ -309,7 +309,7 @@ yours, both people can run `gpg --fingerprint "your name"` (or leave
 away the name string and get all keys) and then compare the
 fingerprints (hex number string with spaces) on the screen.
 
-While care has been taken to try to make the `xmlhub-indexer` source
+While care has been taken to try to make the `xmlhub-build-index` source
 code easy to understand (newbie-friendly), for
 `make-xmlhub-indexer-release` that goal has been dropped; it does use
 some advanced Rust features.
@@ -426,11 +426,13 @@ allow clone() to be called, PartialEq for equality comparison etc.)
 
 ## Help
 
-You can get formatted documentation for the libraries this program
-uses except for the standard library (which is at [standard library
-docs](https://doc.rust-lang.org/std/) instead) via running `cargo doc
---open` (which should open your web browser, alternatively find the
-generated html files in `target/doc/`).
+You can get formatted documentation for the programs and their
+dependencies except for the standard library (which is at [standard
+library docs](https://doc.rust-lang.org/std/) instead) via running
+`cargo doc --bin xmlhub-build-index --open` (or `cargo doc --bins
+--open` which will build all program's docs but may open the browser
+on the wrong one). These should open your web browser, alternatively
+find the generated html files in `target/doc/`.
 
 You can also use the IDE functionality to see a function's docs, or
 follow from a function call to the function's source code.

@@ -28,7 +28,7 @@ use xmlhub_indexer::{
     util::{append, list_get_by_key, InsertValue},
 };
 
-const PROGRAM_NAME: &str = "xmlhub-indexer";
+const PROGRAM_NAME: &str = "xmlhub-build-index";
 const PROGRAM_REPOSITORY: &str = "https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer";
 const HTML_FILENAME: &str = "README.html";
 const MD_FILENAME: &str = "README.md";
@@ -134,7 +134,7 @@ struct Opts {
     pull: bool,
 
     /// Do not add and commit the output files to the Git
-    /// repository. It's better to let xmlhub-indexer do that (the
+    /// repository. It's better to let `xmlhub-build-index` do that (the
     /// default) rather than doing it manually, since it adds its
     /// version information to the commit message and later
     /// invocations of it check whether it needs upgrading. So this

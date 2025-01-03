@@ -24,9 +24,9 @@ use xmlhub_indexer::{
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-/// Produce a new release of the xmlhub-indexer program, both the
-/// source code as well as a binary if on macOS. Also creates a new
-/// version tag if necessary.
+/// Produce a new release of the xmlhub-indexer repository, both the
+/// source code as well as a `xmlhub-build-index` binary if on macOS
+/// or Linux. Also creates a new version tag if necessary.
 struct Opts {
     /// By default, the program shows the actions to be carried out
     /// and then asks for confirmation. This option ends the program
@@ -40,7 +40,7 @@ struct Opts {
     yes: bool,
 
     /// Use this option if you're confident that the files written by
-    /// xmlhub-indexer are not created differently due to changes in
+    /// `xmlhub-build-index` are not created differently due to changes in
     /// the program (note: even formatting changes matter: the aim of
     /// the versioning is to prevent a situation where different
     /// people each run different versions of the xmlhub-indexer and
@@ -133,7 +133,7 @@ impl CheckoutContext {
     }
 }
 
-const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-indexer";
+const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-build-index";
 
 const SOURCE_CHECKOUT: CheckoutContext = CheckoutContext {
     working_dir_path: ".",
@@ -392,7 +392,7 @@ fn main() -> Result<()> {
         cargo(&["test"])?;
     }
 
-    // Pass "--tags" as in `xmlhub-indexer.rs`, keep in sync!
+    // Pass "--tags" as in `build.rs`, keep in sync!
     let old_version: GitVersion<SemVersion> =
         git_describe(SOURCE_CHECKOUT.working_dir_path(), &["--tags"])?
             .parse()
