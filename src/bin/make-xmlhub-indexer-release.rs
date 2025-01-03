@@ -10,6 +10,7 @@ use clap::Parser;
 
 use xmlhub_indexer::{
     command::run,
+    effect::{bind, Effect, NoOp},
     git::{
         git, git_branch_show_current, git_describe, git_remote_get_default_for_branch, git_status,
         git_stdout_string_trimmed, git_tag,
@@ -136,12 +137,21 @@ const BINARIES_CHECKOUT: CheckoutContext = CheckoutContext {
     branch_name: "master",
 };
 
-/// make-xmlhub-indexer-release is first collecting the data into effects to be
-/// carried out, then asks if those should be run, then runs
-/// them. This is the interface for an effect. Note that an Effect can
-/// implicitly depend on another Effect being run first!
-trait Effect: Debug {
-    fn run(&self) -> Result<()>;
+// Don't need to store tag_name String in here since it's constant and
+// part of the individual contexts that need it.
+#[derive(Debug)]
+struct SourceReleaseTag;
+
+#[derive(Debug)]
+struct ExistingTag;
+
+impl Effect for ExistingTag {
+    type Requires = ();
+    type Provides = SourceReleaseTag;
+
+    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+        Ok(SourceReleaseTag)
+    }
 }
 
 #[derive(Debug)]
@@ -149,11 +159,13 @@ struct CreateTag {
     tag_name: String,
     sign: bool,
     local_user: Option<String>,
-    push_to_remote: Option<String>,
 }
 
 impl Effect for CreateTag {
-    fn run(&self) -> Result<()> {
+    type Requires = ();
+    type Provides = SourceReleaseTag;
+
+    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
         git_tag(
             SOURCE_CHECKOUT.working_dir_path(),
             &self.tag_name,
@@ -173,18 +185,52 @@ impl Effect for CreateTag {
             // again due to it being too close? don't bother.)
         }
 
-        if let Some(remote_name) = &self.push_to_remote {
-            git(
-                SOURCE_CHECKOUT.working_dir_path(),
-                &[
-                    "push",
-                    remote_name,
-                    SOURCE_CHECKOUT.branch_name,
-                    &self.tag_name,
-                ],
-            )?;
-        }
+        Ok(SourceReleaseTag)
+    }
+}
 
+#[derive(Debug)]
+struct PushSourceToRemote {
+    tag_name: String,
+    remote_name: String,
+}
+
+#[derive(Debug)]
+struct SourcePushed;
+
+impl Effect for PushSourceToRemote {
+    type Requires = SourceReleaseTag;
+    type Provides = SourcePushed;
+
+    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+        git(
+            SOURCE_CHECKOUT.working_dir_path(),
+            &[
+                "push",
+                &self.remote_name,
+                SOURCE_CHECKOUT.branch_name,
+                &self.tag_name,
+            ],
+        )?;
+        Ok(SourcePushed)
+    }
+}
+
+#[derive(Debug)]
+struct BuildBinaryAndSha256sum {}
+
+#[derive(Debug)]
+struct Sha256sumOfBinary {
+    sha256sum: Result<String>,
+}
+
+impl Effect for BuildBinaryAndSha256sum {
+    // (`SourceReleaseTag` would suffice as requirement! But then the
+    // processing chain wouldn't be linear.)
+    type Requires = SourcePushed;
+    type Provides = Sha256sumOfBinary;
+
+    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
         // Rebuild the binary, so that it picks up on the new Git
         // tag. We want that both for subsequent usage, but especially
         // so that it is up to date when copied off via
@@ -196,29 +242,39 @@ impl Effect for CreateTag {
             file_name(XMLHUB_INDEXER_BINARY_FILE),
         ])?;
 
-        Ok(())
+        // Now that the binary is rebuilt, hash it; store errors,
+        // complain about them later when actually needed (this will
+        // be the case on Windows where the `sha256sum` command may
+        // not be available, but we also don't publish the binary.)
+        let sha256sum = sha256sum(
+            SOURCE_CHECKOUT.working_dir_path(),
+            XMLHUB_INDEXER_BINARY_FILE,
+        );
+
+        Ok(Sha256sumOfBinary { sha256sum })
     }
 }
 
-/// Note: depends on CreateTag being run first!
 #[derive(Debug)]
 struct ReleaseBinary {
     copy_binary_to: PathBuf,
     source_version_tag: String,
     hostname: String,
-    commit_message: String,
+    partial_commit_message: String,
     sign: bool,
     local_user: Option<String>,
     push_to_remote: Option<String>,
 }
 
+#[derive(Debug)]
+struct Done;
+
 impl Effect for ReleaseBinary {
-    fn run(&self) -> Result<()> {
-        // This depends on CreateTag being run first
-        let sha256sum = sha256sum(
-            SOURCE_CHECKOUT.working_dir_path(),
-            XMLHUB_INDEXER_BINARY_FILE,
-        )?;
+    type Requires = Sha256sumOfBinary;
+    type Provides = Done;
+
+    fn run(self: Box<Self>, required: Self::Requires) -> Result<Self::Provides> {
+        let sha256sum = required.sha256sum?;
 
         let tag_name_if_signed = format!(
             "{}-{}-{}",
@@ -242,10 +298,13 @@ impl Effect for ReleaseBinary {
 
         let binary_commit_message = format!(
             "{} / SHA-256: {}\n\n{}",
-            self.source_version_tag, sha256sum, self.commit_message
+            self.source_version_tag, sha256sum, self.partial_commit_message
         );
 
-        let tag_message_if_signed = format!("{}\n\nsha256sum: {}", self.commit_message, sha256sum);
+        let tag_message_if_signed = format!(
+            "{}\n\nsha256sum: {}",
+            self.partial_commit_message, sha256sum
+        );
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
@@ -286,7 +345,7 @@ impl Effect for ReleaseBinary {
             }
             git(BINARIES_CHECKOUT.working_dir_path(), &args)?;
         }
-        Ok(())
+        Ok(Done)
     }
 }
 
@@ -296,6 +355,8 @@ fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
 
 fn main() -> Result<()> {
     let opts = Opts::from_args();
+
+    println!("\n====Preparing...=============================================================\n");
 
     // Make sure the current dir is the top directory of the
     // xmlhub-indexer repo checkout
@@ -321,46 +382,54 @@ fn main() -> Result<()> {
         cargo(&["test"])?;
     }
 
-    let mut effects: Vec<Box<dyn Effect>> = Vec::new();
+    // Pass "--tags" as in `xmlhub-indexer.rs`, keep in sync!
+    let old_version: GitVersion<SemVersion> =
+        git_describe(SOURCE_CHECKOUT.working_dir_path(), &["--tags"])?
+            .parse()
+            .with_context(|| {
+                anyhow!(
+                    "the version number from running `git describe --tags` in {:?} \
+                         uses an invalid format",
+                    SOURCE_CHECKOUT.working_dir_path()
+                )
+            })?;
 
     let (new_version_tag_string, need_tag) = {
-        // Pass "--tags" as in `xmlhub-indexer.rs`, keep in sync!
-        let current_version: GitVersion<SemVersion> =
-            git_describe(SOURCE_CHECKOUT.working_dir_path(), &["--tags"])?
-                .parse()
-                .with_context(|| {
-                    anyhow!(
-                        "the version number from running `git describe --tags` in {:?} \
-                         uses an invalid format",
-                        SOURCE_CHECKOUT.working_dir_path()
-                    )
-                })?;
-
-        if let Some((_depth, _sha1)) = &current_version.past_tag {
+        if let Some((_depth, _sha1)) = &old_version.past_tag {
             let new_version = if opts.unchanged_output {
-                current_version.version.next_minor()
+                old_version.version.next_compatible()
             } else {
-                current_version.version.next_major()
+                old_version.version.next_incompatible()
             };
             (format!("v{new_version}"), true)
         } else {
-            (format!("v{}", current_version.version), false)
+            (format!("v{}", old_version.version), false)
         }
     };
-    if need_tag {
-        let push_to_remote = if opts.push {
-            Some(SOURCE_CHECKOUT.git_remote_get_default()?)
-        } else {
-            None
-        };
-
-        effects.push(Box::new(CreateTag {
+    let tag_effect: Box<dyn Effect<Requires = (), Provides = SourceReleaseTag>> = if need_tag {
+        Box::new(CreateTag {
             tag_name: new_version_tag_string.clone(),
             sign: opts.sign,
             local_user: opts.local_user.clone(),
-            push_to_remote,
-        }));
-    }
+        })
+    } else {
+        Box::new(ExistingTag)
+    };
+
+    let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
+        if opts.push {
+            Box::new(PushSourceToRemote {
+                tag_name: new_version_tag_string.clone(),
+                remote_name: SOURCE_CHECKOUT.git_remote_get_default()?,
+            })
+        } else {
+            NoOp::providing(
+                SourcePushed,
+                "not pushing tag/branch because --push option was not given",
+            )
+        };
+
+    let build_binary = Box::new(BuildBinaryAndSha256sum {});
 
     // Collect build information
     let commit_id =
@@ -387,27 +456,31 @@ fn main() -> Result<()> {
     };
 
     // Should we publish the binary?
-    if opts.no_publish_binary {
-        ()
-    } else {
-        BINARIES_CHECKOUT.check_current_branch()?;
-        BINARIES_CHECKOUT.check_status()?;
-
-        let push_to_remote = if opts.push {
-            Some(BINARIES_CHECKOUT.git_remote_get_default()?)
+    let release_binary: Box<dyn Effect<Requires = Sha256sumOfBinary, Provides = Done>> =
+        if opts.no_publish_binary {
+            NoOp::providing(
+                Done,
+                "not publishing binary because --no-publish-binary option was given",
+            )
         } else {
-            None
-        };
+            BINARIES_CHECKOUT.check_current_branch()?;
+            BINARIES_CHECKOUT.check_status()?;
 
-        let in_dir = |dir_segments: &[&str]| {
-            let mut binary_target_path = PathBuf::from(BINARIES_CHECKOUT.working_dir_path());
-            for segment in dir_segments {
-                binary_target_path.push(segment)
-            }
-            binary_target_path.push(file_name(XMLHUB_INDEXER_BINARY_FILE));
+            let push_to_remote = if opts.push {
+                Some(BINARIES_CHECKOUT.git_remote_get_default()?)
+            } else {
+                None
+            };
 
-            let commit_message = format!(
-                "Version {new_version_tag_string}\n\
+            let in_dir = |dir_segments: &[&str]| {
+                let mut binary_target_path = PathBuf::from(BINARIES_CHECKOUT.working_dir_path());
+                for segment in dir_segments {
+                    binary_target_path.push(segment)
+                }
+                binary_target_path.push(file_name(XMLHUB_INDEXER_BINARY_FILE));
+
+                let partial_commit_message = format!(
+                    "Version {new_version_tag_string}\n\
                  \n\
                  Source commit id: {commit_id}\n\
                  \n\
@@ -420,56 +493,62 @@ fn main() -> Result<()> {
                  - arch: {os_arch}\n\
                  \n\
                  Created by make-xmlhub-indexer-release.rs"
-            );
+                );
 
-            effects.push(Box::new(ReleaseBinary {
-                copy_binary_to: binary_target_path,
-                source_version_tag: new_version_tag_string.clone(),
-                hostname: hostname.clone(),
-                commit_message,
-                sign: opts.sign,
-                local_user: opts.local_user.clone(),
-                push_to_remote,
-            }));
+                Box::new(ReleaseBinary {
+                    copy_binary_to: binary_target_path,
+                    source_version_tag: new_version_tag_string.clone(),
+                    hostname: hostname.clone(),
+                    partial_commit_message,
+                    sign: opts.sign,
+                    local_user: opts.local_user.clone(),
+                    push_to_remote,
+                })
+            };
+            match std::env::consts::OS {
+                "macos" => in_dir(&["macOS", std::env::consts::ARCH]),
+                "linux" => in_dir(&["linux", std::env::consts::ARCH]),
+                _ => NoOp::providing(Done, "binaries are only published on macOS and Linux"),
+            }
         };
-        match std::env::consts::OS {
-            "macos" => in_dir(&["macOS", std::env::consts::ARCH]),
-            "linux" => in_dir(&["linux", std::env::consts::ARCH]),
-            _ => (),
-        }
+
+    let effect = bind(
+        bind(bind(tag_effect, push_to_remote), build_binary),
+        release_binary,
+    );
+
+    // We have finished collecting the effect(s). Now show and perhaps
+    // run it/them.
+
+    println!("\n====Effects:=================================================================\n");
+
+    println!("{}", effect.show());
+
+    if opts.unchanged_output {
+        println!(
+            "-----------------------------------------------------------------------------\n\
+             ! NOTE: you have given the --unchanged-output option, meaning that the \n\
+             ! binary in this release ({new_version_tag_string}, up from {old_version}) purports to \n\
+             ! produce outputs (index files) that are identical to the previous release. \n\
+             ! If this is not true, stop here and remove that option!"
+        );
     }
 
-    // We have finished collecting the effects. Now show and perhaps
-    // run them.
-    let effects_string = format!(
-        "{effects:#?}{}\n",
-        if opts.unchanged_output {
-            "\n\n! NOTE: you have given the --unchanged-output option, meaning \n\
-             ! that the binary from this release purports to produce outputs \n\
-             ! (index files) that are identical to the previous release. \n\
-             ! If this is not true, stop here and remove that option!"
-        } else {
-            ""
-        }
-    );
-    let run_effects = || {
-        for effect in effects {
-            effect.run()?;
-        }
-        Ok(())
-    };
-    if opts.dry_run {
-        println!("\nWould run these effects:\n{effects_string}");
-        Ok(())
+    println!("=============================================================================\n");
+
+    let Done = if opts.dry_run {
+        println!("Not running anything since --dry-run option was given.");
+        Done
     } else if opts.yes {
-        println!("\nRunning these effects:\n{effects_string}");
-        run_effects()
+        println!("Running these effects now.");
+        effect.run(())?
     } else {
-        println!("\n{effects_string}");
         if ask_yn("Should I run the above effects?")? {
-            run_effects()
+            effect.run(())?
         } else {
-            Ok(())
+            Done
         }
-    }
+    };
+
+    Ok(())
 }

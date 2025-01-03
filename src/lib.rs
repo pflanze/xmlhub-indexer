@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod command;
+pub mod effect;
 pub mod flattened;
 pub mod git;
 pub mod git_check_version;
