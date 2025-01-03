@@ -12,8 +12,8 @@ use xmlhub_indexer::{
     command::run,
     effect::{bind, Effect, NoOp},
     git::{
-        git, git_branch_show_current, git_describe, git_remote_get_default_for_branch, git_status,
-        git_stdout_string_trimmed, git_tag,
+        git, git_branch_show_current, git_describe, git_push, git_remote_get_default_for_branch,
+        git_status, git_stdout_string_trimmed, git_tag,
     },
     git_version::{GitVersion, SemVersion},
     util::{
@@ -86,7 +86,7 @@ struct CheckoutContext {
 
 impl CheckoutContext {
     fn checkout_dir_exists(&self) -> bool {
-        let path : &Path = self.working_dir_path.as_ref();
+        let path: &Path = self.working_dir_path.as_ref();
         path.exists()
     }
 
@@ -138,13 +138,13 @@ const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-build-index";
 const SOURCE_CHECKOUT: CheckoutContext = CheckoutContext {
     working_dir_path: ".",
     branch_name: "master",
-    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git"
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git",
 };
 
 const BINARIES_CHECKOUT: CheckoutContext = CheckoutContext {
     working_dir_path: "../xmlhub-indexer-binaries/",
     branch_name: "master",
-    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git"
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git",
 };
 
 // Don't need to store tag_name String in here since it's constant and
@@ -213,14 +213,10 @@ impl Effect for PushSourceToRemote {
     type Provides = SourcePushed;
 
     fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
-        git(
+        git_push(
             SOURCE_CHECKOUT.working_dir_path(),
-            &[
-                "push",
-                &self.remote_name,
-                SOURCE_CHECKOUT.branch_name,
-                &self.tag_name,
-            ],
+            &self.remote_name,
+            &[SOURCE_CHECKOUT.branch_name, &self.tag_name],
         )?;
         Ok(SourcePushed)
     }
@@ -477,11 +473,12 @@ fn main() -> Result<()> {
                 "not publishing binary because --no-publish-binary option was given",
             )
         } else {
-            if ! BINARIES_CHECKOUT.checkout_dir_exists() {
-                bail!("missing the git working directory at {:?}; \
+            if !BINARIES_CHECKOUT.checkout_dir_exists() {
+                bail!(
+                    "missing the git working directory at {:?}; \
                        please run: `cd ..; git clone {}; cd -`",
-                      BINARIES_CHECKOUT.working_dir_path,
-                      BINARIES_CHECKOUT.supposed_upstream_git_url
+                    BINARIES_CHECKOUT.working_dir_path,
+                    BINARIES_CHECKOUT.supposed_upstream_git_url
                 )
             }
             BINARIES_CHECKOUT.check_current_branch()?;
