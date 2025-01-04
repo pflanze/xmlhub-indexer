@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod command;
+pub mod const_util;
 pub mod effect;
 pub mod flattened;
 pub mod git;

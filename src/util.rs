@@ -105,10 +105,6 @@ pub fn remove_file_if_present(path: &str) -> Result<()> {
     }
 }
 
-pub fn file_name(path: &str) -> &str {
-    path.split('/').last().expect("at least file name given")
-}
-
 pub fn prog_version(in_dir: &Path, prog_name: &str) -> Result<String> {
     run_stdout_string(in_dir, prog_name, &["--version"], &[], &[0], true)
 }
