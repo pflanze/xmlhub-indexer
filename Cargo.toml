@@ -17,3 +17,4 @@ thiserror = "=1.0.37"
 # (separate newer versions of the windows dependencies)
 os_info = "=3.7"
 rayon = "=1.5.3"
+chj-util = "0.1.0"
