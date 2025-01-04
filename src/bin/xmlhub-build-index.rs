@@ -15,6 +15,7 @@ use chrono::Local;
 use clap::Parser;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 // From src/*.rs
 use xmlhub_indexer::{
@@ -1418,7 +1419,7 @@ fn main() -> Result<()> {
     // The id is used to refer to each item in document-local links in
     // the generated HTML/Markdown files.
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = paths
-        .into_iter()
+        .into_par_iter()
         .enumerate()
         .map(|(id, path)| -> Result<FileInfo, FileErrors> {
             // We're currently doing nothing with the `xmldoc` value
