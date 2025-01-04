@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod checkout_context;
 pub mod command;
 pub mod const_util;
 pub mod effect;
@@ -8,3 +9,4 @@ pub mod git_check_version;
 pub mod git_version;
 pub mod parse_xml;
 pub mod util;
+pub mod xmlhub_indexer_defaults;

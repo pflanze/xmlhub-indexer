@@ -222,6 +222,12 @@ interesting starting points might be searching for `let
 toplevel_section` for all the sections, or `let intro` for the intro
 text.
 
+There is a file with settings that are shared between the
+`xmlhub-build-index` and `make-xmlhub-indexer-release` programs:
+[`xmlhub_indexer_defaults.rs`](src/xmlhub_indexer_defaults.rs). You
+find docs on the fields in the [declaration of
+`CheckoutContext`](src/checkout_context.rs).
+
 Thanks to the stringent type checking during compilation, you can be
 rather confident that you didn't break anything when you got it to
 compile. You can also check whether the Git diff of the resulting

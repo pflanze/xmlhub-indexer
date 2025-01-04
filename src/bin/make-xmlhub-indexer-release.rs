@@ -1,25 +1,18 @@
-use std::{
-    env::current_dir,
-    ffi::OsStr,
-    fmt::Debug,
-    path::{Path, PathBuf},
-};
+use std::{env::current_dir, ffi::OsStr, fmt::Debug, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 
 use xmlhub_indexer::{
     command::run,
+    const_util::file_name,
     effect::{bind, Effect, NoOp},
-    git::{
-        git, git_branch_show_current, git_describe, git_push, git_remote_get_default_for_branch,
-        git_status, git_stdout_string_trimmed, git_tag,
-    },
+    git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
     util::{
-        ask_yn, create_dir_levels_if_necessary, file_name, hostname, prog_version, sha256sum,
-        stringify_error,
+        ask_yn, create_dir_levels_if_necessary, hostname, prog_version, sha256sum, stringify_error,
     },
+    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
 #[derive(clap::Parser, Debug)]
@@ -73,79 +66,6 @@ struct Opts {
     #[clap(long)]
     push: bool,
 }
-
-struct CheckoutContext {
-    working_dir_path: &'static str,
-    /// The name of the branch used in the remote repository, also
-    /// expected to be the same in the local checkout
-    branch_name: &'static str,
-    /// Where the upstream repository should be, for `git clone` (and
-    /// push) purposes. Currently only used for error message.
-    supposed_upstream_git_url: &'static str,
-}
-
-impl CheckoutContext {
-    fn checkout_dir_exists(&self) -> bool {
-        let path: &Path = self.working_dir_path.as_ref();
-        path.exists()
-    }
-
-    fn working_dir_path(&self) -> &Path {
-        self.working_dir_path.as_ref()
-    }
-
-    fn check_current_branch(&self) -> Result<()> {
-        let current_branch = git_branch_show_current(self.working_dir_path())?;
-        if current_branch.as_deref() != Some(self.branch_name) {
-            bail!(
-                "expecting checked-out branch to be `{}`, but it is `{}`",
-                self.branch_name,
-                current_branch
-                    .as_deref()
-                    .unwrap_or("none, i.e. detached head")
-            )
-        }
-        Ok(())
-    }
-
-    fn check_status(&self) -> Result<()> {
-        let items = git_status(self.working_dir_path())?;
-        if !items.is_empty() {
-            bail!(
-                "uncommitted changes in the git checkout at {:?}: {items:?}",
-                self.working_dir_path()
-            );
-        }
-        Ok(())
-    }
-
-    fn git_remote_get_default(&self) -> Result<String> {
-        git_remote_get_default_for_branch(self.working_dir_path(), self.branch_name)?.ok_or_else(
-            || {
-                anyhow!(
-                    "branch {:?} in {:?} does not have a default remote set, \
-                     you can't use the `--push` option because of that",
-                    self.branch_name,
-                    self.working_dir_path()
-                )
-            },
-        )
-    }
-}
-
-const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-build-index";
-
-const SOURCE_CHECKOUT: CheckoutContext = CheckoutContext {
-    working_dir_path: ".",
-    branch_name: "master",
-    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git",
-};
-
-const BINARIES_CHECKOUT: CheckoutContext = CheckoutContext {
-    working_dir_path: "../xmlhub-indexer-binaries/",
-    branch_name: "master",
-    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git",
-};
 
 // Don't need to store tag_name String in here since it's constant and
 // part of the individual contexts that need it.
