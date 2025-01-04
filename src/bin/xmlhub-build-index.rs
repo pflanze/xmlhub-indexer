@@ -1816,14 +1816,18 @@ fn main() -> Result<()> {
                     )?
                 }
 
-                if did_commit && opts.push {
-                    check_dry_run! {
-                        message: "git push",
-                        git_push::<&str>(
-                            source_checkout.working_dir_path,
-                            &source_checkout.git_remote_get_default()?,
-                            &[]
-                        )?
+                if opts.push {
+                    if did_commit {
+                        check_dry_run! {
+                            message: "git push",
+                            git_push::<&str>(
+                                source_checkout.working_dir_path,
+                                &source_checkout.git_remote_get_default()?,
+                                &[]
+                            )?
+                        }
+                    } else {
+                        println!("There were no changes to commit, thus not pushing.")
                     }
                 }
             }
