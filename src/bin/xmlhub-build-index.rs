@@ -1454,7 +1454,7 @@ fn main() -> Result<()> {
     // attackers of web systems; irrelevant here, just choosing a
     // number large enough.) Rust allows underscores in numbers to
     // allow for better readability of large numbers.
-    let html = HtmlAllocator::new(1_000_000);
+    let html = HtmlAllocator::new(10_000_000);
 
     // Create all the sections making up the output file(s)
 
