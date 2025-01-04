@@ -220,7 +220,7 @@ enum AttributeKind {
     },
     StringList {
         /// This is the separator as used between list items, in the
-        /// XML files within the <!-- --> parts; e.g. if the items are
+        /// XML files within the `<!-- -->` parts; e.g. if the items are
         /// separated by spaces, give " ", if separated by commas, give
         /// ",". This does not determine what's used for the HTML
         /// formatting; for that, see the `to_html` method on
@@ -1196,7 +1196,7 @@ fn build_index_section(
     })
 }
 
-/// Create a <div>&nbsp;<br>...</div> occupying some amount of
+/// Create a `<div>&nbsp;<br>...</div>` occupying some amount of
 /// whitespace; useful at the end of the document to ensure that
 /// document-internal links (e.g. from the table of contents) always
 /// allows the document to be moved so that the link target is at the
