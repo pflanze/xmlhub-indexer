@@ -226,9 +226,10 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
     Ok(output)
 }
 
-/// Do not pattern-match fully on this struct, as fields may be added
-/// at any time!
+/// A single entry returned by the `GitLogIterator` as returned from
+/// `git_log`.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct GitLogEntry {
     pub commit: String, // [u8; 20] ?,
     pub author: String,
