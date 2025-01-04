@@ -16,3 +16,4 @@ thiserror = "=1.0.37"
 # use older version to avoid additional, unknown, dependencies
 # (separate newer versions of the windows dependencies)
 os_info = "=3.7"
+rayon = "=1.5.3"
