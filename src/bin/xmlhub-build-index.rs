@@ -1479,27 +1479,24 @@ fn main() -> Result<()> {
     // Create all indices for those metadata entries for which their
     // specification says to index them. Each index is in a separate
     // `Section`.
-    let index_sections: Vec<Section> = {
-        let mut sections: Vec<Section> = Vec::new();
-        for spec in METADATA_SPECIFICATION {
-            match spec.indexing {
-                AttributeIndexing::Index {
+    let index_sections: Vec<Section> = METADATA_SPECIFICATION
+        .into_iter()
+        .filter_map(|spec| match spec.indexing {
+            AttributeIndexing::Index {
+                first_word_only,
+                use_lowercase,
+            } => Some(build_index_section(
+                &html,
+                spec.key,
+                KeyvaluePreparation {
                     first_word_only,
                     use_lowercase,
-                } => sections.push(build_index_section(
-                    &html,
-                    spec.key,
-                    KeyvaluePreparation {
-                        first_word_only,
-                        use_lowercase,
-                    },
-                    &file_infos,
-                )?),
-                AttributeIndexing::NoIndex => (),
-            }
-        }
-        sections
-    };
+                },
+                &file_infos,
+            )),
+            AttributeIndexing::NoIndex => None,
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     // Make a `Section` with all the errors if there are any
     let errors_section = if file_errorss.is_empty() {
