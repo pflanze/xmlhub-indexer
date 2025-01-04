@@ -31,10 +31,18 @@ use xmlhub_indexer::{
 };
 
 // Some settings are also taken from `SOURCE_CHECKOUT`.
+/// The name of this program.
 const PROGRAM_NAME: &str = file_name(XMLHUB_INDEXER_BINARY_FILE);
+/// The file name of the index file in HTML format (the one viewed
+/// when using `--open` locally).
 const HTML_FILENAME: &str = "README.html";
+/// The file name of the index file in markdown format (the one viewed on GitLab).
 const MD_FILENAME: &str = "README.md";
-const CONTRIBUTE_FILE_NAME: &str = "CONTRIBUTE"; // without the .md or .html suffix!
+/// The file name (without the .md or .html suffix) of the file with
+/// information on how to contribute.
+const CONTRIBUTE_FILE_NAME: &str = "CONTRIBUTE";
+/// The unicode symbol to use in the index page for links to the info
+/// box on a file.
 const INFO_SYMBOL: &str = "ℹ️";
 
 // =============================================================================
@@ -263,7 +271,8 @@ enum AttributeIndexing {
     NoIndex,
 }
 
-/// All metainformation on an
+/// All metainformation on an attribute (its name, format, indexing
+/// requirements..).
 #[derive(Debug)]
 struct AttributeSpecification {
     key: AttributeName,
@@ -387,8 +396,8 @@ lazy_static! {
 // operations (`impl` blocks) including parsing that information from
 // strings and formatting the information as HTML.
 
-/// An attribute value: either a string, a list of strings, or not
-/// present.
+/// A concrete attribute value: either a string, a list of strings, or
+/// not present.
 #[derive(Debug)]
 enum AttributeValue {
     String { value: String, autolink: bool },
@@ -517,9 +526,9 @@ impl AttributeValue {
     }
 }
 
-/// The metadata for one file, specified via XML comments in it. The
-/// keys are the same as (or a subset of) those in
-/// `METADATA_SPECIFICATION`.
+/// The concrete metadata values for one particular file, specified
+/// via XML comments in it. The keys are the same as (or a subset of)
+/// those in `METADATA_SPECIFICATION`.
 #[derive(Debug)]
 struct Metadata(BTreeMap<AttributeName, AttributeValue>);
 
@@ -594,7 +603,7 @@ impl Metadata {
     }
 }
 
-/// The whole information on one file
+/// The whole, concrete, information on one particular file.
 #[derive(Debug)]
 struct FileInfo {
     id: usize,
@@ -697,9 +706,9 @@ struct Section {
     subsections: Vec<Section>,
 }
 
-/// The list of section numbers (like "1.3.2") to identify a
-/// particular subsection, used for naming them and linking from the
-/// table of contents.
+/// A list of section numbers (like "1.3.2") to identify a particular
+/// subsection, used for naming them and linking from the table of
+/// contents.
 struct NumberPath {
     numbers: Vec<usize>,
 }
@@ -962,7 +971,7 @@ impl<'f> Folder<'f> {
 // the end reporting them all (both on the command line and in the
 // output page).
 
-/// An error report with all errors that happened while processing a
+/// An error report with all errors that happened while processing one
 /// particular file.
 #[derive(Debug)]
 struct FileErrors {
@@ -1084,6 +1093,11 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     }
 }
 
+/// Settings and a method for the conversion of a value (string) into
+/// the key string to be used in an index entry (e.g. an item of
+/// `Packages` like "BDSKY 1.2.3" might be converted to "BDSKY", or a
+/// `Keywords` entry "Sampling-through-time" to
+/// "sampling-through-time").
 struct KeyvaluePreparation {
     first_word_only: bool,
     use_lowercase: bool,
@@ -1210,13 +1224,12 @@ fn empty_space_element(number_of_br_elements: usize, html: &HtmlAllocator) -> Re
     html.div([], brs)
 }
 
-/// CSS style information; only useful for the .html file, not
-/// included in the .md file as GitLab will ignore it anyway when
-/// formatting that file.
-
 const FILEINFO_PATH_BGCOLOR: &str = "#cec7f2";
 const FILEINFO_METADATA_BGCOLOR: &str = "#e3e7ff";
 
+/// CSS style information; only useful for the .html file, not
+/// included in the .md file as GitLab will ignore it anyway when
+/// formatting that file.
 fn css_styles() -> String {
     [
         "
