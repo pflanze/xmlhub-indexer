@@ -1597,6 +1597,15 @@ fn main() -> Result<()> {
                          the XML file itself."
                     ))?],
                 )?,
+                html.p(
+                    [],
+                    [html.text(
+                        "You can also search the contents of all files via the \
+                         GitLab search form, which you can find towards the top left \
+                         corner of this page (the input field saying \"Search or go \
+                         to...\").",
+                    )?],
+                )?,
                 if making_md {
                     html.p(
                         [],
