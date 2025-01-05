@@ -5,11 +5,11 @@ use xml::{reader::XmlEvent, EventReader, ParserConfig};
 use xmltree::Element;
 
 /// Parse the given file, return the comments *above the top element*,
-/// and the whole tree of XML elements (which does not include
-/// comments). Even if not making use of the Element tree, it's a good
-/// idea for `parse_xml_file` to generate it, to detect when a file is
-/// not well-formed XML.
-pub fn parse_xml_file(path: &Path) -> Result<(Vec<String>, Element)> {
+/// and if `parse_tree` is true also the whole tree of XML
+/// elements (which does not include comments). Even if not making use
+/// of the Element tree, it could be a good idea to generate it to
+/// detect when a file is not well-formed XML.
+pub fn parse_xml_file(path: &Path, build_tree: bool) -> Result<(Vec<String>, Option<Element>)> {
     let bytes = std::fs::read(path).with_context(|| anyhow!("reading file {path:?}"))?;
 
     // Parse `bytes` as item stream to extract the comments.
@@ -31,7 +31,11 @@ pub fn parse_xml_file(path: &Path) -> Result<(Vec<String>, Element)> {
     }
 
     // Parse the bytes again, now building an element tree.
-    let xmldoc = Element::parse(&*bytes).with_context(|| anyhow!("reparsing file {path:?}"))?;
+    let xmldoc = if build_tree {
+        Some(Element::parse(&*bytes).with_context(|| anyhow!("reparsing file {path:?}"))?)
+    } else {
+        None
+    };
 
     Ok((comments, xmldoc))
 }
