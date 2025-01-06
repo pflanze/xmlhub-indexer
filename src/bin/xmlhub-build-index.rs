@@ -1477,11 +1477,17 @@ fn main() -> Result<()> {
             .into_par_iter()
             .enumerate()
             .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-                // We're currently doing nothing with the `xmldoc` value
-                // from `read_xml_file` (which is the tree of all
-                // elements, excluding the comments), thus prefixed with
-                // an underscore to avoid the compiler warning about that.
-                let (comments, _xmldoc) =
+                // We're currently doing nothing with the `xmltree`
+                // value from `read_xml_file` (which is the tree of
+                // all elements, excluding the comments), thus
+                // prefixed with an underscore to avoid the compiler
+                // warning about that. It would be possible to extract
+                // information from the XML tree for further indexes
+                // by defining another kind of indexing than metadata
+                // attributes, defining extractors for those, doing
+                // the extraction here and adding the results to
+                // `FileInfo`.
+                let (comments, _xmltree) =
                     read_xml_file(&path.full_path(), !opts.no_wellformedness_check).map_err(
                         |e| FileErrors {
                             path: path.clone(),
