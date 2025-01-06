@@ -12,7 +12,7 @@ use std::{
 
 // From external dependencies
 use ahtml::{
-    att, flat::Flat, util::SoftPre, AId, ASlice, AllocatorPool, HtmlAllocator, Node, Print,
+    att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, HtmlAllocatorPool, Node, Print,
     SerHtmlFrag, ToASlice,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -59,7 +59,7 @@ const INFO_SYMBOL: &str = "ℹ️";
 // `HtmlAllocator` is an allocator for HTML elements (it manages memory
 // efficiently, and provides a method for each HTML element by its
 // name, e.g. `html.p(...)` creates a <p>...</p>
-// element). `AllocatorPool` is a pool of `HtmlAllocator` that re-uses
+// element). `HtmlAllocatorPool` is a pool of `HtmlAllocator` that re-uses
 // those for performance. The
 // number passed to `new` is the limit on the number of
 // allocations an allocator allows (a safety feature to limit damage when dealing with
@@ -67,7 +67,11 @@ const INFO_SYMBOL: &str = "ℹ️";
 // number large enough.) Rust allows underscores in numbers to
 // allow for better readability of large numbers.
 lazy_static! {
-    static ref HTML_ALLOCATOR_POOL: AllocatorPool = AllocatorPool::new(5_000_000, true);
+    static ref HTML_ALLOCATOR_POOL: HtmlAllocatorPool = HtmlAllocatorPool::new(
+        5_000_000, // allocation limit
+        true, // verify HTML correctness
+        Arc::new(format!("change the limit in {}:{}", file!(), line!()))
+    );
 }
 
 // =============================================================================
