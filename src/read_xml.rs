@@ -13,7 +13,7 @@ use xmltree::Element;
 /// elements (which does not include comments). Even if not making use
 /// of the Element tree, it could be a good idea to generate it to
 /// detect when a file is not well-formed XML.
-pub fn parse_xml_file(path: &Path, build_tree: bool) -> Result<(Vec<String>, Option<Element>)> {
+pub fn read_xml_file(path: &Path, build_tree: bool) -> Result<(Vec<String>, Option<Element>)> {
     let mut inp =
         BufReader::new(File::open(path).with_context(|| anyhow!("reading file {path:?}"))?);
 

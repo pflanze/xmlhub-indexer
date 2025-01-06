@@ -32,7 +32,7 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, RelPathWithBase},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
-    parse_xml::parse_xml_file,
+    read_xml::read_xml_file,
     string_tree::StringTree,
     util,
     util::{append, list_get_by_key, InsertValue},
@@ -1478,11 +1478,11 @@ fn main() -> Result<()> {
             .enumerate()
             .map(|(id, path)| -> Result<FileInfo, FileErrors> {
                 // We're currently doing nothing with the `xmldoc` value
-                // from `parse_xml_file` (which is the tree of all
+                // from `read_xml_file` (which is the tree of all
                 // elements, excluding the comments), thus prefixed with
                 // an underscore to avoid the compiler warning about that.
                 let (comments, _xmldoc) =
-                    parse_xml_file(&path.full_path(), !opts.no_wellformedness_check).map_err(
+                    read_xml_file(&path.full_path(), !opts.no_wellformedness_check).map_err(
                         |e| FileErrors {
                             path: path.clone(),
                             errors: vec![format!("{e:#}")],
