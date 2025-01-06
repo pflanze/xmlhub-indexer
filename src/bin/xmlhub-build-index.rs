@@ -2,30 +2,38 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
+    convert::identity,
     fs::File,
     io::{stderr, stdout, BufWriter, Write},
     path::PathBuf,
     process::exit,
+    sync::Arc,
 };
 
 // From external dependencies
-use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, Node, Print, ToASlice};
+use ahtml::{
+    att, flat::Flat, util::SoftPre, AId, ASlice, AllocatorPool, HtmlAllocator, Node, Print,
+    SerHtmlFrag, ToASlice,
+};
 use anyhow::{anyhow, bail, Context, Result};
+use chj_util::time_guard;
 use chrono::Local;
 use clap::Parser;
-use itertools::Itertools;
+use itertools::{intersperse_with, Itertools};
 use lazy_static::lazy_static;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
 // From src/*.rs
 use xmlhub_indexer::{
     browser::spawn_browser,
     const_util::file_name,
-    flattened::Flattened,
     git::{git, git_ls_files, git_push, git_status, RelPathWithBase},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     parse_xml::parse_xml_file,
+    string_tree::StringTree,
     util,
     util::{append, list_get_by_key, InsertValue},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
@@ -45,6 +53,20 @@ const CONTRIBUTE_FILE_NAME: &str = "CONTRIBUTE";
 /// The unicode symbol to use in the index page for links to the info
 /// box on a file.
 const INFO_SYMBOL: &str = "ℹ️";
+
+// `HtmlAllocator` is an allocator for HTML elements (it manages memory
+// efficiently, and provides a method for each HTML element by its
+// name, e.g. `html.p(...)` creates a <p>...</p>
+// element). `AllocatorPool` is a pool of `HtmlAllocator` that re-uses
+// those for performance. The
+// number passed to `new` is the limit on the number of
+// allocations an allocator allows (a safety feature to limit damage when dealing with
+// attackers of web systems; irrelevant here, just choosing a
+// number large enough.) Rust allows underscores in numbers to
+// allow for better readability of large numbers.
+lazy_static! {
+    static ref HTML_ALLOCATOR_POOL: AllocatorPool = AllocatorPool::new(5_000_000, true);
+}
 
 // =============================================================================
 // Specification of the command line interface, using the `clap`
@@ -709,7 +731,7 @@ impl FileInfo {
 struct Section {
     in_red: bool,
     title: Option<String>,
-    intro: Option<AId<Node>>,
+    intro: Option<Arc<SerHtmlFrag>>,
     subsections: Vec<Section>,
 }
 
@@ -824,8 +846,8 @@ impl Section {
             )?)?;
         }
 
-        if let Some(node) = self.intro {
-            vec.push(node)?;
+        if let Some(fragment) = &self.intro {
+            vec.push(html.preserialized(fragment)?)?;
         }
 
         for (i, section) in self.subsections.iter().enumerate() {
@@ -838,8 +860,8 @@ impl Section {
     }
 
     /// Format the section for the inclusion in a markdown file
-    fn to_markdown(&self, number_path: NumberPath, html: &HtmlAllocator) -> Result<String> {
-        let mut result = String::new();
+    fn to_markdown(&self, number_path: NumberPath) -> Result<StringTree> {
+        let mut title_and_intro = String::new();
         if let Some(title) = &self.title {
             let number_path_string = number_path.to_string();
             let section_id = format!("section-{number_path_string}");
@@ -848,39 +870,49 @@ impl Section {
                 num_hashes = 6
             }
             for _ in 0..num_hashes {
-                result.push('#');
+                title_and_intro.push('#');
             }
-            result.push(' ');
+            title_and_intro.push(' ');
             // Add an anchor for in-page links; use both available
             // approaches, the older "name" and the newer "id"
             // approach, hoping that at least one gets through
             // GitLab's formatting.
-            result.push_str(
+            let mut html_guard = HTML_ALLOCATOR_POOL.get();
+            let html = html_guard.allocator();
+            title_and_intro.push_str(
                 &html
                     .a([att("name", &section_id), att("id", &section_id)], [])?
                     .to_html_fragment_string(html)?,
             );
-            result.push_str(&number_path_string);
-            result.push(' ');
+            title_and_intro.push_str(&number_path_string);
+            title_and_intro.push(' ');
             // Should we use HTML to try to make this red if
             // `self.in_red`? But GitLab drops it anyway, and there's
             // risk of messing up the title display.
-            result.push_str(title);
-            result.push_str("\n\n");
+            title_and_intro.push_str(title);
+            title_and_intro.push_str("\n\n");
         }
 
-        if let Some(node) = self.intro {
-            result.push_str(&node.to_html_fragment_string(html)?);
-            result.push_str("\n\n");
+        if let Some(fragment) = &self.intro {
+            title_and_intro.push_str(fragment.as_str());
+            title_and_intro.push_str("\n\n");
         }
 
-        for (i, section) in self.subsections.iter().enumerate() {
-            let id = i + 1;
-            let sub_path = number_path.add(id);
-            result.push_str(&section.to_markdown(sub_path, html)?);
-        }
+        let sub_bags = self
+            .subsections
+            .par_iter()
+            .enumerate()
+            .map(|(i, section)| {
+                let id = i + 1;
+                let sub_path = number_path.add(id);
+                section.to_markdown(sub_path)
+            })
+            .collect::<Result<_>>()?;
 
-        Ok(result)
+        Ok(StringTree::Branching(vec![
+            StringTree::Leaf(title_and_intro),
+            StringTree::Branching(sub_bags),
+        ]))
     }
 }
 
@@ -943,30 +975,38 @@ impl<'f> Folder<'f> {
     }
 
     /// Convert to nested `Section`s.
-    fn to_section(&self, title: Option<String>, html: &HtmlAllocator) -> Result<Section> {
-        // Create and then fill in a vector of boxes which we'll use
-        // as the body for a `div` HTML element; this vector is a
-        // custom vector implementation that allocates its storage
-        // space from the `HtmlAllocator` in `html`, that's why we
-        // allocate it via the `new_vec` method and not via
-        // `Vec::new()`.
-        let mut file_info_boxes = html.new_vec();
-        for (file_name, file_info) in &self.files {
-            file_info_boxes.push(file_info.to_box_html(&html, "box", file_name)?)?;
-        }
+    fn to_section(&self, title: Option<String>) -> Result<Section> {
+        let intro = {
+            let mut html_guard = HTML_ALLOCATOR_POOL.get();
+            let html = html_guard.allocator();
 
-        // Using a normal vector here.
-        let mut subsections = Vec::new();
-        for (folder_name, folder) in &self.folders {
-            // Append a '/' to folder_name to indicate that those are
-            // folder names
-            subsections.push(folder.to_section(Some(format!("{folder_name}/")), html)?);
-        }
+            // Create and then fill in a vector of boxes which we'll use
+            // as the body for a `div` HTML element; this vector is a
+            // custom vector implementation that allocates its storage
+            // space from the `HtmlAllocator` in `html`, that's why we
+            // allocate it via the `new_vec` method and not via
+            // `Vec::new()`.
+            let mut file_info_boxes = html.new_vec();
+            for (file_name, file_info) in &self.files {
+                file_info_boxes.push(file_info.to_box_html(&html, "box", file_name)?)?;
+            }
+            Some(html.preserialize(html.div([], file_info_boxes)?)?.into())
+        };
+
+        let subsections = self
+            .folders
+            .par_iter()
+            .map(|(folder_name, folder)| {
+                // Append a '/' to folder_name to indicate that those are
+                // folder names
+                folder.to_section(Some(format!("{folder_name}/")))
+            })
+            .collect::<Result<_>>()?;
 
         Ok(Section {
             in_red: false,
             title,
-            intro: Some(html.div([], file_info_boxes)?),
+            intro,
             subsections,
         })
     }
@@ -1131,7 +1171,6 @@ impl KeyvaluePreparation {
 
 /// Build an index over all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
-    html: &HtmlAllocator,
     attribute_key: AttributeName,
     keyvalue_normalization: KeyvaluePreparation,
     file_infos: &[FileInfo],
@@ -1151,6 +1190,9 @@ fn build_index_section(
             }
         }
     }
+
+    let mut html_guard = HTML_ALLOCATOR_POOL.get();
+    let html = html_guard.allocator();
 
     // The contents of the section, i.e. the list of all keyvalues and
     // the files for the respective keyvalue.
@@ -1212,7 +1254,10 @@ fn build_index_section(
     Ok(Section {
         in_red: false,
         title: Some(attribute_key.as_str().into()),
-        intro: Some(html.dl([att("class", "key_dl")], body)?),
+        intro: Some(
+            html.preserialize(html.dl([att("class", "key_dl")], body)?)?
+                .into(),
+        ),
         subsections: vec![],
     })
 }
@@ -1424,92 +1469,108 @@ fn main() -> Result<()> {
     // passed as the `id` argument to the function given to `map`).
     // The id is used to refer to each item in document-local links in
     // the generated HTML/Markdown files.
-    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = paths
-        .into_par_iter()
-        .enumerate()
-        .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-            // We're currently doing nothing with the `xmldoc` value
-            // from `parse_xml_file` (which is the tree of all
-            // elements, excluding the comments), thus prefixed with
-            // an underscore to avoid the compiler warning about that.
-            let (comments, _xmldoc) =
+    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = {
+        time_guard! {"fileinfo_or_errors"}
+        paths
+            .into_par_iter()
+            .enumerate()
+            .map(|(id, path)| -> Result<FileInfo, FileErrors> {
+                // We're currently doing nothing with the `xmldoc` value
+                // from `parse_xml_file` (which is the tree of all
+                // elements, excluding the comments), thus prefixed with
+                // an underscore to avoid the compiler warning about that.
+                let (comments, _xmldoc) =
                     parse_xml_file(&path.full_path(), !opts.no_wellformedness_check).map_err(
                         |e| FileErrors {
                             path: path.clone(),
                             errors: vec![format!("{e:#}")],
                         },
                     )?;
-            let metadata = parse_comments(&comments).map_err(|errors| FileErrors {
-                path: path.clone(),
-                errors,
-            })?;
-            Ok(FileInfo { id, path, metadata })
-        })
-        .collect();
+                let metadata = parse_comments(&comments).map_err(|errors| FileErrors {
+                    path: path.clone(),
+                    errors,
+                })?;
+                Ok(FileInfo { id, path, metadata })
+            })
+            .collect()
+    };
 
     // Partition fileinfo_or_errors into vectors with only the
     // successful and only the erroneous results.
-    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) =
-        fileinfo_or_errors.into_iter().partition_result();
+    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) = {
+        time_guard! {"partition_result"}
+        fileinfo_or_errors.into_iter().partition_result()
+    };
 
     // Build the HTML fragments to use in the HTML page and the Markdown
     // file.
 
-    // `HtmlAllocator` is an allocator for HTML elements (it manages memory
-    // efficiently, and provides a method for each HTML element by its
-    // name, e.g. `html.p(...)` creates a <p>...</p> element). The
-    // number passed to `new` is the limit on the number of
-    // allocations (a safety feature to limit damage when dealing with
-    // attackers of web systems; irrelevant here, just choosing a
-    // number large enough.) Rust allows underscores in numbers to
-    // allow for better readability of large numbers.
-    let html = HtmlAllocator::new(10_000_000);
-
     // Create all the sections making up the output file(s)
 
-    // Create a Section with boxes with the metainfo for all XML
-    // files, in a hierarchy reflecting the folder hierarchy where
-    // they are.
-    let file_info_boxes_section: Section = {
-        // Temporarily create a folder hierarchy from all the paths,
-        // then convert it to a Section.
+    let (file_info_boxes_section, index_sections_section) = rayon::join(
+        // Create a Section with boxes with the metainfo for all XML
+        // files, in a hierarchy reflecting the folder hierarchy where
+        // they are.
+        || -> Result<Section> {
+            time_guard! {"file_info_boxes_section"}
+            // Temporarily create a folder hierarchy from all the paths,
+            // then convert it to a Section.
 
-        let mut folder = Folder::new();
-        for file_info in &file_infos {
-            folder.add(file_info).expect("no duplicates");
-        }
-        // This being the last expression in a { } block returns
-        // (moves) its value to the `file_info_boxes_section`
-        // variable outside.
-        folder.to_section(Some("File info by folder".into()), &html)?
-    };
-
-    // Create all indices for those metadata entries for which their
-    // specification says to index them. Each index is in a separate
-    // `Section`.
-    let index_sections: Vec<Section> = METADATA_SPECIFICATION
-        .into_iter()
-        .filter_map(|spec| match spec.indexing {
-            AttributeIndexing::Index {
-                first_word_only,
-                use_lowercase,
-            } => Some(build_index_section(
-                &html,
-                spec.key,
-                KeyvaluePreparation {
-                    first_word_only,
-                    use_lowercase,
-                },
-                &file_infos,
-            )),
-            AttributeIndexing::NoIndex => None,
-        })
-        .collect::<Result<Vec<_>>>()?;
+            let mut folder = Folder::new();
+            for file_info in &file_infos {
+                folder.add(file_info).expect("no duplicates");
+            }
+            time_guard! {"file_info_boxes_section folder.to_section"}
+            // This being the last expression in a { } block returns
+            // (moves) its value to the `file_info_boxes_section`
+            // variable outside.
+            folder.to_section(Some("File info by folder".into()))
+        },
+        // Create all indices for those metadata entries for which their
+        // specification says to index them. Each index is in a separate
+        // `Section`.
+        || -> Result<Section> {
+            time_guard! {"index_sections"}
+            let index_sections: Vec<Section> = METADATA_SPECIFICATION
+                .into_par_iter()
+                .filter_map(|spec| match spec.indexing {
+                    AttributeIndexing::Index {
+                        first_word_only,
+                        use_lowercase,
+                    } => {
+                        chj_util::time_guard! {format!("indexing {:?}", spec.key)};
+                        Some(build_index_section(
+                            spec.key,
+                            KeyvaluePreparation {
+                                first_word_only,
+                                use_lowercase,
+                            },
+                            &file_infos,
+                        ))
+                    }
+                    AttributeIndexing::NoIndex => None,
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Section {
+                in_red: false,
+                title: Some("Index by attribute".into()),
+                intro: None,
+                subsections: index_sections,
+            })
+        },
+    );
+    // propagate errors
+    let (file_info_boxes_section, index_sections_section) =
+        (file_info_boxes_section?, index_sections_section?);
 
     // Make a `Section` with all the errors if there are any
     let errors_section = if file_errorss.is_empty() {
         None
     } else {
+        time_guard! {"errors_section"}
+        let mut html_guard = HTML_ALLOCATOR_POOL.get();
+        let html = html_guard.allocator();
+
         let mut vec = html.new_vec();
         for file_errors in &file_errorss {
             vec.push_flat(file_errors.to_html(&html)?)?;
@@ -1517,7 +1578,7 @@ fn main() -> Result<()> {
         Some(Section {
             in_red: true,
             title: Some("Errors".into()),
-            intro: Some(html.dl([], vec)?),
+            intro: Some(html.preserialize(html.dl([], vec)?)?.into()),
             subsections: vec![],
         })
     };
@@ -1536,17 +1597,12 @@ fn main() -> Result<()> {
             errors_section.into_iter().collect::<Vec<_>>(),
             // Always use the file_info_boxes_section and the index
             // sections.
-            vec![
-                Section {
-                    in_red: false,
-                    title: Some("Index by attribute".into()),
-                    intro: None,
-                    subsections: index_sections,
-                },
-                file_info_boxes_section,
-            ],
+            vec![index_sections_section, file_info_boxes_section],
         ),
     };
+
+    let mut html_guard = HTML_ALLOCATOR_POOL.get();
+    let html = html_guard.allocator();
 
     // Some variables used in both the .html and .md documents
     let now = Local::now().to_rfc2822();
@@ -1633,74 +1689,80 @@ fn main() -> Result<()> {
     };
 
     // The contents for the README.html document
-    let htmldocument = html.html(
-        [],
-        [
-            html.head(
-                [],
-                [
-                    html.meta(
-                        [att("name", "generator"), att("content", &generated_message)],
-                        [],
-                    )?,
-                    html.meta(
-                        [att("name", "author"), att("content", &generated_message)],
-                        [],
-                    )?,
-                    html.title([], html.text("Index - XML Hub")?)?,
-                    html.style([], html.text(css_styles())?)?,
-                ],
-            )?,
-            html.body(
-                [],
-                [
-                    html.h1([], html.text(title)?)?,
-                    intro(false)?,
-                    html.h2([], html.text("Contents")?)?,
-                    toc_html,
-                    html.div([], toplevel_section.to_html(NumberPath::empty(), &html)?)?,
-                    if opts.timestamp {
-                        html.div(
+    let htmldocument = {
+        time_guard! {"htmldocument"}
+        html.html(
+            [],
+            [
+                html.head(
+                    [],
+                    [
+                        html.meta(
+                            [att("name", "generator"), att("content", &generated_message)],
                             [],
-                            [
-                                html.hr([], [])?,
-                                html.p([], [html.text("Last updated: ")?, html.text(&now)?])?,
-                            ],
-                        )?
-                    } else {
-                        html.empty_node()?
-                    },
-                    empty_space_element(40, &html)?,
-                ],
-            )?,
-        ],
-    )?;
+                        )?,
+                        html.meta(
+                            [att("name", "author"), att("content", &generated_message)],
+                            [],
+                        )?,
+                        html.title([], html.text("Index - XML Hub")?)?,
+                        html.style([], html.text(css_styles())?)?,
+                    ],
+                )?,
+                html.body(
+                    [],
+                    [
+                        html.h1([], html.text(title)?)?,
+                        intro(false)?,
+                        html.h2([], html.text("Contents")?)?,
+                        toc_html,
+                        html.div([], toplevel_section.to_html(NumberPath::empty(), &html)?)?,
+                        if opts.timestamp {
+                            html.div(
+                                [],
+                                [
+                                    html.hr([], [])?,
+                                    html.p([], [html.text("Last updated: ")?, html.text(&now)?])?,
+                                ],
+                            )?
+                        } else {
+                            html.empty_node()?
+                        },
+                        empty_space_element(40, &html)?,
+                    ],
+                )?,
+            ],
+        )?
+    };
 
     // The contents for the README.md document
-    let mddocument = {
-        [
+    let mddocument: StringTree = {
+        time_guard! {"mddocument"}
+        let flatten_as_paragraphs = |vecs: Vec<Vec<StringTree>>| -> Vec<StringTree> {
+            intersperse_with(vecs.into_iter().flatten(), || "\n\n".into()).collect()
+        };
+
+        StringTree::Branching(flatten_as_paragraphs(vec![
             vec![
-                format!("<!-- NOTE: {generated_message}, do not edit manually! -->"),
-                format!("# {title}"),
-                intro(true)?.to_html_fragment_string(&html)?,
-            ],
-            vec![
-                format!("## Contents"),
-                toc_html.to_html_fragment_string(&html)?,
-                toplevel_section.to_markdown(NumberPath::empty(), &html)?,
-                empty_space_element(40, &html)?.to_html_fragment_string(&html)?,
+                format!("<!-- NOTE: {generated_message}, do not edit manually! -->").into(),
+                format!("# {title}").into(),
+                intro(true)?.to_html_fragment_string(&html)?.into(),
+                "## Contents".into(),
+                toc_html.to_html_fragment_string(&html)?.into(),
+                toplevel_section.to_markdown(NumberPath::empty())?,
+                empty_space_element(40, &html)?
+                    .to_html_fragment_string(&html)?
+                    .into(),
             ],
             if opts.timestamp {
                 vec![
-                    format!("-------------------------------------------------------"),
-                    format!("Last updated: {now}\n"),
+                    "-------------------------------------------------------".into(),
+                    format!("Last updated: {now}\n").into(),
                 ]
             } else {
                 vec![]
             },
-        ]
-        .flattened()
-        .join("\n\n")
+        ]))
     };
 
     let have_errors = !file_errorss.is_empty();
@@ -1738,6 +1800,7 @@ fn main() -> Result<()> {
     }
 
     if write_errors_to_stderr {
+        time_guard! {"write_errors_to_stderr"}
         let mut out = stderr().lock();
         (|| -> Result<()> {
             write!(&mut out, "Indexing errors:\n")?;
@@ -1751,40 +1814,61 @@ fn main() -> Result<()> {
 
     let mut html_file_has_changed = false;
     if write_files {
+        time_guard! {"write_files"}
         // Write the output files to the directory at `base_path` if
         // given.
         if let Some(base_path_) = &opts.base_path {
             let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path_);
-            let mut written_files = Vec::new();
-            if do_html {
-                // Get an owned version of the base path and then
-                // append path segments to it.
-                let mut path = source_checkout.working_dir_path.to_owned();
-                path.push(HTML_FILENAME);
-                written_files.push(HTML_FILENAME);
-                let mut out = BufWriter::new(File::create(&path)?);
-                html.print_html_document(htmldocument, &mut out)?;
-                out.flush()?;
+            let (written_html, written_md) = rayon::join(
+                || -> Result<_> {
+                    if do_html {
+                        time_guard! {"write_files: do_html"}
 
-                if opts.open_if_changed {
-                    // Need to remember whether the file has changed
-                    check_dry_run! {
-                        message: "git diff",
-                        html_file_has_changed = !git(
-                            source_checkout.working_dir_path,
-                            &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
-                        )?
+                        let html = html_guard.allocator();
+
+                        // Get an owned version of the base path and then
+                        // append path segments to it.
+                        let mut path = source_checkout.working_dir_path.to_owned();
+                        path.push(HTML_FILENAME);
+                        let mut out = BufWriter::new(File::create(&path)?);
+                        html.print_html_document(htmldocument, &mut out)?;
+                        out.flush()?;
+
+                        if opts.open_if_changed {
+                            time_guard! {"write_files: do_html: git diff"}
+                            // Need to remember whether the file has changed
+                            check_dry_run! {
+                                message: "git diff",
+                                html_file_has_changed = !git(
+                                    source_checkout.working_dir_path,
+                                    &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
+                                )?
+                            }
+                        }
+                        Ok(Some(HTML_FILENAME))
+                    } else {
+                        Ok(None)
                     }
-                }
-            }
-            if do_md {
-                let mut path = source_checkout.working_dir_path.to_owned();
-                path.push(MD_FILENAME);
-                written_files.push(MD_FILENAME);
-                let mut out = File::create(&path)?;
-                out.write_all(mddocument.as_bytes())?;
-                out.flush()?;
-            }
+                },
+                || -> Result<_> {
+                    if do_md {
+                        time_guard! {"write_files: do_md"}
+                        let mut path = source_checkout.working_dir_path.to_owned();
+                        path.push(MD_FILENAME);
+                        mddocument
+                            .write_to_file(&path)
+                            .with_context(|| anyhow!("writing to file {path:?}"))?;
+                        Ok(Some(MD_FILENAME))
+                    } else {
+                        Ok(None)
+                    }
+                },
+            );
+
+            let written_files: Vec<&str> = [written_html?, written_md?]
+                .into_iter()
+                .filter_map(identity)
+                .collect();
 
             // Commit files if not prevented by --no-commit, and any
             // were written, and --no-commit-errors was not given or

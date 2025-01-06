@@ -8,5 +8,6 @@ pub mod git;
 pub mod git_check_version;
 pub mod git_version;
 pub mod parse_xml;
+pub mod string_tree;
 pub mod util;
 pub mod xmlhub_indexer_defaults;
