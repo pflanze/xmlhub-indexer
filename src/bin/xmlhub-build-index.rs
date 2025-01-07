@@ -904,7 +904,7 @@ impl Section {
             title_and_intro.push_str("\n\n");
         }
 
-        let sub_bags = self
+        let sub_trees = self
             .subsections
             .par_iter()
             .enumerate()
@@ -917,7 +917,7 @@ impl Section {
 
         Ok(StringTree::Branching(vec![
             StringTree::Leaf(title_and_intro),
-            StringTree::Branching(sub_bags),
+            StringTree::Branching(sub_trees),
         ]))
     }
 }
