@@ -154,7 +154,7 @@ pub fn ask_yn(question: &str) -> Result<bool> {
 /// Create the given directory if it doesn't exist and `levels` is at
 /// least 1, as well as the given number of `levels - 1` above
 /// it. (But also see `create_dir_all`.) This expects a directory
-/// path, you have a file path, be careful to take the `parent()`
+/// path, if you have a file path, be careful to take the `parent()`
 /// first!
 pub fn create_dir_levels_if_necessary(dir_path: &Path, levels: u32) -> Result<()> {
     // eprintln!("create_dir_levels_if_necessary({dir_path:?}, {levels})");
