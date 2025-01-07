@@ -1444,7 +1444,7 @@ fn main() -> Result<()> {
             message: "git ls-files",
             paths = git_ls_files(base_path)?
         }
-        paths
+        paths = paths
             .into_iter()
             .filter(|path| {
                 if let Some(ext) = path.extension() {
@@ -1453,7 +1453,13 @@ fn main() -> Result<()> {
                     false
                 }
             })
-            .collect()
+            .collect();
+        // Apparently git ls-files does not guarantee a sort order
+        // (perhaps it is locale dependent), thus sort entries
+        // ourselves first to guarantee generation of consistend ids
+        // later on.
+        paths.sort_by(|a, b| a.rel_path().cmp(b.rel_path()));
+        paths
     };
 
     // Carry out `git pull` if requested
