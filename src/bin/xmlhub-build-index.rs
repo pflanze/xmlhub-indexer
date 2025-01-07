@@ -1454,10 +1454,8 @@ fn main() -> Result<()> {
                 }
             })
             .collect();
-        // Apparently git ls-files does not guarantee a sort order
-        // (perhaps it is locale dependent), thus sort entries
-        // ourselves first to guarantee generation of consistend ids
-        // later on.
+        // Sort entries ourselves out of a worry that git ls-files
+        // might not guarantee a sort order
         paths.sort_by(|a, b| a.rel_path().cmp(b.rel_path()));
         paths
     };
