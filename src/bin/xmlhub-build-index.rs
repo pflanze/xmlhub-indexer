@@ -1455,7 +1455,10 @@ fn main() -> Result<()> {
             })
             .collect();
         // Sort entries ourselves out of a worry that git ls-files
-        // might not guarantee a sort order
+        // might not guarantee a sort order. (The sort order
+        // determines the ID assignment that happens later, and those
+        // are used in the HTML output, hence would lead to useless
+        // commits.)
         paths.sort_by(|a, b| a.rel_path().cmp(b.rel_path()));
         paths
     };
