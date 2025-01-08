@@ -182,3 +182,19 @@ pub fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
         .windows(needle.len())
         .any(|window| window == needle)
 }
+
+pub trait TupleTranspose {
+    type Output;
+    fn transpose(self) -> Self::Output;
+}
+
+/// Convert the return value from `rayon::join` so that errors can be
+/// propagated easily. (There is also `tuple-transpose` crate offering
+/// the same, but it might not stay around and has no docs.)
+impl<V1, V2, E> TupleTranspose for (Result<V1, E>, Result<V2, E>) {
+    type Output = Result<(V1, V2), E>;
+
+    fn transpose(self) -> Self::Output {
+        Ok((self.0?, self.1?))
+    }
+}

@@ -35,7 +35,7 @@ use xmlhub_indexer::{
     read_xml::read_xml_file,
     string_tree::StringTree,
     util,
-    util::{append, list_get_by_key, InsertValue},
+    util::{append, list_get_by_key, InsertValue, TupleTranspose},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
@@ -1535,7 +1535,10 @@ fn main() -> Result<()> {
     // `rayon::join` takes two anonymous functions (closures), runs
     // them in parallel if more than one CPU core is available, and
     // returns their results in a tuple `(result1, result2)` which we
-    // capture in the two `*_section` variables here.
+    // capture in the two `*_section` variables here. (`.transpose()`
+    // converts the tuple returned from `rayon::join` so that
+    // contained errors are moved to the outside, so that they can be
+    // propagated easily via `?`.)
     let (file_info_boxes_section, index_sections_section) = rayon::join(
         // Create a Section with boxes with the metainfo for all XML
         // files, in a hierarchy reflecting the folder hierarchy where
@@ -1555,7 +1558,6 @@ fn main() -> Result<()> {
             // variable outside.
             folder.to_section(Some("File info by folder".into()))
         },
-
         // Create all indices for those metadata entries for which their
         // specification says to index them. Each index is in a separate
         // `Section`.
@@ -1588,11 +1590,8 @@ fn main() -> Result<()> {
                 subsections: index_sections,
             })
         },
-    );
-    // Propagate errors (unpack `Result` via `?`, in case of Err
-    // return, in case of Ok re-bind to variables of the same name).
-    let (file_info_boxes_section, index_sections_section) =
-        (file_info_boxes_section?, index_sections_section?);
+    )
+    .transpose()?;
 
     // Make a `Section` with all the errors if there are any
     let errors_section = if file_errorss.is_empty() {
@@ -1894,9 +1893,10 @@ fn main() -> Result<()> {
                         Ok(None)
                     }
                 },
-            );
+            )
+            .transpose()?;
 
-            let written_files: Vec<&str> = [written_html?, written_md?]
+            let written_files: Vec<&str> = [written_html, written_md]
                 .into_iter()
                 .filter_map(identity)
                 .collect();
