@@ -18,12 +18,12 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct RelPathWithBase {
+pub struct BaseAndRelPath {
     base_path: Option<Arc<PathBuf>>,
     rel_path: PathBuf,
 }
 
-impl RelPathWithBase {
+impl BaseAndRelPath {
     pub fn new(base_path: Option<Arc<PathBuf>>, rel_path: PathBuf) -> Self {
         Self {
             base_path,
@@ -127,7 +127,7 @@ pub fn git_describe<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) 
     git_stdout_string_trimmed(base_path, &all_args)
 }
 
-pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
+pub fn git_ls_files(base_path: &Path) -> Result<Vec<BaseAndRelPath>> {
     let stdout = git_stdout(base_path, &["ls-files", "-z"])?;
     let base_path = Arc::new(base_path.to_owned());
     stdout
@@ -142,7 +142,7 @@ pub fn git_ls_files(base_path: &Path) -> Result<Vec<RelPathWithBase>> {
                     )
                 })?
                 .into();
-            Ok(RelPathWithBase {
+            Ok(BaseAndRelPath {
                 base_path: Some(base_path.clone()),
                 rel_path,
             })

@@ -29,7 +29,7 @@ use rayon::prelude::{
 use xmlhub_indexer::{
     browser::spawn_browser,
     const_util::file_name,
-    git::{git, git_ls_files, git_push, git_status, RelPathWithBase},
+    git::{git, git_ls_files, git_push, git_status, BaseAndRelPath},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     read_xml::read_xml_file,
@@ -642,7 +642,7 @@ impl Metadata {
 #[derive(Debug)]
 struct FileInfo {
     id: usize,
-    path: RelPathWithBase,
+    path: BaseAndRelPath,
     metadata: Metadata,
 }
 
@@ -1028,7 +1028,7 @@ impl<'f> Folder<'f> {
 /// particular file.
 #[derive(Debug)]
 struct FileErrors {
-    path: RelPathWithBase,
+    path: BaseAndRelPath,
     errors: Vec<String>,
 }
 
@@ -1398,10 +1398,10 @@ fn main() -> Result<()> {
     // each of which carries both a path to a base directory
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
-    let paths: Vec<RelPathWithBase> = if let Some(paths) = opts.path {
+    let paths: Vec<BaseAndRelPath> = if let Some(paths) = opts.path {
         paths
             .into_iter()
-            .map(|p| RelPathWithBase::new(None, p))
+            .map(|p| BaseAndRelPath::new(None, p))
             .collect()
     } else {
         // There were no `paths` given; instead get the base_path
