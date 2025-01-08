@@ -1483,6 +1483,12 @@ fn main() -> Result<()> {
     // The id is used to refer to each item in document-local links in
     // the generated HTML/Markdown files.
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = {
+        // `time_guard!` places an object that measures the duration
+        // from its creation until the execution of the current scope
+        // ends; this helps finding which areas are computationally
+        // costly and worth optimizing/parallelizing. Reporting only
+        // happens when setting the environment variable
+        // `TIME_GUARD=1`.
         time_guard! {"fileinfo_or_errors"}
         paths
             .into_par_iter()
