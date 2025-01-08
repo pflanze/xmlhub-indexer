@@ -1557,7 +1557,7 @@ fn main() -> Result<()> {
                         first_word_only,
                         use_lowercase,
                     } => {
-                        chj_util::time_guard! {format!("indexing {:?}", spec.key)};
+                        time_guard! {format!("indexing {:?}", spec.key)};
                         Some(build_index_section(
                             spec.key,
                             KeyvaluePreparation {
