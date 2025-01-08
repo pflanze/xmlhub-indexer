@@ -1532,6 +1532,10 @@ fn main() -> Result<()> {
 
     // Create all the sections making up the output file(s)
 
+    // `rayon::join` takes two anonymous functions (closures), runs
+    // them in parallel if more than one CPU core is available, and
+    // returns their results in a tuple `(result1, result2)` which we
+    // capture in the two `*_section` variables here.
     let (file_info_boxes_section, index_sections_section) = rayon::join(
         // Create a Section with boxes with the metainfo for all XML
         // files, in a hierarchy reflecting the folder hierarchy where
@@ -1551,6 +1555,7 @@ fn main() -> Result<()> {
             // variable outside.
             folder.to_section(Some("File info by folder".into()))
         },
+
         // Create all indices for those metadata entries for which their
         // specification says to index them. Each index is in a separate
         // `Section`.
@@ -1584,7 +1589,8 @@ fn main() -> Result<()> {
             })
         },
     );
-    // propagate errors
+    // Propagate errors (unpack `Result` via `?`, in case of Err
+    // return, in case of Ok re-bind to variables of the same name).
     let (file_info_boxes_section, index_sections_section) =
         (file_info_boxes_section?, index_sections_section?);
 
