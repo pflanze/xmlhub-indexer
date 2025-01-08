@@ -427,6 +427,7 @@ pub fn git_tag(
     sign: bool,
     local_user: Option<&str>,
 ) -> Result<bool> {
+    let clean_local_user: String;
     let mut args = vec![
         "tag",
         if sign { "-s" } else { "-a" },
@@ -435,8 +436,14 @@ pub fn git_tag(
         message,
     ];
     if let Some(local_user) = local_user {
+        // Meh, "GPG Keychain" (gpgtools.org) on macOS copies the
+        // fingerprint with non-breaking spaces to the clipboard.
+        clean_local_user = local_user
+            .chars()
+            .map(|c| if c == '\u{a0}' { ' ' } else { c })
+            .collect();
         args.push("--local-user");
-        args.push(local_user);
+        args.push(&clean_local_user);
     }
     if let Some(revision) = revision {
         args.push(revision);
