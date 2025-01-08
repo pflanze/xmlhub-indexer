@@ -304,11 +304,19 @@ Caveats:
   it has not been tested on Windows at all.
 
 For making signed tags (using the `--sign` option), you need a PGP/gpg
-key. If you don't have one, in a terminal, run `gpg --generate-key`,
+key. If you don't have one, in a terminal, run
+
+    gpg --generate-key
+
 then follow the instructions. When done, `cd` into your checkout of
-the `xmlhub-indexer-binaries` repository, then run `gpg --export -a >
-keys/your-name.asc`, `git add .`, `git commit -m "add key"`, `git
-push`, so that others can then run `git --import key/your-name.asc`
+the `xmlhub-indexer-binaries` repository, then run
+
+    gpg --export -a "your name or fingerprint" > keys/your-name.asc
+    git add .
+    git commit -m "add key"
+    git push
+
+so that others can then run `git --import key/your-name.asc`
 from their checkout once and then run `git tag -v v123` to verify the
 authenticity of the v123 version. To know whether the key is actually
 yours, both people can run `gpg --fingerprint "your name"` (or leave
