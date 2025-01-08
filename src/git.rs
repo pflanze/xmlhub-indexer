@@ -443,16 +443,13 @@ pub fn git_tag(
     }
 
     let explain = |e| {
-        if local_user.is_none() {
-            Err(e).with_context(|| {
-                anyhow!(
-                    "if you get 'gpg failed to sign the data', try \
-                         giving the local-user argument"
-                )
-            })
+        let hint = if local_user.is_none() {
+            "-- NOTE: if you get 'gpg failed to sign the data', try giving the \
+             local-user argument"
         } else {
-            Err(e)
-        }
+            ""
+        };
+        Err(e).with_context(|| anyhow!("running git {args:?} in {base_path:?}{hint}"))
     };
     match run_outputs(base_path, "git", &args, &[("PAGER", "")], &[0, 128]) {
         Err(e) => explain(e),
