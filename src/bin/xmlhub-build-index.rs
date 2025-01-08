@@ -16,7 +16,6 @@ use ahtml::{
     SerHtmlFrag, ToASlice,
 };
 use anyhow::{anyhow, bail, Context, Result};
-use chj_util::time_guard;
 use chrono::Local;
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
@@ -1485,13 +1484,6 @@ fn main() -> Result<()> {
     // The id is used to refer to each item in document-local links in
     // the generated HTML/Markdown files.
     let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = {
-        // `time_guard!` places an object that measures the duration
-        // from its creation until the execution of the current scope
-        // ends; this helps finding which areas are computationally
-        // costly and worth optimizing/parallelizing. Reporting only
-        // happens when setting the environment variable
-        // `TIME_GUARD=1`.
-        time_guard! {"fileinfo_or_errors"}
         paths
             .into_par_iter()
             .enumerate()
@@ -1524,10 +1516,8 @@ fn main() -> Result<()> {
 
     // Partition fileinfo_or_errors into vectors with only the
     // successful and only the erroneous results.
-    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) = {
-        time_guard! {"partition_result"}
-        fileinfo_or_errors.into_iter().partition_result()
-    };
+    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) =
+        fileinfo_or_errors.into_iter().partition_result();
 
     // Build the HTML fragments to use in the HTML page and the Markdown
     // file.
@@ -1546,7 +1536,6 @@ fn main() -> Result<()> {
         // files, in a hierarchy reflecting the folder hierarchy where
         // they are.
         || -> Result<Section> {
-            time_guard! {"file_info_boxes_section"}
             // Temporarily create a folder hierarchy from all the paths,
             // then convert it to a Section.
 
@@ -1554,7 +1543,6 @@ fn main() -> Result<()> {
             for file_info in &file_infos {
                 folder.add(file_info).expect("no duplicates");
             }
-            time_guard! {"file_info_boxes_section folder.to_section"}
             // This being the last expression in a { } block returns
             // (moves) its value to the `file_info_boxes_section`
             // variable outside.
@@ -1564,24 +1552,20 @@ fn main() -> Result<()> {
         // specification says to index them. Each index is in a separate
         // `Section`.
         || -> Result<Section> {
-            time_guard! {"index_sections"}
             let index_sections: Vec<Section> = METADATA_SPECIFICATION
                 .into_par_iter()
                 .filter_map(|spec| match spec.indexing {
                     AttributeIndexing::Index {
                         first_word_only,
                         use_lowercase,
-                    } => {
-                        time_guard! {format!("indexing {:?}", spec.key)};
-                        Some(build_index_section(
-                            spec.key,
-                            KeyvaluePreparation {
-                                first_word_only,
-                                use_lowercase,
-                            },
-                            &file_infos,
-                        ))
-                    }
+                    } => Some(build_index_section(
+                        spec.key,
+                        KeyvaluePreparation {
+                            first_word_only,
+                            use_lowercase,
+                        },
+                        &file_infos,
+                    )),
                     AttributeIndexing::NoIndex => None,
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -1599,7 +1583,6 @@ fn main() -> Result<()> {
     let errors_section = if file_errorss.is_empty() {
         None
     } else {
-        time_guard! {"errors_section"}
         let mut html_guard = HTML_ALLOCATOR_POOL.get();
         let html = html_guard.allocator();
 
@@ -1722,7 +1705,6 @@ fn main() -> Result<()> {
 
     // The contents for the README.html document
     let htmldocument = {
-        time_guard! {"htmldocument"}
         html.html(
             [],
             [
@@ -1769,7 +1751,6 @@ fn main() -> Result<()> {
 
     // The contents for the README.md document
     let mddocument: StringTree = {
-        time_guard! {"mddocument"}
         let flatten_as_paragraphs = |vecs: Vec<Vec<StringTree>>| -> Vec<StringTree> {
             intersperse_with(vecs.into_iter().flatten(), || "\n\n".into()).collect()
         };
@@ -1832,7 +1813,6 @@ fn main() -> Result<()> {
     }
 
     if write_errors_to_stderr {
-        time_guard! {"write_errors_to_stderr"}
         let mut out = stderr().lock();
         (|| -> Result<()> {
             write!(&mut out, "Indexing errors:\n")?;
@@ -1846,7 +1826,6 @@ fn main() -> Result<()> {
 
     let mut html_file_has_changed = false;
     if write_files {
-        time_guard! {"write_files"}
         // Write the output files to the directory at `base_path` if
         // given.
         if let Some(base_path_) = &opts.base_path {
@@ -1854,8 +1833,6 @@ fn main() -> Result<()> {
             let (written_html, written_md) = rayon::join(
                 || -> Result<_> {
                     if do_html {
-                        time_guard! {"write_files: do_html"}
-
                         let html = html_guard.allocator();
 
                         // Get an owned version of the base path and then
@@ -1867,7 +1844,6 @@ fn main() -> Result<()> {
                         out.flush()?;
 
                         if opts.open_if_changed {
-                            time_guard! {"write_files: do_html: git diff"}
                             // Need to remember whether the file has changed
                             check_dry_run! {
                                 message: "git diff",
@@ -1884,7 +1860,6 @@ fn main() -> Result<()> {
                 },
                 || -> Result<_> {
                     if do_md {
-                        time_guard! {"write_files: do_md"}
                         let mut path = source_checkout.working_dir_path.to_owned();
                         path.push(MD_FILENAME);
                         mddocument
