@@ -48,7 +48,7 @@ const HTML_FILENAME: &str = "README.html";
 const MD_FILENAME: &str = "README.md";
 /// The file name (without the .md or .html suffix) of the file with
 /// information on how to contribute.
-const CONTRIBUTE_FILE_NAME: &str = "CONTRIBUTE";
+const CONTRIBUTE_FILENAME: &str = "CONTRIBUTE";
 /// The unicode symbol to use in the index page for links to the info
 /// box on a file.
 const INFO_SYMBOL: &str = "ℹ️";
@@ -1646,8 +1646,8 @@ fn main() -> Result<()> {
                     [
                         html.text("To contribute XML files, see ")?,
                         html.a(
-                            [att("href", format!("{CONTRIBUTE_FILE_NAME}.md"))],
-                            html.text(CONTRIBUTE_FILE_NAME)?,
+                            [att("href", format!("{CONTRIBUTE_FILENAME}.md"))],
+                            html.text(CONTRIBUTE_FILENAME)?,
                         )?,
                         html.text(".")?,
                     ],
