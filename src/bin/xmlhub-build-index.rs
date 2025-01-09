@@ -1727,7 +1727,7 @@ fn main() -> Result<()> {
                         intro(false)?,
                         html.h2([], html.text("Contents")?)?,
                         toc_html,
-                        html.div([], toplevel_section.to_html(NumberPath::empty(), &html)?)?,
+                        html.div([], toplevel_section.to_html(NumberPath::empty(), &*html)?)?,
                         if opts.timestamp {
                             html.div(
                                 [],
@@ -1739,7 +1739,7 @@ fn main() -> Result<()> {
                         } else {
                             html.empty_node()?
                         },
-                        empty_space_element(40, &html)?,
+                        empty_space_element(40, &*html)?,
                     ],
                 )?,
             ],
@@ -1756,12 +1756,12 @@ fn main() -> Result<()> {
             vec![
                 format!("<!-- NOTE: {generated_message}, do not edit manually! -->").into(),
                 format!("# {title}").into(),
-                intro(true)?.to_html_fragment_string(&html)?.into(),
+                intro(true)?.to_html_fragment_string(&*html)?.into(),
                 "## Contents".into(),
-                toc_html.to_html_fragment_string(&html)?.into(),
+                toc_html.to_html_fragment_string(&*html)?.into(),
                 toplevel_section.to_markdown(NumberPath::empty())?,
-                empty_space_element(40, &html)?
-                    .to_html_fragment_string(&html)?
+                empty_space_element(40, &*html)?
+                    .to_html_fragment_string(&*html)?
                     .into(),
             ],
             if opts.timestamp {
