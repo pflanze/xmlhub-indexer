@@ -15,9 +15,10 @@ is automatically run immediately when xmlhub receives changes.
 
 ### Download
 
-You can download pre-built binaries (currently for macOS, built
-manually) from
-[xmlhub-indexer-binaries](https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer-binaries).
+You can download pre-built binaries from
+[xmlhub-indexer-binaries](https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer-binaries),
+currently for macOS on ARM only as it's currently built on the machine
+the person makes a release from (I may change this).
 
 ### From source
 
