@@ -101,6 +101,14 @@ integration) on GitLab to run `xmlhub-build-index` automatically whenever
 the xmlhub repository receives changes on GitLab, but maybe that's too
 much magic and not worth the additional complexity.)
 
+Besides those settings changeable via command line options, there are
+various others hard coded but defined and easily changeable near the
+top of the main program file,
+[`xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs), that can
+easily be changed, although you will need to recompile the program for
+that--see the [From source](#from-source) and [Maintaining and
+changing the program](#Maintaining-and-changing-the-program) sections.
+
 ## Details
 
 ### Parsing
