@@ -265,8 +265,10 @@ enum AttributeKind {
         /// display in the file info boxes. (StringList items (the
         /// case below) are always normalized btw.)
         normalize_whitespace: bool,
-        /// Whether to automatically create links of http and https
-        /// URLs
+        /// Whether to automatically find http and https URLs in the
+        /// text and create links with them (i.e. the string `"See
+        /// https://example.com."` is turned into the HTML code `See
+        /// <a href="https://example.com">https://example.com</a>.`)
         autolink: bool,
     },
     StringList {
