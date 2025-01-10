@@ -346,10 +346,13 @@ IDE, they represent documentation for the item that follows them. `//`
 comments are not tied to any item, and are only visible to the reader
 of the source code.
 
-`struct` declares a type that is a data structure with fields (similar
-to a class or dict in other languages), `enum` declares a type that
-has a number of alternative types, one for each named branch. `impl`
-implements methods on either kind of type.
+`struct TypeName` declares a type that is a data structure with fields
+(similar to a class or dict in other languages), `enum TypeName`
+declares a type that has a number of alternative types, one for each
+named branch. `impl TypeName` implements methods on either kind of
+type. (Less used: `impl InterfaceName for TypeName` implements the
+methods specified in `trait InterfaceName` (can be in another file and
+imported) for the type `TypeName`.)
 
 `?` means that the expression to the left can produce an error, and
 that this error should be returnd from the current function at this
