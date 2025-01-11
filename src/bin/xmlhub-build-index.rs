@@ -1569,10 +1569,10 @@ fn main() -> Result<()> {
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
             if opts.dry_run {
-                eprintln!("--dry-run: would run: {}", s());
+                eprintln!("+ --dry-run: would run: {}", s());
             } else {
                 if opts.verbose {
-                    eprintln!("running: {}", s());
+                    eprintln!("+ running: {}", s());
                 }
                 $body;
             }
