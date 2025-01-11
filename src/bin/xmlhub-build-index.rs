@@ -2,7 +2,6 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    convert::identity,
     fs::File,
     io::{stderr, stdout, BufWriter, Write},
     path::PathBuf,
@@ -99,26 +98,6 @@ struct Opts {
     // in Clap.
     #[clap(short, long = "version")]
     v: bool,
-
-    /// A path to an individual XML file to index. The output is
-    /// printed as HTML to stdout if only this option is used. The
-    /// option can be given multiple times, with one path each
-    /// time. This option was added just for testing; normally you
-    /// would just provide the base_path to the repository instead.
-    #[clap(long)]
-    path: Option<Vec<PathBuf>>,
-
-    /// Generate *only* the `README.html` file. This has better
-    /// layout but doesn't work for viewing on GitLab (and may not
-    /// work for GitHub either).The default is to generate both files.
-    #[clap(long)]
-    html: bool,
-
-    /// Generate *only* the `README.md` file. This works for
-    /// viewing on GitLab but has somewhat broken layout. The default
-    /// is to generate both files.
-    #[clap(long)]
-    md: bool,
 
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
@@ -1392,24 +1371,12 @@ fn main() -> Result<()> {
         }
     }
 
-    let do_both = (!opts.html) && (!opts.md);
-    let do_html = opts.html || do_both;
-    let do_md = opts.md || do_both;
-
-    // Try to get the paths from the `paths` option, if available,
-    // otherwise read the files in a Git repo given by the base_path
+    // Read the files in a Git repo given by the base_path
     // option. Collect them as a vector of `RelPathWithBase` values,
     // each of which carries both a path to a base directory
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
-    let paths: Vec<BaseAndRelPath> = if let Some(paths) = opts.path {
-        paths
-            .into_iter()
-            .map(|p| BaseAndRelPath::new(None, p))
-            .collect()
-    } else {
-        // There were no `paths` given; instead get the base_path
-        // argument, complain if it's missing.
+    let paths: Vec<BaseAndRelPath> = {
         let base_path = opts.base_path.as_ref().ok_or_else(|| {
             anyhow!(
                 "need the path to the XML Hub repository (or the --paths \
@@ -1464,6 +1431,8 @@ fn main() -> Result<()> {
         // are used in the HTML output, hence would lead to useless
         // commits.)
         paths.sort_by(|a, b| a.rel_path().cmp(b.rel_path()));
+        // Move `paths` to the variable with the same name in the
+        // outer scope.
         paths
     };
 
@@ -1835,49 +1804,41 @@ fn main() -> Result<()> {
             ((written_html, html_file_has_changed), written_md) = rayon::join(
                 move || -> Result<_> {
                     let mut html_file_has_changed = false;
-                    if do_html {
-                        // Get an owned version of the base path and then
-                        // append path segments to it.
-                        let mut path = source_checkout.working_dir_path.to_owned();
-                        path.push(HTML_FILENAME);
-                        let mut out = BufWriter::new(File::create(&path)?);
-                        html.print_html_document(htmldocument, &mut out)?;
-                        out.flush()?;
 
-                        if opts.open_if_changed {
-                            // Need to remember whether the file has changed
-                            check_dry_run! {
-                                message: "git diff",
-                                html_file_has_changed = !git(
-                                    source_checkout.working_dir_path,
-                                    &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
-                                )?
-                            }
+                    // Get an owned version of the base path and then
+                    // append path segments to it.
+                    let mut path = source_checkout.working_dir_path.to_owned();
+                    path.push(HTML_FILENAME);
+                    let mut out = BufWriter::new(File::create(&path)?);
+                    html.print_html_document(htmldocument, &mut out)?;
+                    out.flush()?;
+
+                    if opts.open_if_changed {
+                        // Need to remember whether the file has changed
+                        check_dry_run! {
+                            message: "git diff",
+                            html_file_has_changed = !git(
+                                source_checkout.working_dir_path,
+                                &["diff", "--no-patch", "--exit-code", "--", HTML_FILENAME],
+                            )?
                         }
-                        Ok((Some(HTML_FILENAME), html_file_has_changed))
-                    } else {
-                        Ok((None, html_file_has_changed))
                     }
+                    Ok((HTML_FILENAME, html_file_has_changed))
                 },
                 || -> Result<_> {
-                    if do_md {
-                        let mut path = source_checkout.working_dir_path.to_owned();
-                        path.push(MD_FILENAME);
-                        mddocument
-                            .write_to_file(&path)
-                            .with_context(|| anyhow!("writing to file {path:?}"))?;
-                        Ok(Some(MD_FILENAME))
-                    } else {
-                        Ok(None)
-                    }
+                    let mut path = source_checkout.working_dir_path.to_owned();
+                    path.push(MD_FILENAME);
+                    mddocument
+                        .write_to_file(&path)
+                        .with_context(|| anyhow!("writing to file {path:?}"))?;
+                    Ok(MD_FILENAME)
                 },
             )
             .transpose()?;
 
-            let written_files: Vec<&str> = [written_html, written_md]
-                .into_iter()
-                .filter_map(identity)
-                .collect();
+            // XX somehow convert the above tuple instead, or take
+            // from a constant declaration?
+            let written_files = [written_html, written_md];
 
             // Commit files if not prevented by --no-commit, and any
             // were written, and --no-commit-errors was not given or
