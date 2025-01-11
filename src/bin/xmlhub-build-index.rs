@@ -119,8 +119,12 @@ struct Opts {
     /// --tags` at compile time.
     // Note: can't name this field `version` as that's special-cased
     // in Clap.
-    #[clap(short, long = "version")]
+    #[clap(long = "version")]
     v: bool,
+
+    /// Show external modifying commands that are run.
+    #[clap(short, long)]
+    verbose: bool,
 
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
@@ -1559,13 +1563,17 @@ fn main() -> Result<()> {
     };
 
     // Define a macro to only run $body if opts.dry_run is false,
-    // otherwise show $message instead.
+    // otherwise show $message instead, or show $message anyway if
+    // opts.verbose.
     macro_rules! check_dry_run {
         { message: $message:expr, $body:expr } => {
+            let s = || -> String { $message.into() };
             if opts.dry_run {
-                let s: String = $message.into();
-                eprintln!("--dry-run: would run: {s}");
+                eprintln!("--dry-run: would run: {}", s());
             } else {
+                if opts.verbose {
+                    eprintln!("running: {}", s());
+                }
                 $body;
             }
         }
