@@ -2049,7 +2049,7 @@ fn main() -> Result<()> {
             }
 
             check_dry_run! {
-                message: "git add",
+                message: format!("git add -f -- {written_files:?}"),
                 git(
                     source_checkout.working_dir_path,
                     &append(&["add", "-f", "--"], &written_files)
@@ -2058,7 +2058,7 @@ fn main() -> Result<()> {
 
             let mut did_commit = true;
             check_dry_run! {
-                message: "git commit",
+                message: format!("git commit -m .. -- {written_files:?}"),
                 did_commit = git(
                     source_checkout.working_dir_path,
                     &append(
@@ -2079,11 +2079,12 @@ fn main() -> Result<()> {
 
             if opts.push {
                 if did_commit {
+                    let default = &source_checkout.git_remote_get_default()?;
                     check_dry_run! {
-                        message: "git push",
+                        message: format!("git push {default:?}"),
                         git_push::<&str>(
                             source_checkout.working_dir_path,
-                            &source_checkout.git_remote_get_default()?,
+                            default,
                             &[]
                         )?
                     }
