@@ -11,17 +11,17 @@ use std::{
 };
 
 #[derive(Debug)]
-pub enum StringTree {
+pub enum StringTree<'s> {
     Leaf(String),
-    StaticLeaf(&'static str),
-    Branching(Vec<StringTree>),
+    StrLeaf(&'s str),
+    Branching(Vec<StringTree<'s>>),
 }
 
-impl StringTree {
+impl<'s> StringTree<'s> {
     pub fn print_to_string(&self, out: &mut String) {
         match self {
             StringTree::Leaf(s) => out.push_str(s),
-            StringTree::StaticLeaf(s) => out.push_str(s),
+            StringTree::StrLeaf(s) => out.push_str(s),
             StringTree::Branching(vec) => {
                 for v in vec {
                     v.print_to_string(out);
@@ -34,7 +34,7 @@ impl StringTree {
     pub fn len(&self) -> usize {
         match self {
             StringTree::Leaf(s) => s.len(),
-            StringTree::StaticLeaf(s) => s.len(),
+            StringTree::StrLeaf(s) => s.len(),
             StringTree::Branching(v) => v.iter().map(|s| s.len()).sum(),
         }
     }
@@ -44,7 +44,7 @@ impl StringTree {
         // write calls instead
         match self {
             StringTree::Leaf(s) => out.write_all(s.as_bytes()),
-            StringTree::StaticLeaf(s) => out.write_all(s.as_bytes()),
+            StringTree::StrLeaf(s) => out.write_all(s.as_bytes()),
             StringTree::Branching(vec) => {
                 for v in vec {
                     v.write_all(out)?;
@@ -70,7 +70,7 @@ impl StringTree {
     }
 }
 
-impl ToString for StringTree {
+impl<'s> ToString for StringTree<'s> {
     fn to_string(&self) -> String {
         let mut out = String::with_capacity(self.len());
         self.print_to_string(&mut out);
@@ -78,14 +78,14 @@ impl ToString for StringTree {
     }
 }
 
-impl From<String> for StringTree {
+impl<'s> From<String> for StringTree<'s> {
     fn from(value: String) -> Self {
         StringTree::Leaf(value)
     }
 }
 
-impl From<&'static str> for StringTree {
-    fn from(value: &'static str) -> Self {
-        StringTree::StaticLeaf(value)
+impl<'s> From<&'s str> for StringTree<'s> {
+    fn from(value: &'s str) -> Self {
+        StringTree::StrLeaf(value)
     }
 }
