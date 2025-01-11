@@ -9,5 +9,6 @@ pub mod git_check_version;
 pub mod git_version;
 pub mod read_xml;
 pub mod string_tree;
+pub mod tuple_transpose;
 pub mod util;
 pub mod xmlhub_indexer_defaults;
