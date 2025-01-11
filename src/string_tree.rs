@@ -1,19 +1,21 @@
 //! # A string represented by a tree of substrings.
 
 //! This allows to build up a large document recursively without
-//! having to copy its parts for each recursion level (and each resize
-//! of a string to collect parts to).
+//! having to copy its parts (and resize of a string to collect parts
+//! to) for each recursion level.
 
 use std::{
     fs::File,
     io::{BufWriter, Write},
     path::Path,
+    sync::Arc,
 };
 
 #[derive(Debug)]
 pub enum StringTree<'s> {
     Leaf(String),
     StrLeaf(&'s str),
+    ArcLeaf(Arc<str>),
     Branching(Vec<StringTree<'s>>),
 }
 
@@ -22,6 +24,7 @@ impl<'s> StringTree<'s> {
         match self {
             StringTree::Leaf(s) => out.push_str(s),
             StringTree::StrLeaf(s) => out.push_str(s),
+            StringTree::ArcLeaf(s) => out.push_str(&*s),
             StringTree::Branching(vec) => {
                 for v in vec {
                     v.print_to_string(out);
@@ -35,6 +38,7 @@ impl<'s> StringTree<'s> {
         match self {
             StringTree::Leaf(s) => s.len(),
             StringTree::StrLeaf(s) => s.len(),
+            StringTree::ArcLeaf(s) => s.len(),
             StringTree::Branching(v) => v.iter().map(|s| s.len()).sum(),
         }
     }
@@ -45,6 +49,7 @@ impl<'s> StringTree<'s> {
         match self {
             StringTree::Leaf(s) => out.write_all(s.as_bytes()),
             StringTree::StrLeaf(s) => out.write_all(s.as_bytes()),
+            StringTree::ArcLeaf(s) => out.write_all(s.as_bytes()),
             StringTree::Branching(vec) => {
                 for v in vec {
                     v.write_all(out)?;
@@ -87,5 +92,11 @@ impl<'s> From<String> for StringTree<'s> {
 impl<'s> From<&'s str> for StringTree<'s> {
     fn from(value: &'s str) -> Self {
         StringTree::StrLeaf(value)
+    }
+}
+
+impl<'s> From<Arc<str>> for StringTree<'s> {
+    fn from(value: Arc<str>) -> Self {
+        StringTree::ArcLeaf(value)
     }
 }
