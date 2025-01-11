@@ -38,8 +38,9 @@ use xmlhub_indexer::{
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
-// Various settings in addition to those from
-// `xmlhub_indexer_defaults`.
+// Various settings in addition to those imported from
+// `xmlhub_indexer_defaults` (see `xmlhub_indexer_defaults.rs` to edit
+// those!).
 
 /// The file name of the index file in HTML format (the one viewed
 /// when using `--open` locally).
@@ -64,16 +65,17 @@ const REPO_NAME: &str = file_name(SOURCE_CHECKOUT.supposed_upstream_web_url);
 /// --tags`.
 const PROGRAM_VERSION: &str = env!("GIT_DESCRIBE");
 
-// `HtmlAllocator` is an allocator for HTML elements (it manages memory
-// efficiently, and provides a method for each HTML element by its
-// name, e.g. `html.p(...)` creates a <p>...</p>
-// element). `HtmlAllocatorPool` is a pool of `HtmlAllocator` that re-uses
-// those for performance. The
-// number passed to `new` is the limit on the number of
-// allocations an allocator allows (a safety feature to limit damage when dealing with
-// attackers of web systems; irrelevant here, just choosing a
-// number large enough.) Rust allows underscores in numbers to
-// allow for better readability of large numbers.
+// `HtmlAllocator` is an allocator for HTML elements (it manages
+// memory efficiently, and provides a method for each HTML element by
+// its name, e.g. `html.p(...)` creates a `<p>...</p>`
+// element). `HtmlAllocatorPool` is a pool of `HtmlAllocator` that
+// re-uses those for performance. The number passed to `new` is the
+// limit on the number of allocations an allocator allows (a safety
+// feature to limit damage when dealing with attackers of web systems;
+// irrelevant here, just choosing a number large enough.) Rust allows
+// underscores in numbers to allow for better readability of large
+// numbers. `lazy_static!` declares a global variable that is
+// initialized on the first access.
 lazy_static! {
     static ref HTML_ALLOCATOR_POOL: HtmlAllocatorPool = HtmlAllocatorPool::new(
         5_000_000, // allocation limit
