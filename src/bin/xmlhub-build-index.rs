@@ -1868,7 +1868,7 @@ fn main() -> Result<()> {
                     .to_html_fragment_string(&html)?
                     .into(),
                 "## Contents".into(),
-                toc_html.as_str().to_owned().into(),
+                toc_html.as_arc_str().into(),
                 toplevel_section.to_markdown(NumberPath::empty())?,
                 empty_space_element(40, &html)?
                     .to_html_fragment_string(&html)?
