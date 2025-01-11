@@ -1974,6 +1974,14 @@ fn main() -> Result<()> {
             .as_ref()
             .expect("already checked in the beginning");
         let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path_);
+
+        // Retrieve this early to avoid committing and then erroring out on pushing
+        let default_remote_for_push = if opts.push {
+            Some(source_checkout.git_remote_get_default()?)
+        } else {
+            None
+        };
+
         (html_file_has_changed, (), ()) = (
                 move || -> Result<_> {
                     let html = HTML_ALLOCATOR_POOL.get();
@@ -2077,14 +2085,13 @@ fn main() -> Result<()> {
                 )?
             }
 
-            if opts.push {
+            if let Some(default_remote_for_push) = default_remote_for_push {
                 if did_commit {
-                    let default = &source_checkout.git_remote_get_default()?;
                     check_dry_run! {
-                        message: format!("git push {default:?}"),
+                        message: format!("git push {default_remote_for_push:?}"),
                         git_push::<&str>(
                             source_checkout.working_dir_path,
-                            default,
+                            &default_remote_for_push,
                             &[]
                         )?
                     }
