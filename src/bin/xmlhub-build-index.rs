@@ -1613,11 +1613,7 @@ fn main() -> Result<()> {
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = vec![];
-        check_dry_run! {
-            message: "git ls-files",
-            paths = git_ls_files(base_path)?
-        }
+        let mut paths = git_ls_files(base_path)?;
         paths = paths
             .into_iter()
             .filter(|path| {
