@@ -7,6 +7,7 @@ pub mod flattened;
 pub mod git;
 pub mod git_check_version;
 pub mod git_version;
+pub mod rayon_util;
 pub mod read_xml;
 pub mod string_tree;
 pub mod tuple_transpose;
