@@ -203,6 +203,17 @@ struct Opts {
     #[clap(long)]
     push: bool,
 
+    /// Update the xmlhub repository unattended (e.g. via a cronjob or
+    /// similar). Implies --write-errors, --silent-on-written-errors
+    /// and --push, and disables --no-commit and --timestamp. Instead
+    /// of --pull, uses `git remote update` and `git reset --hard` to
+    /// set the local branch to the remote, which avoids the risk for
+    /// merge conflicts but throws away local changes!  WARNING: this
+    /// will lead to local changes being lost!  Do not use this option
+    /// for interactive usage!
+    #[clap(long)]
+    batch: bool,
+
     /// Do not run external processes like git or browsers,
     /// i.e. ignore all the options asking to do so. Instead just say
     /// on stderr what would be done. Still writes to the output
@@ -1545,8 +1556,92 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
 }
 
 fn main() -> Result<()> {
-    // Retrieve the command line options / arguments.
-    let opts: Opts = Opts::from_args();
+    let opts = {
+        // Retrieve the command line options / arguments, and fix
+        // those that are overridden by others.
+
+        // Create an `Opts` from program arguments then deconstruct it
+        // immediately, binding the values in the fields to same-named
+        // variables, except where followed by `:` in which case
+        // binding the values to the given variable names with leading
+        // underscore.
+        let Opts {
+            v,
+            verbose,
+            timestamp: _timestamp,
+            write_errors: _write_errors,
+            no_commit_errors: _no_commit_errors,
+            ok_on_written_errors,
+            silent_on_written_errors: _silent_on_written_errors,
+            open,
+            open_if_changed,
+            pull: _pull,
+            no_commit: _no_commit,
+            push: _push,
+            batch,
+            dry_run,
+            no_version_check,
+            no_wellformedness_check,
+            base_path,
+        } = Opts::from_args();
+
+        // Create variables without the underscores, then set them
+        // depending on whether --batch was given.
+        let (
+            pull,
+            push,
+            no_commit,
+            write_errors,
+            no_commit_errors,
+            silent_on_written_errors,
+            timestamp,
+        );
+        if batch {
+            pull = false;
+            push = true;
+            no_commit = false;
+            write_errors = true;
+            no_commit_errors = false;
+            silent_on_written_errors = true;
+            timestamp = false;
+        } else {
+            pull = _pull;
+            push = _push;
+            no_commit = _no_commit;
+            write_errors = _write_errors;
+            no_commit_errors = _no_commit_errors;
+            silent_on_written_errors = _silent_on_written_errors;
+            timestamp = _timestamp;
+        }
+
+        // Pack up the variables in a new `Opts` struct.
+        Opts {
+            v,
+            verbose,
+            timestamp,
+            write_errors,
+            no_commit_errors,
+            ok_on_written_errors,
+            silent_on_written_errors,
+            open,
+            open_if_changed,
+            pull,
+            no_commit,
+            push,
+            batch,
+            dry_run,
+            no_version_check,
+            no_wellformedness_check,
+            base_path,
+        }
+    };
+
+    let base_path = opts.base_path.as_ref().ok_or_else(|| {
+        anyhow!(
+            "need the path to the XML Hub repository (or the --paths \
+                 option). Run with --help for details."
+        )
+    })?;
 
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
@@ -1585,13 +1680,6 @@ fn main() -> Result<()> {
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
     let paths: Vec<BaseAndRelPath> = {
-        let base_path = opts.base_path.as_ref().ok_or_else(|| {
-            anyhow!(
-                "need the path to the XML Hub repository (or the --paths \
-                 option). Run with --help for details."
-            )
-        })?;
-
         if !opts.no_version_check {
             // Verify that this is not an outdated version of the program.
             let found = git_log_version_checker
@@ -1643,13 +1731,43 @@ fn main() -> Result<()> {
         paths
     };
 
-    // Carry out `git pull` if requested
-    if let Some(base_path) = &opts.base_path {
+    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path);
+
+    // Retrieve this early to avoid committing and then erroring out on pushing
+    let default_remote_for_push = if opts.push || opts.batch {
+        Some(source_checkout.git_remote_get_default()?)
+    } else {
+        None
+    };
+
+    // Update repository if requested
+    if let Some(default_remote_for_push) = &default_remote_for_push {
         if opts.pull {
             check_dry_run! {
                 message: "git pull",
                 if !git(base_path, &["pull"])? {
                     bail!("git pull failed")
+                }
+            }
+        }
+
+        if opts.batch {
+            check_dry_run! {
+                message: format!("git remote update {default_remote_for_push:?}"),
+                if !git(base_path, &["remote", "update", default_remote_for_push])? {
+                    bail!("git remote update {default_remote_for_push:?} failed")
+                }
+            }
+
+            let remote_banch_name = format!(
+                "remotes/{default_remote_for_push}/{}",
+                SOURCE_CHECKOUT.branch_name
+            );
+
+            check_dry_run! {
+                message: format!("git reset --hard {remote_banch_name:?}"),
+                if !git(base_path, &["reset", "--hard", &remote_banch_name])? {
+                    bail!("git reset --hard {remote_banch_name:?} failed")
                 }
             }
         }
@@ -1967,21 +2085,6 @@ fn main() -> Result<()> {
 
     let html_file_has_changed;
     if write_files {
-        // Write the output files to the directory at `base_path` if
-        // given.
-        let base_path_ = opts
-            .base_path
-            .as_ref()
-            .expect("already checked in the beginning");
-        let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path_);
-
-        // Retrieve this early to avoid committing and then erroring out on pushing
-        let default_remote_for_push = if opts.push {
-            Some(source_checkout.git_remote_get_default()?)
-        } else {
-            None
-        };
-
         (html_file_has_changed, (), ()) = (
                 move || -> Result<_> {
                     let html = HTML_ALLOCATOR_POOL.get();

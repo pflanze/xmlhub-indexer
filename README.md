@@ -90,6 +90,12 @@ the short options shown in the `--help` text instead):
 
     xmlhub-build-index path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
+or if you run it on a repository you never use interactively (e.g. on
+a server), this is more fail proof for automatic action (but deletes
+local changes to the repo!):
+
+    xmlhub-build-index path/to/your/checkout/of/xmlhub --batch
+
 Running this will pull, convert, write the output even if there are
 errors, and if there were changes, commit and push them back to the
 Git repository, and open your browser. You could put that into a
