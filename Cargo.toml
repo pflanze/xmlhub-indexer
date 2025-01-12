@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ahtml = { version = "0.6", path = "../website/libs/ahtml" }
+ahtml = { version = "0.6.1", path = "../website/libs/ahtml" }
 auri = { version = "0.1", path = "../website/libs/auri" }
 chj-util = { version = "0.2.1", path = "../website/libs/chj-util" }
 xmltree = "0.11.0"
