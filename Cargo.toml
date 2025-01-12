@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ahtml = { version = "0.6", path = "../website/libs/ahtml" }
-chj-util = { version = "0.2", path = "../website/libs/chj-util" }
+ahtml = { version = "0.6" }
+auri = { version = "0.1" }
+chj-util = { version = "0.2.1" }
 xmltree = "0.11.0"
 xml-rs = "0.8.20"
 anyhow = "1.0.65"
@@ -13,7 +14,7 @@ clap = { version = "3", features = ["derive"] }
 chrono = "0.4"
 lazy_static = "1.4"
 itertools = "0.11.0"
-thiserror = "=1.0.37"
+thiserror = "1.0.37"
 # use older version to avoid additional, unknown, dependencies
 # (separate newer versions of the windows dependencies)
 os_info = "=3.7"
