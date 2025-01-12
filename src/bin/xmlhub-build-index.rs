@@ -1683,18 +1683,18 @@ fn main() -> Result<()> {
                 .with_context(|| {
                     anyhow!(
                         "you should update your copy of the {PROGRAM_NAME} program. \
-                     If you're sure you want to proceed anyway, use the \
-                     --no-version-check option."
+                         If you're sure you want to proceed anyway, use the \
+                         --no-version-check option."
                     )
                 })?;
             if found.is_none() {
                 println!(
                     "Warning: could not find or parse {PROGRAM_NAME} version statements \
-                 in the git log on the output files; this may mean that \
-                 this is a fresh xmlhub Git repository, or something is messed up. \
-                 This means that if {PROGRAM_NAME} is used from another computer, \
-                 if its version is producing different output from this version \
-                 then each will overwrite the changes from the other endlessly."
+                     in the git log on the output files; this may mean that \
+                     this is a fresh xmlhub Git repository, or something is messed up. \
+                     This means that if {PROGRAM_NAME} is used from another computer, \
+                     if its version is producing different output from this version \
+                     then each will overwrite the changes from the other endlessly."
                 );
             }
         }
