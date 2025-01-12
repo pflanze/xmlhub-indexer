@@ -1675,18 +1675,15 @@ fn main() -> Result<()> {
     let paths: Vec<BaseAndRelPath> = {
         if !opts.no_version_check {
             // Verify that this is not an outdated version of the program.
-            let found = git_log_version_checker
-                .check_git_log(
-                    &opts.base_path,
-                    &[HTML_FILE.path_from_repo_top, MD_FILE.path_from_repo_top],
-                )
-                .with_context(|| {
-                    anyhow!(
-                        "you should update your copy of the {PROGRAM_NAME} program. \
-                         If you're sure you want to proceed anyway, use the \
-                         --no-version-check option."
-                    )
-                })?;
+            let found = git_log_version_checker.check_git_log(
+                &opts.base_path,
+                &[HTML_FILE.path_from_repo_top, MD_FILE.path_from_repo_top],
+                Some(format!(
+                    "you should update your copy of the {PROGRAM_NAME} program. \
+                     If you're sure you want to proceed anyway, use the \
+                     --no-version-check option."
+                )),
+            )?;
             if found.is_none() {
                 println!(
                     "Warning: could not find or parse {PROGRAM_NAME} version statements \

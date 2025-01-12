@@ -89,15 +89,39 @@ pub enum GitCheckVersionError {
         data_version: GitVersion<SemVersion>,
     },
 
-    #[error("checking for program version numbers in the git log")]
+    #[error("error {0:#}")]
     OtherError(#[from] anyhow::Error),
 }
 
 impl GitCheckVersionError {
-    pub fn with_base_path(self, base_path: &Path) -> GitCheckVersionErrorWithContext {
+    pub fn is_version_error(&self) -> bool {
+        match self {
+            GitCheckVersionError::ProgramTooOld {
+                program_version: _,
+                data_version: _,
+            } => true,
+            GitCheckVersionError::ProgramPotentiallyTooOld {
+                program_version: _,
+                data_version: _,
+                reason: _,
+            } => true,
+            GitCheckVersionError::CouldNotCompare {
+                message: _,
+                program_version: _,
+                data_version: _,
+            } => false,
+            GitCheckVersionError::OtherError(_) => false,
+        }
+    }
+    pub fn extend(
+        self,
+        base_path: &Path,
+        what_to_do: Option<String>,
+    ) -> GitCheckVersionErrorWithContext {
         GitCheckVersionErrorWithContext {
             base_path: base_path.to_owned(),
             error: self,
+            what_to_do,
         }
     }
 }
@@ -219,10 +243,17 @@ fn t_check_version() {
 }
 
 #[derive(Debug, Error)]
-#[error("checking the git log at {base_path:?}: {error}")]
+#[error("{}checking the git log at {base_path:?}: {error}",
+        if let Some(what) = what_to_do {
+            format!("{what}\n")
+        } else {
+            "".into()
+        }
+)]
 pub struct GitCheckVersionErrorWithContext {
     pub base_path: PathBuf,
     pub error: GitCheckVersionError,
+    pub what_to_do: Option<String>,
 }
 
 pub struct GitLogVersionChecker {
@@ -264,11 +295,14 @@ impl GitLogVersionChecker {
     /// error. Returns the ordering comparison from the program
     /// version to the found version, which might be `Less`, if both
     /// versions are still semver compatible, and the found version,
-    /// or `None` if nothing was found.
+    /// or `None` if nothing was found. `what_to_do` is made part of
+    /// the error if it is because of an insufficient version issue;
+    /// it is ignored if the error is due to something else.
     pub fn check_git_log<S: AsRef<OsStr> + Debug>(
         &self,
         base_path: &Path,
         git_log_arguments: &[S],
+        what_to_do: Option<String>,
     ) -> Result<Option<(Ordering, GitVersion<SemVersion>)>, GitCheckVersionErrorWithContext> {
         (|| {
             for entry in git_log(base_path, git_log_arguments)? {
@@ -280,6 +314,13 @@ impl GitLogVersionChecker {
             }
             Ok(None)
         })()
-        .map_err(|e: GitCheckVersionError| e.with_base_path(base_path))
+        .map_err(|e: GitCheckVersionError| {
+            let what_to_do = if e.is_version_error() {
+                what_to_do
+            } else {
+                None
+            };
+            e.extend(base_path, what_to_do)
+        })
     }
 }
