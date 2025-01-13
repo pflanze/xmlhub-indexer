@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 ahtml = { version = "0.6.1" }
 auri = { version = "0.1" }
-chj-util = { version = "0.2.1", path = "../website/libs/chj-util" }
+chj-util = { version = "0.2.1" }
 xmltree = "0.11.0"
 xml-rs = "0.8.20"
 anyhow = "1.0.65"
