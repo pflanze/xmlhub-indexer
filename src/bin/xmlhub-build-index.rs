@@ -31,7 +31,7 @@ use xmlhub_indexer::{
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     rayon_util::ParRun,
-    read_xml::read_xml_file,
+    read_xml::XMLDocumentBacking,
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util,
@@ -1775,6 +1775,12 @@ fn main() -> Result<()> {
             .into_par_iter()
             .enumerate()
             .map(|(id, path)| -> Result<FileInfo, FileErrors> {
+                let backing =
+                    XMLDocumentBacking::from_path(&path.full_path()).map_err(|e| FileErrors {
+                        path: path.clone(),
+                        errors: vec![format!("{e:#}")],
+                    })?;
+
                 // We're currently doing nothing with the `xmltree`
                 // value from `read_xml_file` (which is the tree of
                 // all elements, excluding the comments), thus
@@ -1786,12 +1792,12 @@ fn main() -> Result<()> {
                 // the extraction here and adding the results to
                 // `FileInfo`.
                 let (comments, _xmltree) =
-                    read_xml_file(&path.full_path(), !opts.no_wellformedness_check).map_err(
-                        |e| FileErrors {
+                    backing
+                        .parse(!opts.no_wellformedness_check)
+                        .map_err(|e| FileErrors {
                             path: path.clone(),
                             errors: vec![format!("{e:#}")],
-                        },
-                    )?;
+                        })?;
                 let metadata = parse_comments(&comments).map_err(|errors| FileErrors {
                     path: path.clone(),
                     errors,

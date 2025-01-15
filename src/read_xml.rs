@@ -1,47 +1,47 @@
-use std::{
-    fs::File,
-    io::{BufReader, Seek},
-    path::Path,
-};
+use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
-use xml::{reader::XmlEvent, EventReader, ParserConfig};
-use xmltree::Element;
+use anyhow::{Context, Result};
+use roxmltree::{Document, ParsingOptions};
 
-/// Parse the given file, return the comments *above the top element*,
-/// and if `parse_tree` is true also the whole tree of XML
-/// elements (which does not include comments). Even if not making use
-/// of the Element tree, it could be a good idea to generate it to
-/// detect when a file is not well-formed XML.
-pub fn read_xml_file(path: &Path, build_tree: bool) -> Result<(Vec<String>, Option<Element>)> {
-    let mut inp =
-        BufReader::new(File::open(path).with_context(|| anyhow!("reading file {path:?}"))?);
+/// Representation of file contents that can be parsed from.
+pub struct XMLDocumentBacking {
+    string: String,
+}
 
-    // Parse `bytes` as item stream to extract the comments.
-    let config = ParserConfig::new().ignore_comments(false);
-    let input = EventReader::new_with_config(&mut inp, config);
-    let mut comments = Vec::new();
-    for item in input {
-        let item = item.with_context(|| anyhow!("parsing file {path:?}"))?;
-        match item {
-            XmlEvent::Comment(comment) => comments.push(comment),
-            XmlEvent::StartElement {
-                name: _,
-                attributes: _,
-                namespace: _,
-            } => break,
-            // ignore all other items:
-            _ => (),
-        }
+impl XMLDocumentBacking {
+    /// Read the file from the given path.
+    pub fn from_path(path: &Path) -> Result<Self> {
+        // Back to reading the whole file to memory first since roxmltree
+        // requires that.
+        Ok(Self {
+            string: std::fs::read_to_string(path).context("reading file")?,
+        })
     }
 
-    // Parse the bytes again, now building an element tree.
-    let xmldoc = if build_tree {
-        inp.rewind()?;
-        Some(Element::parse(&mut inp).with_context(|| anyhow!("reparsing file {path:?}"))?)
-    } else {
-        None
-    };
+    /// Parse the given file, return the comments *above the top element*,
+    /// and if `parse_tree` is true also the whole tree of XML elements
+    /// (which does not include comments). Even if not making use of the
+    /// Element tree, it could be a good idea to generate it to detect
+    /// when a file is not well-formed XML. (But currently actually always
+    /// builds the tree.)
+    pub fn parse(&self, build_tree: bool) -> Result<(Vec<String>, Option<Document>)> {
+        let opt = ParsingOptions {
+            allow_dtd: true,
+            ..ParsingOptions::default()
+        };
+        let xmldoc =
+            Document::parse_with_options(&self.string, opt).context("parsing the XML markup")?;
 
-    Ok((comments, xmldoc))
+        let root = xmldoc.root();
+
+        let comments: Vec<String> = root
+            .children()
+            .take_while(|item| item.is_comment())
+            .map(|item| item.text().expect("comment has text").to_owned())
+            .collect();
+
+        let xmldoc = if build_tree { Some(xmldoc) } else { None };
+
+        Ok((comments, xmldoc))
+    }
 }
