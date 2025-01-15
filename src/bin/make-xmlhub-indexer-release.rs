@@ -287,6 +287,20 @@ fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
 fn main() -> Result<()> {
     let opts = Opts::from_args();
 
+    let unless_dry_run = |res: Result<()>| -> Result<()> {
+        match res {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if opts.dry_run {
+                    eprintln!("dry-run: would stop because of {e:#}");
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    };
+
     println!("\n====Preparing...=============================================================\n");
 
     // Make sure the current dir is the top directory of the
@@ -304,23 +318,14 @@ fn main() -> Result<()> {
     // Check that we are on the correct branch
     SOURCE_CHECKOUT.check_current_branch()?;
     // Check that everything is committed
-    SOURCE_CHECKOUT.check_status()?;
+    unless_dry_run(SOURCE_CHECKOUT.check_status())?;
 
     // Check that Cargo.toml does not refer to any packages by path,
     // as that would fail to compile on other people's machines (if
     // they don't have the source in the same locations; we are not
     // talking "cargo publish" which would remove the path directives,
     // but people using the clone of this repository directly!)
-    match check_cargo_toml_no_path("Cargo.toml") {
-        Ok(()) => (),
-        Err(e) => {
-            if opts.dry_run {
-                eprintln!("dry-run: would stop because of {e:#}");
-            } else {
-                Err(e)?
-            }
-        }
-    }
+    unless_dry_run(check_cargo_toml_no_path("Cargo.toml"))?;
 
     // Check everything and run the test suite to make sure we are
     // ready for release.
