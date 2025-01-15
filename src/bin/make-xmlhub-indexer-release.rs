@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 
 use xmlhub_indexer::{
+    cargo::check_cargo_toml_no_path,
     command::run,
     const_util::file_name,
     effect::{bind, Effect, NoOp},
@@ -304,6 +305,22 @@ fn main() -> Result<()> {
     SOURCE_CHECKOUT.check_current_branch()?;
     // Check that everything is committed
     SOURCE_CHECKOUT.check_status()?;
+
+    // Check that Cargo.toml does not refer to any packages by path,
+    // as that would fail to compile on other people's machines (if
+    // they don't have the source in the same locations; we are not
+    // talking "cargo publish" which would remove the path directives,
+    // but people using the clone of this repository directly!)
+    match check_cargo_toml_no_path("Cargo.toml") {
+        Ok(()) => (),
+        Err(e) => {
+            if opts.dry_run {
+                eprintln!("dry-run: would stop because of {e:#}");
+            } else {
+                Err(e)?
+            }
+        }
+    }
 
     // Check everything and run the test suite to make sure we are
     // ready for release.

@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod cargo;
 pub mod checkout_context;
 pub mod command;
 pub mod const_util;
