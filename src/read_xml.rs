@@ -18,13 +18,10 @@ impl XMLDocumentBacking {
         })
     }
 
-    /// Parse the given file, return the comments *above the top element*,
-    /// and if `parse_tree` is true also the whole tree of XML elements
-    /// (which does not include comments). Even if not making use of the
-    /// Element tree, it could be a good idea to generate it to detect
-    /// when a file is not well-formed XML. (But currently actually always
-    /// builds the tree.)
-    pub fn parse(&self, build_tree: bool) -> Result<(Vec<String>, Option<Document>)> {
+    /// Parse the given file, return the comments *above the top
+    /// element* as owned strings, and the parsed XML tree (which
+    /// references the `XMLDocumentBacking`).
+    pub fn parse(&self) -> Result<(Vec<String>, Document)> {
         let opt = ParsingOptions {
             allow_dtd: true,
             ..ParsingOptions::default()
@@ -39,8 +36,6 @@ impl XMLDocumentBacking {
             .take_while(|item| item.is_comment())
             .map(|item| item.text().expect("comment has text").to_owned())
             .collect();
-
-        let xmldoc = if build_tree { Some(xmldoc) } else { None };
 
         Ok((comments, xmldoc))
     }

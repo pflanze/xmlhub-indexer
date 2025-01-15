@@ -227,12 +227,6 @@ struct Opts {
     #[clap(long)]
     no_version_check: bool,
 
-    /// Stop parsing XML files after the comments making up the
-    /// metadata header. This means that well-formedness of the XML is
-    /// not checked. Speeds up indexing ~5-10x.
-    #[clap(long)]
-    no_wellformedness_check: bool,
-
     /// The path to the base directory of the Git checkout of the XML
     /// Hub; it is an error if this is omitted and no --paths option
     /// was given. If given, writes the index as `README.html` and
@@ -1581,7 +1575,6 @@ fn main() -> Result<()> {
             batch,
             dry_run,
             no_version_check,
-            no_wellformedness_check,
             base_path,
         } = Opts::from_args();
 
@@ -1631,7 +1624,6 @@ fn main() -> Result<()> {
             batch,
             dry_run,
             no_version_check,
-            no_wellformedness_check,
             base_path,
         }
     };
@@ -1791,13 +1783,10 @@ fn main() -> Result<()> {
                 // attributes, defining extractors for those, doing
                 // the extraction here and adding the results to
                 // `FileInfo`.
-                let (comments, _xmltree) =
-                    backing
-                        .parse(!opts.no_wellformedness_check)
-                        .map_err(|e| FileErrors {
-                            path: path.clone(),
-                            errors: vec![format!("{e:#}")],
-                        })?;
+                let (comments, _xmltree) = backing.parse().map_err(|e| FileErrors {
+                    path: path.clone(),
+                    errors: vec![format!("{e:#}")],
+                })?;
                 let metadata = parse_comments(&comments).map_err(|errors| FileErrors {
                     path: path.clone(),
                     errors,
