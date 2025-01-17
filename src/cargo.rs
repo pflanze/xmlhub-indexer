@@ -3,9 +3,8 @@ use toml::Value;
 
 pub fn check_cargo_toml_no_path(cargo_toml_path: &str) -> Result<()> {
     (|| -> Result<()> {
-        let bytes = std::fs::read(cargo_toml_path).with_context(|| anyhow!("reading file"))?;
         let string =
-            std::str::from_utf8(&bytes).with_context(|| anyhow!("decoding file as UTF-8"))?;
+            std::fs::read_to_string(cargo_toml_path).with_context(|| anyhow!("reading file"))?;
         let val: Value = string.parse()?;
         let top = val
             .as_table()
