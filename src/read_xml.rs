@@ -1,35 +1,47 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use ouroboros::self_referencing;
 use roxmltree::{Document, ParsingOptions};
 
-/// Representation of file contents that can be parsed from.
-pub struct XMLDocumentBacking {
-    string: String,
+/// Bundles the XML string and parsed `roxmltree::Document`.
+#[self_referencing]
+pub struct XMLDocument {
+    string: Box<str>,
+    #[borrows(string)]
+    #[covariant]
+    document: Document<'this>,
 }
 
-impl XMLDocumentBacking {
-    /// Read the file from the given path.
-    pub fn from_path(path: &Path) -> Result<Self> {
-        // Back to reading the whole file to memory first since roxmltree
-        // requires that.
-        Ok(Self {
-            string: std::fs::read_to_string(path).context("reading file")?,
-        })
+impl XMLDocument {
+    pub fn as_str(&self) -> &str {
+        self.borrow_string()
     }
 
-    /// Parse the given file, return the comments *above the top
-    /// element* as owned strings, and the parsed XML tree (which
-    /// references the `XMLDocumentBacking`).
-    pub fn parse(&self) -> Result<(Vec<String>, Document)> {
-        let opt = ParsingOptions {
-            allow_dtd: true,
-            ..ParsingOptions::default()
-        };
-        let xmldoc =
-            Document::parse_with_options(&self.string, opt).context("parsing the XML markup")?;
+    pub fn document<'a>(&'a self) -> &'a Document<'a> {
+        self.borrow_document()
+    }
+}
 
-        let root = xmldoc.root();
+/// Parse the given file, return the comments *above the top element*,
+/// and the parsed XML tree.
+pub fn read_xml_file(path: &Path) -> Result<(Vec<String>, XMLDocument)> {
+    (|| -> Result<_> {
+        // Back to reading the whole file to memory first since roxmltree
+        // requires that.
+        let string = std::fs::read_to_string(path)
+            .context("reading file")?
+            .into_boxed_str();
+
+        let xmldoc = XMLDocument::try_new(string, |string| {
+            let opt = ParsingOptions {
+                allow_dtd: true,
+                ..ParsingOptions::default()
+            };
+            Document::parse_with_options(string, opt).context("parsing the XML markup")
+        })?;
+
+        let root = xmldoc.document().root();
 
         let comments: Vec<String> = root
             .children()
@@ -38,5 +50,6 @@ impl XMLDocumentBacking {
             .collect();
 
         Ok((comments, xmldoc))
-    }
+    })()
+    .with_context(|| anyhow!("reading file {path:?}"))
 }
