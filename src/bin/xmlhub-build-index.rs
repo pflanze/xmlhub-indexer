@@ -668,18 +668,19 @@ impl AttributeValue {
             AttributeValue::StringList { value, autolink } => {
                 let mut body = html.new_vec();
                 let mut need_comma = false;
-                for s in value {
+                for text in value {
                     if need_comma {
                         body.push(html.text(", ")?)?;
                     }
                     need_comma = true;
-                    // Do not do SoftPre for string list items, only
-                    // autolink if requested. Wrap in <q></q>.
-                    if *autolink {
-                        body.push(html.q([], ahtml::util::autolink(html, s)?)?)?;
+                    // Do not do SoftPre for string list items, but only
+                    // autolink (if requested). Then wrap in <q></q>.
+                    let text_marked_up = if *autolink {
+                        ahtml::util::autolink(html, text)?
                     } else {
-                        body.push(html.q([], html.text(s)?)?)?;
-                    }
+                        html.text_slice(text)?
+                    };
+                    body.push(html.q([], text_marked_up)?)?;
                 }
                 Ok(body.as_slice())
             }
