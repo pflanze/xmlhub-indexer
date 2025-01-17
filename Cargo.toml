@@ -7,12 +7,10 @@ edition = "2021"
 ahtml = { version = "0.6.1", path = "../website/libs/ahtml" }
 auri = { version = "0.1", path = "../website/libs/auri" }
 chj-util = { version = "0.2.1", path = "../website/libs/chj-util" }
-
 #xmlparser = "0.13.6"
 # ^ OH careful, recent owner change, was abandoned and merged into
 #   roxmltree but not publicly accessible!
 roxmltree = "0.20.0"
-
 anyhow = "1.0.65"
 clap = { version = "3", features = ["derive"] }
 chrono = "0.4"
@@ -26,6 +24,3 @@ rayon = "=1.5.3"
 # use old version since it's known, and doesn't have additional
 # dependencies
 toml = "0.5"
-# known
-memmap2 = "0.5.10"
-ouroboros = "0.18.5"
