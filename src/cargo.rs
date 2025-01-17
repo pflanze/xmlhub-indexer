@@ -37,9 +37,9 @@ pub fn check_cargo_toml_no_path(cargo_toml_path: &str) -> Result<()> {
                     }
                     Value::String(_) => (),
                     _ => bail!(
-                    "expecting package entry for dependencies to be a table or string, but for \
-                     {package_name:?} got: {val:?}"
-                ),
+                        "expecting package entry for dependencies to be a table or string, \
+                         but for {package_name:?} got: {val:?}"
+                    ),
                 }
             }
         }
