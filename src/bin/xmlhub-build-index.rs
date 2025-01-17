@@ -661,7 +661,7 @@ impl AttributeValue {
                 let softpre = SoftPre {
                     tabs_to_nbsp: Some(8),
                     autolink: *autolink,
-                    line_separator: "\n",
+                    input_line_separator: "\n",
                 };
                 softpre.format(value, html)?.to_aslice(html)
             }
@@ -1164,7 +1164,7 @@ impl FileErrors {
         const SOFT_PRE: SoftPre = SoftPre {
             tabs_to_nbsp: Some(4),
             autolink: true,
-            line_separator: "\n",
+            input_line_separator: "\n",
         };
         let mut ul_body = html.new_vec();
         for error in &self.errors {
