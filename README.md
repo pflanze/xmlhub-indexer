@@ -148,7 +148,7 @@ the time of writing.
     one given in `METADATA_SPECIFICATION` is used.
     
   - Attributes that take lists of values can be split on whatever one
-    configures in the `separator` field of
+    configures in the `input_separator` field of
     `AttributeKind::StringList`, but the "," makes most sense as
     splitting on space doesn't work when values can also have version
     numbers like for the "Packages" attribute--if space is used both

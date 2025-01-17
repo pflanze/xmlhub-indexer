@@ -270,6 +270,9 @@ enum AttributeNeed {
 /// Specifies how an attribute value should be treated
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeKind {
+    /// A single piece of text, e.g. description or comment. It is
+    /// formatted to HTML via `SoftPre`, meaning line breaks and tab
+    /// characters are preserved.
     String {
         /// Whether to convert groups of any kind of whitespace
         /// (spaces, tabs, newlines) to a single space. I.e. this
@@ -284,6 +287,10 @@ enum AttributeKind {
         /// <a href="https://example.com">https://example.com</a>.`)
         autolink: bool,
     },
+    /// A list of small pieces of text, e.g. keywords. The individual
+    /// list elements are cleaned up then formatted to HTML, all
+    /// whitespace including line breaks is uniformly replaced with a
+    /// single normal space.
     StringList {
         /// This is the separator as used between list items, in the
         /// XML files within the `<!-- -->` parts; e.g. if the items are
@@ -291,7 +298,7 @@ enum AttributeKind {
         /// ",". This does not determine what's used for the HTML
         /// formatting; for that, see the `to_html` method on
         /// AttributeValue.
-        separator: &'static str,
+        input_separator: &'static str,
         /// Whether to automatically create links of http and https
         /// URLs
         autolink: bool,
@@ -314,7 +321,7 @@ impl AttributeKind {
                 autolink: _,
             } => false,
             AttributeKind::StringList {
-                separator: _,
+                input_separator: _,
                 autolink: _,
             } => true,
         }
@@ -334,11 +341,11 @@ impl AttributeKind {
                 html,
             ),
             AttributeKind::StringList {
-                separator,
+                input_separator,
                 autolink,
             } => softpre.format(
                 &format!(
-                    "list with\n- items separated by {separator:?},\n- URLs {}autodetected",
+                    "list with\n- items separated by {input_separator:?},\n- URLs {}autodetected",
                     text_not(*autolink)
                 ),
                 html,
@@ -453,7 +460,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             key: AttributeName("Keywords"),
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
-                separator: ",",
+                input_separator: ",",
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -477,7 +484,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             key: AttributeName("Packages"),
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
-                separator: ",",
+                input_separator: ",",
                 autolink: true,
             },
             indexing: AttributeIndexing::Index {
@@ -559,7 +566,10 @@ lazy_static! {
 // strings and formatting the information as HTML.
 
 /// A concrete attribute value: either a string, a list of strings, or
-/// not present.
+/// not present. The value of the `autolink` field is copied from the
+/// same field in the metainformation (`AttributeKind`), so that the
+/// setting is immediately available without having to pass on
+/// `AttributeKind` separately.
 #[derive(Debug)]
 enum AttributeValue {
     String { value: String, autolink: bool },
@@ -604,7 +614,7 @@ impl AttributeValue {
                     Ok(AttributeValue::String { value, autolink })
                 }
                 AttributeKind::StringList {
-                    separator,
+                    input_separator,
                     autolink,
                 } => {
                     // (Note: there is no need to replace '\n' with ' '
@@ -612,7 +622,7 @@ impl AttributeValue {
                     // those around values, and normalize_whitespace will
                     // replace those within keys, too.)
                     let vals: Vec<String> = val
-                        .split(separator)
+                        .split(input_separator)
                         .map(|s| util::normalize_whitespace(s.trim()))
                         .filter(|s| !s.is_empty())
                         .collect();
