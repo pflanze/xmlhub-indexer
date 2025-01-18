@@ -309,7 +309,7 @@ fn main() -> Result<()> {
         let cwd = current_dir()?;
         if cwd.file_name() != Some("xmlhub-indexer".as_ref()) {
             bail!(
-                "current directory is not the top-level directory of the \
+                "the current directory is not the top-level directory of the \
                  xmlhub-indexer clone. `cd path/to/xmlhub-indexer` first."
             )
         }
@@ -341,7 +341,7 @@ fn main() -> Result<()> {
             .with_context(|| {
                 anyhow!(
                     "the version number from running `git describe --tags` in {:?} \
-                         uses an invalid format",
+                     uses an invalid format",
                     SOURCE_CHECKOUT.working_dir_path()
                 )
             })?;
@@ -441,18 +441,18 @@ fn main() -> Result<()> {
 
                 let partial_commit_message = format!(
                     "Version {new_version_tag_string}\n\
-                 \n\
-                 Source commit id: {commit_id}\n\
-                 \n\
-                 Details about the build host:\n\
-                 \n\
-                 - hostname: {hostname}\n\
-                 - rustc version{rustc_version}\n\
-                 - cargo version{cargo_version}\n\
-                 - OS / version: {os_version}\n\
-                 - arch: {os_arch}\n\
-                 \n\
-                 Created by make-xmlhub-indexer-release.rs"
+                     \n\
+                     Source commit id: {commit_id}\n\
+                     \n\
+                     Details about the build host:\n\
+                     \n\
+                     - hostname: {hostname}\n\
+                     - rustc version{rustc_version}\n\
+                     - cargo version{cargo_version}\n\
+                     - OS / version: {os_version}\n\
+                     - arch: {os_arch}\n\
+                     \n\
+                     Created by make-xmlhub-indexer-release.rs"
                 );
 
                 Box::new(ReleaseBinary {
