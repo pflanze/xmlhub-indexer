@@ -124,6 +124,9 @@ impl<R: Debug, P: Debug> Effect for NoOp<R, P> {
     type Provides = P;
 
     fn show(&self) -> String {
+        // Show `providing` here even though the type is shown anyway
+        // on the arrow, since `providing` is the instance possibly
+        // containing runtime data.
         format!(
             "NoOp providing {:?}: {}{}",
             self.providing,
