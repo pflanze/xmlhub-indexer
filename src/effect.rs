@@ -6,7 +6,7 @@
 //! dependencies and outputs (only one type for each, but one could
 //! use tuples? -> FUTURE work)).
 
-use std::{any::type_name, fmt::Debug, marker::PhantomData};
+use std::{any::type_name, borrow::Cow, fmt::Debug, marker::PhantomData};
 
 use anyhow::Result;
 
@@ -106,11 +106,11 @@ impl<
 pub struct NoOp<R, P> {
     phantom: PhantomData<fn() -> R>,
     providing: P,
-    why: &'static str,
+    why: Cow<'static, str>,
 }
 
 impl<R, P> NoOp<R, P> {
-    pub fn providing(providing: P, why: &'static str) -> Box<Self> {
+    pub fn providing(providing: P, why: Cow<'static, str>) -> Box<Self> {
         Box::new(Self {
             phantom: PhantomData,
             providing,

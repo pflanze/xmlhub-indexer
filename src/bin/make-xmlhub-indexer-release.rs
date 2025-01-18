@@ -353,7 +353,10 @@ fn main() -> Result<()> {
             local_user: opts.local_user.clone(),
         })
     } else {
-        NoOp::providing(SourceReleaseTag, "tag already exists")
+        NoOp::providing(
+            SourceReleaseTag,
+            format!("using existing tag {new_version_tag_string:?}").into(),
+        )
     };
 
     let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
@@ -365,7 +368,7 @@ fn main() -> Result<()> {
         } else {
             NoOp::providing(
                 SourcePushed,
-                "not pushing tag/branch because --push option was not given",
+                "not pushing tag/branch because --push option was not given".into(),
             )
         };
 
@@ -400,7 +403,7 @@ fn main() -> Result<()> {
         if opts.no_publish_binary {
             NoOp::providing(
                 Done,
-                "not publishing binary because --no-publish-binary option was given",
+                "not publishing binary because --no-publish-binary option was given".into(),
             )
         } else {
             if !BINARIES_CHECKOUT.checkout_dir_exists() {
@@ -456,7 +459,10 @@ fn main() -> Result<()> {
             match std::env::consts::OS {
                 "macos" => in_dir(&["macOS", std::env::consts::ARCH]),
                 "linux" => in_dir(&["linux", std::env::consts::ARCH]),
-                _ => NoOp::providing(Done, "binaries are only published on macOS and Linux"),
+                _ => NoOp::providing(
+                    Done,
+                    "binaries are only published on macOS and Linux".into(),
+                ),
             }
         };
 
