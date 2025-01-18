@@ -74,18 +74,6 @@ struct Opts {
 struct SourceReleaseTag;
 
 #[derive(Debug)]
-struct ExistingTag;
-
-impl Effect for ExistingTag {
-    type Requires = ();
-    type Provides = SourceReleaseTag;
-
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
-        Ok(SourceReleaseTag)
-    }
-}
-
-#[derive(Debug)]
 struct CreateTag {
     tag_name: String,
     sign: bool,
@@ -365,7 +353,7 @@ fn main() -> Result<()> {
             local_user: opts.local_user.clone(),
         })
     } else {
-        Box::new(ExistingTag)
+        NoOp::providing(SourceReleaseTag, "tag already exists")
     };
 
     let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
