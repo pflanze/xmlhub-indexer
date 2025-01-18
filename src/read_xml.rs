@@ -36,6 +36,7 @@ pub fn read_xml_file(path: &Path) -> Result<(Vec<String>, XMLDocument)> {
         let xmldoc = XMLDocument::try_new(string, |string| {
             let opt = ParsingOptions {
                 allow_dtd: true,
+                // nodes_limit: 1, -- somehow ignored
                 ..ParsingOptions::default()
             };
             Document::parse_with_options(string, opt).context("parsing the XML markup")
