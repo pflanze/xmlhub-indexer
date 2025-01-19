@@ -237,7 +237,7 @@ struct Opts {
     /// was given. If given, writes the index as `README.html` and
     /// `README.md` files into this directory (otherwise the HTML
     /// variant is printed to standard output).
-    base_path: PathBuf,
+    base_path: Option<PathBuf>,
 }
 
 // =============================================================================
@@ -1653,6 +1653,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let base_path = opts
+        .base_path
+        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
+
     let git_log_version_checker = GitLogVersionChecker {
         program_name: PROGRAM_NAME.into(),
         program_version,
@@ -1684,7 +1688,7 @@ fn main() -> Result<()> {
         if !opts.no_version_check {
             // Verify that this is not an outdated version of the program.
             let found = git_log_version_checker.check_git_log(
-                &opts.base_path,
+                &base_path,
                 &[HTML_FILE.path_from_repo_top, MD_FILE.path_from_repo_top],
                 Some(format!(
                     "you should update your copy of the {PROGRAM_NAME} program. \
@@ -1707,7 +1711,7 @@ fn main() -> Result<()> {
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = git_ls_files(&opts.base_path)?;
+        let mut paths = git_ls_files(&base_path)?;
         paths = paths
             .into_iter()
             .filter(|path| {
@@ -1729,7 +1733,7 @@ fn main() -> Result<()> {
         paths
     };
 
-    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(&opts.base_path);
+    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(&base_path);
 
     // Retrieve this early to avoid committing and then erroring out on pushing
     let default_remote_for_push = if opts.push || opts.batch {
@@ -1743,7 +1747,7 @@ fn main() -> Result<()> {
         if opts.pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(&opts.base_path, &["pull"])? {
+                if !git(&base_path, &["pull"])? {
                     bail!("git pull failed")
                 }
             }
@@ -1752,7 +1756,7 @@ fn main() -> Result<()> {
         if opts.batch {
             check_dry_run! {
                 message: format!("git remote update {default_remote_for_push:?}"),
-                if !git(&opts.base_path, &["remote", "update", default_remote_for_push])? {
+                if !git(&base_path, &["remote", "update", default_remote_for_push])? {
                     bail!("git remote update {default_remote_for_push:?} failed")
                 }
             }
@@ -1764,7 +1768,7 @@ fn main() -> Result<()> {
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_name:?}"),
-                if !git(&opts.base_path, &["reset", "--hard", &remote_banch_name])? {
+                if !git(&base_path, &["reset", "--hard", &remote_banch_name])? {
                     bail!("git reset --hard {remote_banch_name:?} failed")
                 }
             }
@@ -2212,7 +2216,7 @@ fn main() -> Result<()> {
             // let mut path = base_path.clone();
             // path.push(HTML_FILENAME);
             // path.canonicalize().as_os_str()
-            spawn_browser(&opts.base_path, &[HTML_FILE.path_from_repo_top.as_ref()])?;
+            spawn_browser(&base_path, &[HTML_FILE.path_from_repo_top.as_ref()])?;
         } else {
             eprintln!(
                 "Note: not opening browser because the files weren't written due \
