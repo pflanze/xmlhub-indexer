@@ -322,13 +322,14 @@ fn main() -> Result<()> {
         cargo(&["test"])?;
     }
 
-    // Pass "--tags" as in `build.rs`, keep in sync!
+    // Pass "--tags ..." as in `build.rs`, keeping in sync by sharing the code
+    let args = &include!("../../include/git_describe_arguments.rs")[1..];
     let old_version: GitVersion<SemVersion> =
-        git_describe(SOURCE_CHECKOUT.working_dir_path(), &["--tags"])?
+        git_describe(SOURCE_CHECKOUT.working_dir_path(), args)?
             .parse()
             .with_context(|| {
                 anyhow!(
-                    "the version number from running `git describe --tags` in {:?} \
+                    "the version number from running `git describe` {args:?} in {:?} \
                      uses an invalid format",
                     SOURCE_CHECKOUT.working_dir_path()
                 )

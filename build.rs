@@ -4,10 +4,11 @@ use std::process::Command;
 fn main() {
     // Pass `git describe --tags` to programs to be picked up via
     // `env!("GIT_DESCRIBE")`.
+    let args = include!("include/git_describe_arguments.rs");
     let output = Command::new("git")
-        .args(&["describe", "--tags"])
+        .args(args)
         .output()
-        .expect("`git` command should be available and not fail to run `describe --tags`");
+        .expect("`git` command should be available and not fail to run {args:?}");
 
     let stdout = String::from_utf8(output.stdout).expect("git describe should print utf-8");
     let version = stdout.trim();
