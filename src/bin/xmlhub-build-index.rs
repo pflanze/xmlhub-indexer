@@ -19,6 +19,7 @@ use chrono::Local;
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
 use lazy_static::lazy_static;
+use mimalloc::MiMalloc;
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -105,6 +106,10 @@ lazy_static! {
         Arc::new(format!("change the limit in {}:{}", file!(), line!()))
     );
 }
+
+// Faster memory allocation
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 // =============================================================================
 // Specification of the command line interface, using the `clap`
