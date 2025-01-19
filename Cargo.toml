@@ -27,4 +27,3 @@ rayon = "=1.5.3"
 # use old version since it's known, and doesn't have additional
 # dependencies
 toml = "0.5"
-mimalloc = "=0.1.29"
