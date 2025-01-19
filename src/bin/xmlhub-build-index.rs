@@ -1836,7 +1836,7 @@ fn main() -> Result<()> {
         },
         // Create all indices for those metadata entries for which their
         // specification says to index them. Each index is in a separate
-        // `Section`.
+        // `Section`, but all are bundled as subsections in a single `Section`.
         || -> Result<Section> {
             let index_sections: Vec<Section> = METADATA_SPECIFICATION
                 .into_par_iter()
