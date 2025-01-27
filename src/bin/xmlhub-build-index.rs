@@ -740,7 +740,7 @@ impl Metadata {
     /// An HTML table with all metadata.
     fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
         let mut table_body = html.new_vec();
-        for (key, opt_attval) in self.sorted_entries() {
+        for (attribute_name, opt_attval) in self.sorted_entries() {
             let attval_html = if let Some(attval) = opt_attval {
                 attval.to_html(html)?
             } else {
@@ -753,8 +753,8 @@ impl Metadata {
                         att(
                             "title",
                             format!(
-                                "The XML comment for {key:?} is completely missing \
-                                 in this file, perhaps because of an oversight."
+                                "The XML comment for {attribute_name:?} is completely \
+                                 missing in this file, perhaps because of an oversight."
                             ),
                         ),
                     ],
@@ -772,7 +772,7 @@ impl Metadata {
                             att("valign", "top"),
                             att("align", "right"),
                         ],
-                        html.i([], [html.text(key.as_ref())?, html.text(":")?])?,
+                        html.i([], [html.text(attribute_name.as_ref())?, html.text(":")?])?,
                     )?,
                     html.td([att("class", "metadata_value")], attval_html)?,
                 ],
