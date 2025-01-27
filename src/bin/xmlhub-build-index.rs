@@ -1296,34 +1296,34 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
 /// `Packages` like "BDSKY 1.2.3" might be converted to "BDSKY", or a
 /// `Keywords` entry "Sampling-through-time" to
 /// "sampling-through-time").
-struct KeyvaluePreparation {
+struct KeyStringPreparation {
     first_word_only: bool,
     use_lowercase: bool,
 }
 
-impl KeyvaluePreparation {
-    fn prepare_keyvalue(&self, keyvalue: &str) -> String {
-        let mut keyvalue_prepared: String = util::normalize_whitespace(keyvalue.trim());
+impl KeyStringPreparation {
+    fn prepare_key_string(&self, key_string: &str) -> String {
+        let mut key_string_prepared: String = util::normalize_whitespace(key_string.trim());
         // ^ Should we keep newlines instead, and then SoftPre for the
         // display? Probably not.
         if self.first_word_only {
-            keyvalue_prepared = keyvalue_prepared
+            key_string_prepared = key_string_prepared
                 .split(' ')
                 .next()
-                .expect("keyvalue is not empty")
+                .expect("key_string is not empty")
                 .into();
         }
         if self.use_lowercase {
-            keyvalue_prepared = keyvalue_prepared.to_lowercase()
+            key_string_prepared = key_string_prepared.to_lowercase()
         }
-        keyvalue_prepared
+        key_string_prepared
     }
 }
 
 /// Build an index over all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
     attribute_key: AttributeName,
-    keyvalue_normalization: KeyvaluePreparation,
+    key_string_normalization: KeyStringPreparation,
     file_infos: &[FileInfo],
 ) -> Result<Section> {
     // Build an index by the value for attribute_key (lower-casing the
@@ -1331,23 +1331,25 @@ fn build_index_section(
     // maps from key value to a set of all `FileInfo`s for that
     // value. The BTreeMap keeps the key values sorted alphabetically,
     // which is nice so we don't have to sort those afterwards.
-    let mut file_infos_by_keyvalue: BTreeMap<String, BTreeSet<&FileInfo>> = BTreeMap::new();
+    let mut file_infos_by_key_string: BTreeMap<String, BTreeSet<&FileInfo>> = BTreeMap::new();
 
     for file_info in file_infos {
         if let Some(attribute_value) = file_info.metadata.get(attribute_key) {
-            for keyvalue in attribute_value.as_string_list().iter() {
-                file_infos_by_keyvalue
-                    .insert_value(keyvalue_normalization.prepare_keyvalue(keyvalue), file_info);
+            for key_string in attribute_value.as_string_list().iter() {
+                file_infos_by_key_string.insert_value(
+                    key_string_normalization.prepare_key_string(key_string),
+                    file_info,
+                );
             }
         }
     }
 
     let html = HTML_ALLOCATOR_POOL.get();
 
-    // The contents of the section, i.e. the list of all keyvalues and
-    // the files for the respective keyvalue.
+    // The contents of the section, i.e. the list of all key_strings and
+    // the files for the respective key_string.
     let mut body = html.new_vec();
-    for (keyvalue, file_infos) in &file_infos_by_keyvalue {
+    for (key_string, file_infos) in &file_infos_by_key_string {
         // Output the key value
         body.push(html.dt(
             // The first list passed to HTML constructor methods like
@@ -1362,7 +1364,7 @@ fn build_index_section(
             [att("class", "key_dt")],
             html.strong(
                 [att("class", "key")],
-                html.i([], html.q([], html.text(keyvalue)?)?)?,
+                html.i([], html.q([], html.text(key_string)?)?)?,
             )?,
         )?)?;
 
@@ -1861,7 +1863,7 @@ fn main() -> Result<()> {
                         use_lowercase,
                     } => Some(build_index_section(
                         spec.key,
-                        KeyvaluePreparation {
+                        KeyStringPreparation {
                             first_word_only,
                             use_lowercase,
                         },
