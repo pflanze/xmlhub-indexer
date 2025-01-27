@@ -227,6 +227,12 @@ struct Opts {
     #[clap(long)]
     no_version_check: bool,
 
+    /// Do not check that the correct branch is checked out in the
+    /// xmlhub repository. Only use if you're experimenting on another
+    /// branch.
+    #[clap(long)]
+    no_branch_check: bool,
+
     /// The path to the base directory of the Git checkout of the XML
     /// Hub; it is an error if this is omitted and no --paths option
     /// was given. If given, writes the index as `README.html` and
@@ -1587,6 +1593,7 @@ fn main() -> Result<()> {
             dry_run,
             no_version_check,
             base_path,
+            no_branch_check,
         } = Opts::from_args();
 
         // Create variables without the underscores, then set them
@@ -1636,6 +1643,7 @@ fn main() -> Result<()> {
             dry_run,
             no_version_check,
             base_path,
+            no_branch_check,
         }
     };
 
@@ -2132,8 +2140,10 @@ fn main() -> Result<()> {
             opts.no_commit || written_files.is_empty() || (have_errors && opts.no_commit_errors);
         let do_commit_files = !no_commit_files;
         if do_commit_files {
-            // Are we on the expected branch?
-            source_checkout.check_current_branch()?;
+            if !opts.no_branch_check {
+                // Are we on the expected branch?
+                source_checkout.check_current_branch()?;
+            }
 
             // Check that there are no uncommitted changes
             let mut items = vec![];
