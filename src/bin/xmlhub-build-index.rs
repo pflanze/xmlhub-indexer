@@ -1734,7 +1734,49 @@ fn main() -> Result<()> {
         }
     }
 
-    // Read the files in a Git repo given by the base_path
+    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(&base_path);
+
+    // Retrieve this early to avoid committing and then erroring out on pushing
+    let default_remote_for_push = if opts.push || opts.batch {
+        Some(source_checkout.git_remote_get_default()?)
+    } else {
+        None
+    };
+
+    // Update repository if requested
+    if let Some(default_remote_for_push) = &default_remote_for_push {
+        if opts.pull {
+            check_dry_run! {
+                message: "git pull",
+                if !git(&base_path, &["pull"])? {
+                    bail!("git pull failed")
+                }
+            }
+        }
+
+        if opts.batch {
+            check_dry_run! {
+                message: format!("git remote update {default_remote_for_push:?}"),
+                if !git(&base_path, &["remote", "update", default_remote_for_push])? {
+                    bail!("git remote update {default_remote_for_push:?} failed")
+                }
+            }
+
+            let remote_banch_name = format!(
+                "remotes/{default_remote_for_push}/{}",
+                SOURCE_CHECKOUT.branch_name
+            );
+
+            check_dry_run! {
+                message: format!("git reset --hard {remote_banch_name:?}"),
+                if !git(&base_path, &["reset", "--hard", &remote_banch_name])? {
+                    bail!("git reset --hard {remote_banch_name:?} failed")
+                }
+            }
+        }
+    }
+
+    // Get the list of files in the Git repo given by the base_path
     // option. Collect them as a vector of `RelPathWithBase` values,
     // each of which carries both a path to a base directory
     // (optional) and a relative path from there (if it contains no
@@ -1787,48 +1829,6 @@ fn main() -> Result<()> {
         // outer scope.
         paths
     };
-
-    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(&base_path);
-
-    // Retrieve this early to avoid committing and then erroring out on pushing
-    let default_remote_for_push = if opts.push || opts.batch {
-        Some(source_checkout.git_remote_get_default()?)
-    } else {
-        None
-    };
-
-    // Update repository if requested
-    if let Some(default_remote_for_push) = &default_remote_for_push {
-        if opts.pull {
-            check_dry_run! {
-                message: "git pull",
-                if !git(&base_path, &["pull"])? {
-                    bail!("git pull failed")
-                }
-            }
-        }
-
-        if opts.batch {
-            check_dry_run! {
-                message: format!("git remote update {default_remote_for_push:?}"),
-                if !git(&base_path, &["remote", "update", default_remote_for_push])? {
-                    bail!("git remote update {default_remote_for_push:?} failed")
-                }
-            }
-
-            let remote_banch_name = format!(
-                "remotes/{default_remote_for_push}/{}",
-                SOURCE_CHECKOUT.branch_name
-            );
-
-            check_dry_run! {
-                message: format!("git reset --hard {remote_banch_name:?}"),
-                if !git(&base_path, &["reset", "--hard", &remote_banch_name])? {
-                    bail!("git reset --hard {remote_banch_name:?} failed")
-                }
-            }
-        }
-    }
 
     // Map each file to the info extracted from it (or `FileErrors`
     // when there were errors), including path and an id, held in a
