@@ -847,7 +847,10 @@ impl FileInfo {
                                         // top-level directory)
                                         self.path.rel_path(),
                                     )],
-                                    html.text(file_path_or_name)?,
+                                    [
+                                        html.text(file_path_or_name)?,
+                                        html.text(format!(" {DOCUMENT_SYMBOL}"))?,
+                                    ],
                                 )?,
                             )?,
                         )?,
