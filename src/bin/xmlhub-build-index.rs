@@ -34,7 +34,7 @@ use xmlhub_indexer::{
     read_xml::read_xml_file,
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
-    util::{self, format_string_list},
+    util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
@@ -263,6 +263,18 @@ impl AsRef<str> for AttributeName {
     }
 }
 
+impl AttributeName {
+    /// Generate an anchor name for this attribute with the given
+    /// attribute item string.
+    fn anchor_name(self, key_string: &str) -> String {
+        format!(
+            "{}-{}",
+            format_anchor_name(self.as_ref()),
+            format_anchor_name(key_string)
+        )
+    }
+}
+
 /// Specifies whether an attribute is required
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum AttributeNeed {
@@ -357,6 +369,18 @@ enum AttributeIndexing {
 }
 
 impl AttributeIndexing {
+    fn key_string_preparation(&self) -> Option<KeyStringPreparation> {
+        match *self {
+            AttributeIndexing::Index {
+                first_word_only,
+                use_lowercase,
+            } => Some(KeyStringPreparation {
+                first_word_only,
+                use_lowercase,
+            }),
+            AttributeIndexing::NoIndex => None,
+        }
+    }
     fn to_html(&self, is_list: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
         let softpre = SoftPre::default();
         match self {
@@ -663,8 +687,26 @@ impl AttributeValue {
     /// both .html and .md files. An `ASlice<Node>` is a list of
     /// elements (nodes), directly usable as the body (child elements)
     /// for another element.
-    fn to_html(&self, html: &HtmlAllocator) -> Result<ASlice<Node>> {
+    fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
         let AttributeValue { spec, value } = self;
+        // Make a function `possibly_link` that takes the raw
+        // `key_value` string and the prepared value and wraps the
+        // latter with a link to the index for `spec`key`, to the
+        // entry for `key_value`, if the spec says it is indexed
+        // (otherwise just wrap the body in a `<div>` element).
+        let possibly_link = {
+            let key_string_preparation = spec.indexing.key_string_preparation();
+            move |key_value, body| {
+                if let Some(key_string_preparation) = &key_string_preparation {
+                    let anchor_name = spec
+                        .key
+                        .anchor_name(&key_string_preparation.prepare_key_string(key_value));
+                    html.a([att("href", format!("#{anchor_name}"))], body)
+                } else {
+                    html.div([], body)
+                }
+            }
+        };
         match value {
             AttributeValueKind::String(value) => {
                 let softpre = SoftPre {
@@ -672,7 +714,8 @@ impl AttributeValue {
                     autolink: spec.autolink,
                     input_line_separator: "\n",
                 };
-                softpre.format(value, html)?.to_aslice(html)
+                let body = softpre.format(value, html)?.to_aslice(html)?;
+                possibly_link(value, body)
             }
             AttributeValueKind::StringList(value) => {
                 let mut body = html.new_vec();
@@ -689,11 +732,11 @@ impl AttributeValue {
                     } else {
                         html.text_slice(text)?
                     };
-                    body.push(html.q([], text_marked_up)?)?;
+                    body.push(html.q([], possibly_link(text, text_marked_up)?)?)?;
                 }
-                Ok(body.as_slice())
+                html.div([], body)
             }
-            AttributeValueKind::NA => html.i([], html.text("n.A.")?)?.to_aslice(html),
+            AttributeValueKind::NA => html.i([], html.text("n.A.")?),
         }
     }
 }
@@ -753,7 +796,6 @@ impl Metadata {
                     ],
                     html.text("entry missing")?,
                 )?
-                .to_aslice(html)?
             };
             table_body.push(html.tr(
                 [],
@@ -1345,7 +1387,8 @@ fn build_index_section(
     // the files for the respective key_string.
     let mut body = html.new_vec();
     for (key_string, file_infos) in &file_infos_by_key_string {
-        // Output the key value
+        // Output the key value, with an anchor
+        let anchor_name = attribute_key.anchor_name(key_string);
         body.push(html.dt(
             // The first list passed to HTML constructor methods like
             // `dt` is holding attributes, the second the child
@@ -1359,7 +1402,16 @@ fn build_index_section(
             [att("class", "key_dt")],
             html.strong(
                 [att("class", "key")],
-                html.i([], html.q([], html.text(key_string)?)?)?,
+                html.i(
+                    [],
+                    html.q(
+                        [],
+                        html.a(
+                            [att("name", &anchor_name), att("id", &anchor_name)],
+                            html.text(key_string)?,
+                        )?,
+                    )?,
+                )?,
             )?,
         )?)?;
 
@@ -1852,19 +1904,14 @@ fn main() -> Result<()> {
         || -> Result<Section> {
             let index_sections: Vec<Section> = METADATA_SPECIFICATION
                 .into_par_iter()
-                .filter_map(|spec| match spec.indexing {
-                    AttributeIndexing::Index {
-                        first_word_only,
-                        use_lowercase,
-                    } => Some(build_index_section(
-                        spec.key,
-                        KeyStringPreparation {
-                            first_word_only,
-                            use_lowercase,
-                        },
-                        &file_infos,
-                    )),
-                    AttributeIndexing::NoIndex => None,
+                .filter_map(|spec| {
+                    // Get a `KeyStringPreparation` instance if
+                    // indexing is desired, if we got one we build an
+                    // index; if we got none, `map` also returns
+                    // `None`, which is dropped by `filter_map`.
+                    spec.indexing
+                        .key_string_preparation()
+                        .map(|prep| build_index_section(spec.key, prep, &file_infos))
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Section {

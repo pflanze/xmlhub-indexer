@@ -204,3 +204,29 @@ fn t_format_string_list() {
         "\"Hi\", \"there\""
     );
 }
+
+const MAX_ANCHOR_NAME_LEN: usize = 60;
+
+/// Format a string so that it can be safely used as an anchor name:
+/// only alphanumeric characters are preserved, anything else is
+/// replaced with underscore. Also, limits the length to
+/// MAX_ANCHOR_NAME_LEN (simply cuts off the remainder!). Note that
+/// this function does not guarantee an 1:1 mapping even if `s` is
+/// shorter.
+pub fn format_anchor_name(s: &str) -> String {
+    let s = &s[..MAX_ANCHOR_NAME_LEN.min(s.len())];
+    s.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+#[test]
+fn t_format_anchor_name() {
+    let t = format_anchor_name;
+    assert_eq!(t("Hi there!"), "Hi_there_");
+    assert_eq!(t(""), "");
+    assert_eq!(
+        t("Format a string so that it can be safely used as an anchor name"),
+        "Format_a_string_so_that_it_can_be_safely_used_as_an_anchor_n"
+    );
+}
