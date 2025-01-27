@@ -1376,16 +1376,16 @@ fn build_index_section(
                 [att("class", "file_link")],
                 [
                     html.a(
-                        [att("href", rel_path), att("title", "Open the file")],
-                        html.text(DOCUMENT_SYMBOL)?,
-                    )?,
-                    html.nbsp()?,
-                    html.a(
                         [
                             att("href", format!("#box-{}", file_info.id)),
                             att("title", "Jump to info box"),
                         ],
                         html.text(rel_path)?,
+                    )?,
+                    html.nbsp()?,
+                    html.a(
+                        [att("href", rel_path), att("title", "Open the file")],
+                        html.text(DOCUMENT_SYMBOL)?,
                     )?,
                 ],
             )?;
@@ -1531,8 +1531,9 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
             html.p(
                 [],
                 [html.text(format!(
-                    "Click on the {DOCUMENT_SYMBOL} symbols to open the original XML file, \
-                     or on the link to jump to an info box about the file."
+                    "From the index, click on a link to jump to the info box \
+                     about that file, or on the {DOCUMENT_SYMBOL} symbol to open \
+                     the XML file directly."
                 ))?],
             )?,
             html.p(
