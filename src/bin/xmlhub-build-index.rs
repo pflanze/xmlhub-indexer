@@ -1296,20 +1296,22 @@ struct KeyStringPreparation {
 
 impl KeyStringPreparation {
     fn prepare_key_string(&self, key_string: &str) -> String {
-        let mut key_string_prepared: String = util::normalize_whitespace(key_string.trim());
+        let normalized = util::normalize_whitespace(key_string.trim());
         // ^ Should we keep newlines instead, and then SoftPre for the
         // display? Probably not.
-        if self.first_word_only {
-            key_string_prepared = key_string_prepared
+        let part = if self.first_word_only {
+            normalized
                 .split(' ')
                 .next()
                 .expect("key_string is not empty")
-                .into();
-        }
+        } else {
+            &normalized
+        };
         if self.use_lowercase {
-            key_string_prepared = key_string_prepared.to_lowercase()
+            part.to_lowercase()
+        } else {
+            part.into()
         }
-        key_string_prepared
     }
 }
 
