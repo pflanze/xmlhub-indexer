@@ -70,9 +70,9 @@ const OUTPUT_FILES: [&OutputFile; 3] = [&HTML_FILE, &MD_FILE, &ATTRIBUTES_FILE];
 /// information on how to contribute.
 const CONTRIBUTE_FILENAME: &str = "CONTRIBUTE";
 
-/// The unicode symbol to use in the index page for links to the info
-/// box on a file.
-const INFO_SYMBOL: &str = "ℹ️";
+/// The unicode symbol to use in the index page for links to the original
+/// XML file.
+const DOCUMENT_SYMBOL: &str = "🗎";
 
 // Derived values:
 
@@ -1376,15 +1376,15 @@ fn build_index_section(
                 [att("class", "file_link")],
                 [
                     html.a(
+                        [att("href", rel_path), att("title", "Open the file")],
+                        html.text(DOCUMENT_SYMBOL)?,
+                    )?,
+                    html.nbsp()?,
+                    html.a(
                         [
                             att("href", format!("#box-{}", file_info.id)),
                             att("title", "Jump to info box"),
                         ],
-                        html.text(INFO_SYMBOL)?,
-                    )?,
-                    html.nbsp()?,
-                    html.a(
-                        [att("href", rel_path), att("title", "Open the file")],
                         html.text(rel_path)?,
                     )?,
                 ],
@@ -1531,9 +1531,8 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
             html.p(
                 [],
                 [html.text(format!(
-                    "Click on the {INFO_SYMBOL} symbols to jump to the \
-                     info box about that file, or on the link to open \
-                     the XML file itself."
+                    "Click on the {DOCUMENT_SYMBOL} symbols to open the original XML file, \
+                     or on the link to jump to an info box about the file."
                 ))?],
             )?,
             html.p(
