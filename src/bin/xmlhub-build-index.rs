@@ -813,7 +813,7 @@ impl Eq for FileInfo {}
 
 impl FileInfo {
     /// Show in a box with a table of the metadata
-    fn to_box_html(
+    fn to_info_box_html(
         &self,
         html: &HtmlAllocator,
         id_prefix: &str,
@@ -1139,7 +1139,7 @@ impl<'f> Folder<'f> {
             // `Vec::new()`.
             let mut file_info_boxes = html.new_vec();
             for (file_name, file_info) in &self.files {
-                file_info_boxes.push(file_info.to_box_html(&html, "box", file_name)?)?;
+                file_info_boxes.push(file_info.to_info_box_html(&html, "box", file_name)?)?;
             }
             Some(html.preserialize(html.div([], file_info_boxes)?)?.into())
         };
