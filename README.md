@@ -223,19 +223,22 @@ introduce new metadata types simply by adding/changing
 `AttributeSpecification` entries here.
 
 The `main` function, which is the last item in the
-[`src/bin/xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs) file (search
-for "fn main" if your IDE doesn't make it easy to find), is what
-is called when invoking the program. It's a good idea to start here,
-to see what things the program does in which order. Use IDE
-functionality (try context menu (right mouse click)) to jump to the
-definitions of functions or methods that are called. If you want to
-read through the whole code, you should be able to read through the
-file from top to bottom, the code is roughly ordered in a way that
-makes that sensible. The code is split into sections separated with
-`// ====...` to make it clearer what belongs together. Some other
-interesting starting points might be searching for `let
-toplevel_section` for all the sections, or `let intro` for the intro
-text.
+[`src/bin/xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs) file
+(search for "fn main" if your IDE doesn't make it easy to find), is
+what is called when invoking the program. It's a good idea to start
+here, to see what things the program does in which order--although the
+function `build_index`, which is called from `main`, carries out the
+actual index building.
+
+Use IDE functionality (try context menu (right mouse click)) to jump
+to the definitions of functions or methods that are called. If you
+want to read through the whole code, you should be able to read
+through the file from top to bottom, the code is roughly ordered in a
+way that makes that sensible. The code is split into sections
+separated with `// ====...` to make it clearer what belongs
+together. Some other interesting starting points might be searching
+for `let toplevel_section` for all the sections, or `let intro` for
+the intro text.
 
 There is a file with settings that are shared between the
 `xmlhub-build-index` and `make-xmlhub-indexer-release` programs:

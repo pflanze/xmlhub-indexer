@@ -2224,8 +2224,9 @@ fn main() -> Result<()> {
             daemon,
         } = Opts::from_args();
 
-        // Create variables without the underscores, then set them
-        // depending on whether --batch was given.
+        // Create uninitialized variables without the underscores,
+        // then initialize them differently depending on some of the
+        // options (--batch, --daemon).
         let (
             pull,
             push,
