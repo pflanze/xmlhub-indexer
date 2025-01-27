@@ -26,6 +26,7 @@ use rayon::prelude::{
 // From src/*.rs
 use xmlhub_indexer::{
     browser::spawn_browser,
+    checkout_context::CheckoutContext,
     const_util::file_name,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath},
     git_check_version::GitLogVersionChecker,
@@ -1625,113 +1626,15 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
     )
 }
 
-fn main() -> Result<()> {
-    let opts = {
-        // Retrieve the command line options / arguments, and fix
-        // those that are overridden by others.
-
-        // Create an `Opts` from program arguments then deconstruct it
-        // immediately, binding the values in the fields to same-named
-        // variables, except where followed by `:` in which case
-        // binding the values to the given variable names with leading
-        // underscore.
-        let Opts {
-            v,
-            verbose,
-            timestamp: _timestamp,
-            write_errors: _write_errors,
-            no_commit_errors: _no_commit_errors,
-            ok_on_written_errors,
-            silent_on_written_errors: _silent_on_written_errors,
-            open,
-            open_if_changed,
-            pull: _pull,
-            no_commit: _no_commit,
-            push: _push,
-            batch: _batch,
-            dry_run,
-            no_version_check,
-            base_path,
-            no_branch_check,
-            daemon,
-        } = Opts::from_args();
-
-        // Create variables without the underscores, then set them
-        // depending on whether --batch was given.
-        let (
-            pull,
-            push,
-            no_commit,
-            write_errors,
-            no_commit_errors,
-            silent_on_written_errors,
-            timestamp,
-            batch,
-        );
-        if daemon.is_some() {
-            batch = true;
-        } else {
-            batch = _batch;
-        }
-        if batch {
-            pull = false;
-            push = true;
-            no_commit = false;
-            write_errors = true;
-            no_commit_errors = false;
-            silent_on_written_errors = true;
-            timestamp = false;
-        } else {
-            pull = _pull;
-            push = _push;
-            no_commit = _no_commit;
-            write_errors = _write_errors;
-            no_commit_errors = _no_commit_errors;
-            silent_on_written_errors = _silent_on_written_errors;
-            timestamp = _timestamp;
-        }
-
-        // Pack up the variables in a new `Opts` struct.
-        Opts {
-            v,
-            verbose,
-            timestamp,
-            write_errors,
-            no_commit_errors,
-            ok_on_written_errors,
-            silent_on_written_errors,
-            open,
-            open_if_changed,
-            pull,
-            no_commit,
-            push,
-            batch,
-            dry_run,
-            no_version_check,
-            base_path,
-            no_branch_check,
-            daemon,
-        }
-    };
-
-    let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
-        .parse()
-        .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
-
-    if opts.v {
-        println!("{PROGRAM_NAME} {program_version}");
-        return Ok(());
-    }
-
-    let base_path = opts
-        .base_path
-        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
-
-    let git_log_version_checker = GitLogVersionChecker {
-        program_name: PROGRAM_NAME.into(),
-        program_version,
-    };
-
+/// Run one conversion from the XML files to the index files. Returns
+/// the exit code to exit the program with.
+fn build_index(
+    opts: &Opts,
+    base_path: &PathBuf,
+    git_log_version_checker: &GitLogVersionChecker,
+    source_checkout: &CheckoutContext<&PathBuf>,
+    default_remote_for_push: &Option<String>,
+) -> Result<i32> {
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
     // opts.verbose.
@@ -1748,15 +1651,6 @@ fn main() -> Result<()> {
             }
         }
     }
-
-    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(&base_path);
-
-    // Retrieve this early to avoid committing and then erroring out on pushing
-    let default_remote_for_push = if opts.push || opts.batch {
-        Some(source_checkout.git_remote_get_default()?)
-    } else {
-        None
-    };
 
     // Update repository if requested
     if let Some(default_remote_for_push) = &default_remote_for_push {
@@ -2293,5 +2187,139 @@ fn main() -> Result<()> {
         }
     }
 
-    exit(exit_code);
+    Ok(exit_code)
+}
+
+fn main() -> Result<()> {
+    let opts = {
+        // Retrieve the command line options / arguments, and fix
+        // those that are overridden by others.
+
+        // Create an `Opts` from program arguments then deconstruct it
+        // immediately, binding the values in the fields to same-named
+        // variables, except where followed by `:` in which case
+        // binding the values to the given variable names with leading
+        // underscore.
+        let Opts {
+            v,
+            verbose,
+            timestamp: _timestamp,
+            write_errors: _write_errors,
+            no_commit_errors: _no_commit_errors,
+            ok_on_written_errors,
+            silent_on_written_errors: _silent_on_written_errors,
+            open,
+            open_if_changed,
+            pull: _pull,
+            no_commit: _no_commit,
+            push: _push,
+            batch: _batch,
+            dry_run,
+            no_version_check,
+            base_path,
+            no_branch_check,
+            daemon,
+        } = Opts::from_args();
+
+        // Create variables without the underscores, then set them
+        // depending on whether --batch was given.
+        let (
+            pull,
+            push,
+            no_commit,
+            write_errors,
+            no_commit_errors,
+            silent_on_written_errors,
+            timestamp,
+            batch,
+        );
+        if daemon.is_some() {
+            batch = true;
+        } else {
+            batch = _batch;
+        }
+        if batch {
+            pull = false;
+            push = true;
+            no_commit = false;
+            write_errors = true;
+            no_commit_errors = false;
+            silent_on_written_errors = true;
+            timestamp = false;
+        } else {
+            pull = _pull;
+            push = _push;
+            no_commit = _no_commit;
+            write_errors = _write_errors;
+            no_commit_errors = _no_commit_errors;
+            silent_on_written_errors = _silent_on_written_errors;
+            timestamp = _timestamp;
+        }
+
+        // Pack up the variables in a new `Opts` struct.
+        Opts {
+            v,
+            verbose,
+            timestamp,
+            write_errors,
+            no_commit_errors,
+            ok_on_written_errors,
+            silent_on_written_errors,
+            open,
+            open_if_changed,
+            pull,
+            no_commit,
+            push,
+            batch,
+            dry_run,
+            no_version_check,
+            base_path,
+            no_branch_check,
+            daemon,
+        }
+    };
+
+    let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
+        .parse()
+        .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
+
+    if opts.v {
+        println!("{PROGRAM_NAME} {program_version}");
+        return Ok(());
+    }
+
+    let base_path = opts
+        .base_path
+        .as_ref()
+        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
+
+    let git_log_version_checker = GitLogVersionChecker {
+        program_name: PROGRAM_NAME.into(),
+        program_version,
+    };
+
+    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path);
+
+    // Retrieve this early to avoid committing and then erroring out on pushing
+    let default_remote_for_push = if opts.push || opts.batch {
+        Some(source_checkout.git_remote_get_default()?)
+    } else {
+        None
+    };
+
+    let build_index_once = || match build_index(
+        &opts,
+        &base_path,
+        &git_log_version_checker,
+        &source_checkout,
+        &default_remote_for_push,
+    ) {
+        Ok(exit_code) => exit(exit_code),
+
+        Err(e) => {
+            eprintln!("Error: {e}");
+            exit(1);
+        }
+    };
+    build_index_once()
 }
