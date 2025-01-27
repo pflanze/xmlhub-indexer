@@ -214,6 +214,13 @@ struct Opts {
     #[clap(long)]
     batch: bool,
 
+    /// Run as a daemon, i.e. do not exit, but run batch conversion
+    /// repeatedly with the given number of seconds slept inbetween;
+    /// on errors this interval may be increased (exponential
+    /// backoff). Implies `--batch`.
+    #[clap(long)]
+    daemon: Option<f64>,
+
     /// Do not run external processes like git or browsers,
     /// i.e. ignore all the options asking to do so. Instead just say
     /// on stderr what would be done. Still writes to the output
@@ -1641,11 +1648,12 @@ fn main() -> Result<()> {
             pull: _pull,
             no_commit: _no_commit,
             push: _push,
-            batch,
+            batch: _batch,
             dry_run,
             no_version_check,
             base_path,
             no_branch_check,
+            daemon,
         } = Opts::from_args();
 
         // Create variables without the underscores, then set them
@@ -1658,7 +1666,13 @@ fn main() -> Result<()> {
             no_commit_errors,
             silent_on_written_errors,
             timestamp,
+            batch,
         );
+        if daemon.is_some() {
+            batch = true;
+        } else {
+            batch = _batch;
+        }
         if batch {
             pull = false;
             push = true;
@@ -1696,6 +1710,7 @@ fn main() -> Result<()> {
             no_version_check,
             base_path,
             no_branch_check,
+            daemon,
         }
     };
 
