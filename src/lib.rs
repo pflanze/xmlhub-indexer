@@ -12,5 +12,6 @@ pub mod rayon_util;
 pub mod read_xml;
 pub mod string_tree;
 pub mod tuple_transpose;
+pub mod unix;
 pub mod util;
 pub mod xmlhub_indexer_defaults;
