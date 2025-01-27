@@ -287,11 +287,6 @@ enum AttributeKind {
         /// display in the file info boxes. (StringList items (the
         /// case below) are always normalized btw.)
         normalize_whitespace: bool,
-        /// Whether to automatically find http and https URLs in the
-        /// text and create links with them (i.e. the string `"See
-        /// https://example.com."` is turned into the HTML code `See
-        /// <a href="https://example.com">https://example.com</a>.`)
-        autolink: bool,
     },
     /// A list of small pieces of text, e.g. keywords. The individual
     /// list elements are cleaned up then formatted to HTML, all
@@ -305,9 +300,6 @@ enum AttributeKind {
         /// formatting; for that, see the `to_html` method on
         /// AttributeValue.
         input_separator: &'static str,
-        /// Whether to automatically create links of http and https
-        /// URLs
-        autolink: bool,
     },
 }
 
@@ -324,12 +316,8 @@ impl AttributeKind {
         match self {
             AttributeKind::String {
                 normalize_whitespace: _,
-                autolink: _,
             } => false,
-            AttributeKind::StringList {
-                input_separator: _,
-                autolink: _,
-            } => true,
+            AttributeKind::StringList { input_separator: _ } => true,
         }
     }
     fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
@@ -337,23 +325,15 @@ impl AttributeKind {
         match self {
             AttributeKind::String {
                 normalize_whitespace,
-                autolink,
             } => softpre.format(
                 &format!(
-                    "text with\n- space {}normalized,\n- URLs {}autodetected",
+                    "text with space {}normalized",
                     text_not(*normalize_whitespace),
-                    text_not(*autolink)
                 ),
                 html,
             ),
-            AttributeKind::StringList {
-                input_separator,
-                autolink,
-            } => softpre.format(
-                &format!(
-                    "list with\n- items separated by {input_separator:?},\n- URLs {}autodetected",
-                    text_not(*autolink)
-                ),
+            AttributeKind::StringList { input_separator } => softpre.format(
+                &format!("list with items separated by {input_separator:?}",),
                 html,
             ),
         }
@@ -408,11 +388,22 @@ struct AttributeSpecification {
     key: AttributeName,
     need: AttributeNeed,
     kind: AttributeKind,
+    /// Whether to automatically find http and https URLs in the
+    /// text and create links with them (i.e. the string `"See
+    /// https://example.com."` is turned into the HTML code `See
+    /// <a href="https://example.com">https://example.com</a>.`)
+    autolink: bool,
     indexing: AttributeIndexing,
 }
 
 impl AttributeSpecification {
-    const TITLES: &[&str] = &["Name", "Content needed?", "Content kind", "Indexing"];
+    const TITLES: &[&str] = &[
+        "Name",
+        "Content needed?",
+        "Content kind",
+        "URLs automatically linked?",
+        "Indexing",
+    ];
 
     /// Show the specification using HTML markup, for writing to
     /// ATTRIBUTE_SPECIFICATION_FILENAME.
@@ -421,6 +412,7 @@ impl AttributeSpecification {
             key,
             need,
             kind,
+            autolink,
             indexing,
         } = self;
         html.tr(
@@ -435,6 +427,7 @@ impl AttributeSpecification {
                     })?,
                 )?,
                 html.td([], kind.to_html(html)?)?,
+                html.td([], html.text(if *autolink { "yes" } else { "no" })?)?,
                 html.td([], indexing.to_html(kind.is_list(), html)?)?,
             ],
         )
@@ -467,8 +460,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 input_separator: ",",
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: true,
@@ -479,8 +472,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -491,8 +484,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 input_separator: ",",
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::Index {
                 first_word_only: true,
                 use_lowercase: false,
@@ -503,8 +496,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -512,8 +505,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -521,8 +514,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -530,8 +523,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -542,8 +535,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             need: AttributeNeed::Required,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
-                autolink: true,
             },
+            autolink: true,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -572,14 +565,19 @@ lazy_static! {
 // strings and formatting the information as HTML.
 
 /// A concrete attribute value: either a string, a list of strings, or
-/// not present. The value of the `autolink` field is copied from the
-/// same field in the metainformation (`AttributeKind`), so that the
-/// setting is immediately available without having to pass on
-/// `AttributeKind` separately.
+/// not present. It links the `AttributeSpecification` so that it can
+/// be properly formatted and generate links back to the correct
+/// index.
 #[derive(Debug)]
-enum AttributeValue {
-    String { value: String, autolink: bool },
-    StringList { value: Vec<String>, autolink: bool },
+struct AttributeValue {
+    spec: &'static AttributeSpecification,
+    value: AttributeValueKind,
+}
+
+#[derive(Debug)]
+enum AttributeValueKind {
+    String(String),
+    StringList(Vec<String>),
     NA,
 }
 
@@ -589,10 +587,10 @@ impl AttributeValue {
     /// lists). Returns an error if it couldn't do that, which happens
     /// if the input is only whitespace but a value is required by the
     /// spec.
-    fn from_str_and_spec(val: &str, spec: &AttributeSpecification) -> Result<Self> {
-        if val.is_empty() || val == "NA" {
+    fn from_str_and_spec(val: &str, spec: &'static AttributeSpecification) -> Result<Self> {
+        let value: AttributeValueKind = if val.is_empty() || val == "NA" {
             match spec.need {
-                AttributeNeed::Optional => Ok(AttributeValue::NA),
+                AttributeNeed::Optional => AttributeValueKind::NA,
                 AttributeNeed::Required => {
                     bail!(
                         "attribute {:?} requires {}, but none given",
@@ -609,7 +607,6 @@ impl AttributeValue {
             match spec.kind {
                 AttributeKind::String {
                     normalize_whitespace,
-                    autolink,
                 } => {
                     let value = val.trim();
                     let value = if normalize_whitespace {
@@ -617,12 +614,9 @@ impl AttributeValue {
                     } else {
                         value.into()
                     };
-                    Ok(AttributeValue::String { value, autolink })
+                    AttributeValueKind::String(value)
                 }
-                AttributeKind::StringList {
-                    input_separator,
-                    autolink,
-                } => {
+                AttributeKind::StringList { input_separator } => {
                     // (Note: there is no need to replace '\n' with ' '
                     // in `val` first, because the trim will remove
                     // those around values, and normalize_whitespace will
@@ -634,7 +628,7 @@ impl AttributeValue {
                         .collect();
                     if vals.is_empty() {
                         match spec.need {
-                            AttributeNeed::Optional => Ok(AttributeValue::NA),
+                            AttributeNeed::Optional => AttributeValueKind::NA,
                             AttributeNeed::Required => {
                                 bail!(
                                     "values for attribute {:?} are required but missing",
@@ -643,14 +637,12 @@ impl AttributeValue {
                             }
                         }
                     } else {
-                        Ok(AttributeValue::StringList {
-                            value: vals,
-                            autolink,
-                        })
+                        AttributeValueKind::StringList(vals)
                     }
                 }
             }
-        }
+        };
+        Ok(AttributeValue { spec, value })
     }
 
     /// Also works for single-value and unavailable attributes,
@@ -659,10 +651,10 @@ impl AttributeValue {
     /// ones; that's just a performance feature, they can be used
     /// wherever a Vec or [] is required.)
     fn as_string_list(&self) -> Cow<[String]> {
-        match self {
-            AttributeValue::StringList { value, autolink: _ } => Cow::from(value.as_slice()),
-            AttributeValue::NA => Cow::from(&[]),
-            AttributeValue::String { value, autolink: _ } => Cow::from(vec![value.clone()]),
+        match &self.value {
+            AttributeValueKind::StringList(value) => Cow::from(value.as_slice()),
+            AttributeValueKind::NA => Cow::from(&[]),
+            AttributeValueKind::String(value) => Cow::from(vec![value.clone()]),
         }
     }
 
@@ -672,16 +664,17 @@ impl AttributeValue {
     /// elements (nodes), directly usable as the body (child elements)
     /// for another element.
     fn to_html(&self, html: &HtmlAllocator) -> Result<ASlice<Node>> {
-        match self {
-            AttributeValue::String { value, autolink } => {
+        let AttributeValue { spec, value } = self;
+        match value {
+            AttributeValueKind::String(value) => {
                 let softpre = SoftPre {
                     tabs_to_nbsp: Some(8),
-                    autolink: *autolink,
+                    autolink: spec.autolink,
                     input_line_separator: "\n",
                 };
                 softpre.format(value, html)?.to_aslice(html)
             }
-            AttributeValue::StringList { value, autolink } => {
+            AttributeValueKind::StringList(value) => {
                 let mut body = html.new_vec();
                 let mut need_comma = false;
                 for text in value {
@@ -691,7 +684,7 @@ impl AttributeValue {
                     need_comma = true;
                     // Do not do SoftPre for string list items, but only
                     // autolink (if requested). Then wrap in <q></q>.
-                    let text_marked_up = if *autolink {
+                    let text_marked_up = if spec.autolink {
                         ahtml::util::autolink(html, text)?
                     } else {
                         html.text_slice(text)?
@@ -700,7 +693,7 @@ impl AttributeValue {
                 }
                 Ok(body.as_slice())
             }
-            AttributeValue::NA => html.i([], html.text("n.A.")?)?.to_aslice(html),
+            AttributeValueKind::NA => html.i([], html.text("n.A.")?)?.to_aslice(html),
         }
     }
 }
