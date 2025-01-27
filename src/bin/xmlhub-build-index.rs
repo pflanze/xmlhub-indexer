@@ -34,7 +34,7 @@ use xmlhub_indexer::{
     read_xml::read_xml_file,
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
-    util,
+    util::{self, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
@@ -256,9 +256,9 @@ struct Opts {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 struct AttributeName(&'static str);
 
-impl AttributeName {
-    /// Get the actual attribute name string
-    fn as_str(self) -> &'static str {
+/// Get the actual attribute name string
+impl AsRef<str> for AttributeName {
+    fn as_ref(&self) -> &'static str {
         self.0
     }
 }
@@ -426,7 +426,7 @@ impl AttributeSpecification {
         html.tr(
             [],
             [
-                html.td([], html.i([], html.text(key.as_str())?)?)?,
+                html.td([], html.i([], html.text(key.as_ref())?)?)?,
                 html.td(
                     [],
                     html.text(match need {
@@ -772,7 +772,7 @@ impl Metadata {
                             att("valign", "top"),
                             att("align", "right"),
                         ],
-                        html.i([], [html.text(key.as_str())?, html.text(":")?])?,
+                        html.i([], [html.text(key.as_ref())?, html.text(":")?])?,
                     )?,
                     html.td([att("class", "metadata_value")], attval_html)?,
                 ],
@@ -1228,7 +1228,7 @@ impl FileErrors {
 fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
-        .map(|spec| (spec.key.as_str().to_lowercase(), spec))
+        .map(|spec| (spec.key.as_ref().to_lowercase(), spec))
         .collect();
     let mut unseen_specs_by_lowercase_key = spec_by_lowercase_key.clone();
     let mut map: BTreeMap<AttributeName, AttributeValue> = BTreeMap::new();
@@ -1278,9 +1278,9 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
         .collect();
     if !missing.is_empty() {
         // Show just the names, not the AttributeName wrappers
-        let missing_strings: Vec<&'static str> = missing.iter().map(|key| key.as_str()).collect();
         errors.push(format!(
-            "attributes with these names are missing: {missing_strings:?}",
+            "attributes with these names are missing: {}",
+            format_string_list(&missing),
         ));
     }
 
@@ -1403,7 +1403,7 @@ fn build_index_section(
 
     Ok(Section {
         in_red: false,
-        title: Some(attribute_key.as_str().into()),
+        title: Some(attribute_key.as_ref().into()),
         intro: Some(
             html.preserialize(html.dl([att("class", "key_dl")], body)?)?
                 .into(),
