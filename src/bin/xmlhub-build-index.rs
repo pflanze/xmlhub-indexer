@@ -1292,13 +1292,13 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
                 if let Some(spec) = spec_by_lowercase_key.get(&lc_key) {
                     unseen_specs_by_lowercase_key.remove(&lc_key);
                     if map.contains_key(&spec.key) {
-                        bail!("duplicate entry for key {lc_key:?}")
+                        bail!("duplicate entry for attribute name {lc_key:?}")
                     } else {
                         let value = AttributeValue::from_str_and_spec(value, spec)?;
                         map.insert(spec.key, value);
                     }
                 } else {
-                    bail!("unknown key {lc_key:?} given")
+                    bail!("unknown attribute name {lc_key:?} given")
                 }
             } else {
                 bail!("comment does not start with a keyword name and ':'")
