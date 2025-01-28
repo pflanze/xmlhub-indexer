@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::Range, path::Path};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use ouroboros::self_referencing;
 use roxmltree::{Document, Node, ParsingOptions};
 
@@ -91,21 +91,18 @@ impl XMLDocument {
 /// Load the given file into memory and parse it into a tree of
 /// elements representation.
 pub fn read_xml_file(path: &Path) -> Result<XMLDocument> {
-    (|| -> Result<_> {
-        // Back to reading the whole file to memory first since roxmltree
-        // requires that.
-        let string = std::fs::read_to_string(path)
-            .context("reading file")?
-            .into_boxed_str();
+    // Back to reading the whole file to memory first since roxmltree
+    // requires that.
+    let string = std::fs::read_to_string(path)
+        .context("reading file")?
+        .into_boxed_str();
 
-        XMLDocument::try_new(string, |string| {
-            let opt = ParsingOptions {
-                allow_dtd: true,
-                // nodes_limit: 1, -- somehow ignored
-                ..ParsingOptions::default()
-            };
-            Document::parse_with_options(string, opt).context("parsing the XML markup")
-        })
-    })()
-    .with_context(|| anyhow!("reading file {path:?}"))
+    XMLDocument::try_new(string, |string| {
+        let opt = ParsingOptions {
+            allow_dtd: true,
+            // nodes_limit: 1, -- somehow ignored
+            ..ParsingOptions::default()
+        };
+        Document::parse_with_options(string, opt).context("parsing the XML markup")
+    })
 }
