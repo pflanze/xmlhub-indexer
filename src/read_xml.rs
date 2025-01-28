@@ -10,10 +10,10 @@ pub struct XMLDocumentLocation<'a> {
     byte_range: Range<usize>,
 }
 
-/// Returns (line, column), both 0-based, of the end of `s` with
+/// Returns (line, column), based on `start`, of the end of `s` with
 /// respect of the start of `s`.
-fn str_line_col(s: &str) -> (usize, usize) {
-    let (mut line, mut col) = (0, 0);
+fn str_line_col(start: (usize, usize), s: &str) -> (usize, usize) {
+    let (mut line, mut col) = start;
     for c in s.chars() {
         match c {
             '\n' => {
@@ -41,10 +41,12 @@ fn line_col_string((line, col): (usize, usize)) -> String {
 impl<'a> Display for XMLDocumentLocation<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = self.xmldocument.as_str();
+        let start = str_line_col((0, 0), &s[0..self.byte_range.start]);
+        let end = str_line_col(start, &s[self.byte_range.start..self.byte_range.end]);
         f.write_fmt(format_args!(
             "{} – {}",
-            line_col_string(str_line_col(&s[0..self.byte_range.start])),
-            line_col_string(str_line_col(&s[0..self.byte_range.end]))
+            line_col_string(start),
+            line_col_string(end)
         ))
     }
 }
