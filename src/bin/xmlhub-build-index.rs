@@ -34,7 +34,7 @@ use xmlhub_indexer::{
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     rayon_util::ParRun,
-    read_xml::read_xml_file,
+    read_xml::{read_xml_file, XMLDocumentComment},
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     unix::{easy_fork, waitpid_until_gone, Status},
@@ -1270,8 +1270,14 @@ impl FileErrors {
 // entry point) at the bottom.
 
 /// Parse all XML comments from above the first XML opening element
-/// out of one file as `Metadata`.
-fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
+/// out of one file as `Metadata`. The comments are passed as an
+/// iterator over `XMLDocumentComment`, which has the string and
+/// location of the comment. The `XMLDocumentComment` has a limited
+/// lifetime (validity span) indicated by the context of the call to
+/// `parse_comments`, hence passed as lifetime parameter 'a;
+fn parse_comments<'a>(
+    comments: impl Iterator<Item = XMLDocumentComment<'a>>,
+) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
         .map(|spec| (spec.key.as_ref().to_lowercase(), spec))
@@ -1281,11 +1287,11 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
 
     // Collect all errors instead of stopping at the first one.
     let mut errors: Vec<String> = Vec::new();
-    for (i, comment) in comments.iter().enumerate() {
+    for comment in comments {
         // Using a function without arguments and calling it right
         // away to capture the result (Ok or Err).
         let result = (|| {
-            if let Some((key_, value)) = comment.split_once(":") {
+            if let Some((key_, value)) = comment.string.split_once(":") {
                 let lc_key = key_.trim().to_lowercase();
                 let value = value.trim();
 
@@ -1305,7 +1311,7 @@ fn parse_comments(comments: &[String]) -> Result<Metadata, Vec<String>> {
             }
             Ok(())
         })()
-        .with_context(|| anyhow!("XML comment no. {}", i + 1));
+        .with_context(|| anyhow!("XML comment on lines {}", comment.location));
         if let Err(e) = result {
             errors.push(format!("{e:#}"));
         }
@@ -1754,24 +1760,23 @@ fn build_index(
             .into_par_iter()
             .enumerate()
             .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-                // We're currently doing nothing with the `xmltree`
-                // value (which is the tree of all elements, excluding
-                // the comments), thus prefixed with an underscore to
-                // avoid the compiler warning about that. It would be
-                // possible to extract information from the XML tree
-                // for further indexes by defining another kind of
-                // indexing than metadata attributes, defining
-                // extractors for those, doing the extraction here and
-                // adding the results to `FileInfo`.
-                let (comments, _xmltree) =
-                    read_xml_file(&path.full_path()).map_err(|e| FileErrors {
-                        path: path.clone(),
-                        errors: vec![format!("{e:#}")],
-                    })?;
-                let metadata = parse_comments(&comments).map_err(|errors| FileErrors {
+                let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
                     path: path.clone(),
-                    errors,
+                    errors: vec![format!("{e:#}")],
                 })?;
+                let metadata =
+                    parse_comments(xmldocument.header_comments()).map_err(|errors| FileErrors {
+                        path: path.clone(),
+                        errors,
+                    })?;
+                // We're currently doing nothing else with
+                // `xmldocument` (which holds the tree of all elements
+                // in the document). It would be possible to extract
+                // information from the XML tree for further indexes
+                // by defining another kind of indexing than metadata
+                // attributes, defining extractors for those, doing
+                // the extraction here and adding the results to
+                // `FileInfo`.
                 Ok(FileInfo { id, path, metadata })
             })
             .collect()

@@ -1,10 +1,61 @@
-use std::path::Path;
+use std::{fmt::Display, ops::Range, path::Path};
 
 use anyhow::{anyhow, Context, Result};
 use ouroboros::self_referencing;
-use roxmltree::{Document, ParsingOptions};
+use roxmltree::{Document, Node, ParsingOptions};
 
-/// Bundles the XML string and parsed `roxmltree::Document`.
+#[derive(Clone)]
+pub struct XMLDocumentLocation<'a> {
+    xmldocument: &'a XMLDocument,
+    byte_range: Range<usize>,
+}
+
+/// Returns (line, column), both 0-based, of the end of `s` with
+/// respect of the start of `s`.
+fn str_line_col(s: &str) -> (usize, usize) {
+    let (mut line, mut col) = (0, 0);
+    for c in s.chars() {
+        match c {
+            '\n' => {
+                line += 1;
+                col = 0;
+            }
+            '\r' => {
+                col = 0;
+            }
+            _ => {
+                col += 1;
+            }
+        }
+    }
+    (line, col)
+}
+
+/// Format line, col in the format as used by roxmltree itself, and
+/// matching VS Code's numbering (but not Emacs' which is 1:0 based),
+/// meaning as line:col and with line anc col both 1-based
+fn line_col_string((line, col): (usize, usize)) -> String {
+    format!("{}:{}", line + 1, col + 1)
+}
+
+impl<'a> Display for XMLDocumentLocation<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self.xmldocument.as_str();
+        f.write_fmt(format_args!(
+            "{} – {}",
+            line_col_string(str_line_col(&s[0..self.byte_range.start])),
+            line_col_string(str_line_col(&s[0..self.byte_range.end]))
+        ))
+    }
+}
+
+pub struct XMLDocumentComment<'a> {
+    pub location: XMLDocumentLocation<'a>,
+    pub string: &'a str,
+}
+
+/// A parsed XML document: bundles the XML string and parsed
+/// `roxmltree::Document`.
 #[self_referencing]
 pub struct XMLDocument {
     string: Box<str>,
@@ -21,11 +72,25 @@ impl XMLDocument {
     pub fn document<'a>(&'a self) -> &'a Document<'a> {
         self.borrow_document()
     }
+
+    /// The comments above the first element in the document.
+    pub fn header_comments<'a>(&'a self) -> impl Iterator<Item = XMLDocumentComment<'a>> {
+        let root: Node = self.document().root();
+        root.children()
+            .take_while(|item| item.is_comment())
+            .map(|item| XMLDocumentComment {
+                location: XMLDocumentLocation {
+                    xmldocument: self,
+                    byte_range: item.range(),
+                },
+                string: item.text().expect("comment has text"),
+            })
+    }
 }
 
-/// Parse the given file, return the comments *above the top element*,
-/// and the parsed XML tree.
-pub fn read_xml_file(path: &Path) -> Result<(Vec<String>, XMLDocument)> {
+/// Load the given file into memory and parse it into a tree of
+/// elements representation.
+pub fn read_xml_file(path: &Path) -> Result<XMLDocument> {
     (|| -> Result<_> {
         // Back to reading the whole file to memory first since roxmltree
         // requires that.
@@ -33,24 +98,14 @@ pub fn read_xml_file(path: &Path) -> Result<(Vec<String>, XMLDocument)> {
             .context("reading file")?
             .into_boxed_str();
 
-        let xmldoc = XMLDocument::try_new(string, |string| {
+        XMLDocument::try_new(string, |string| {
             let opt = ParsingOptions {
                 allow_dtd: true,
                 // nodes_limit: 1, -- somehow ignored
                 ..ParsingOptions::default()
             };
             Document::parse_with_options(string, opt).context("parsing the XML markup")
-        })?;
-
-        let root = xmldoc.document().root();
-
-        let comments: Vec<String> = root
-            .children()
-            .take_while(|item| item.is_comment())
-            .map(|item| item.text().expect("comment has text").to_owned())
-            .collect();
-
-        Ok((comments, xmldoc))
+        })
     })()
     .with_context(|| anyhow!("reading file {path:?}"))
 }
