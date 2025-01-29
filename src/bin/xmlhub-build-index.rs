@@ -2205,23 +2205,23 @@ fn main() -> Result<()> {
 
         // Create an `Opts` from program arguments then deconstruct it
         // immediately, binding the values in the fields to same-named
-        // variables, except where followed by `:` in which case
-        // binding the values to the given variable names with leading
-        // underscore.
+        // variables, except where followed by `:`, in which case
+        // binding the value to a variable with an underscore appended
+        // to the field name.
         let Opts {
             v,
             verbose,
-            timestamp: _timestamp,
-            write_errors: _write_errors,
-            no_commit_errors: _no_commit_errors,
+            timestamp: timestamp_,
+            write_errors: write_errors_,
+            no_commit_errors: no_commit_errors_,
             ok_on_written_errors,
-            silent_on_written_errors: _silent_on_written_errors,
+            silent_on_written_errors: silent_on_written_errors_,
             open,
             open_if_changed,
-            pull: _pull,
-            no_commit: _no_commit,
-            push: _push,
-            batch: _batch,
+            pull: pull_,
+            no_commit: no_commit_,
+            push: push_,
+            batch: batch_,
             dry_run,
             no_version_check,
             base_path,
@@ -2245,7 +2245,7 @@ fn main() -> Result<()> {
         if daemon.is_some() {
             batch = true;
         } else {
-            batch = _batch;
+            batch = batch_;
         }
         if batch {
             pull = false;
@@ -2256,13 +2256,13 @@ fn main() -> Result<()> {
             silent_on_written_errors = true;
             timestamp = false;
         } else {
-            pull = _pull;
-            push = _push;
-            no_commit = _no_commit;
-            write_errors = _write_errors;
-            no_commit_errors = _no_commit_errors;
-            silent_on_written_errors = _silent_on_written_errors;
-            timestamp = _timestamp;
+            pull = pull_;
+            push = push_;
+            no_commit = no_commit_;
+            write_errors = write_errors_;
+            no_commit_errors = no_commit_errors_;
+            silent_on_written_errors = silent_on_written_errors_;
+            timestamp = timestamp_;
         }
 
         // Pack up the variables in a new `Opts` struct.
