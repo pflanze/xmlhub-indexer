@@ -1311,7 +1311,7 @@ fn parse_comments<'a>(
             }
             Ok(())
         })()
-        .with_context(|| anyhow!("XML comment on lines {}", comment.location));
+        .with_context(|| anyhow!("XML comment on {}", comment.location));
         if let Err(e) = result {
             errors.push(format!("{e:#}"));
         }
