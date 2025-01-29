@@ -1266,8 +1266,8 @@ impl FileErrors {
 }
 
 // =============================================================================
-// Parsing and printing functionality, including the main function (the program
-// entry point) at the bottom.
+// Parsing and printing functionality, up to and including the
+// `build_index` function below.
 
 /// Parse all XML comments from above the first XML opening element
 /// out of one file as `Metadata`. The comments are passed as an
