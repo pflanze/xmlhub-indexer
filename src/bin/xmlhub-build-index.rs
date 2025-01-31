@@ -5,10 +5,7 @@ use std::{
     fs::File,
     io::{stderr, BufWriter, Write},
     path::PathBuf,
-    process::exit,
     sync::Arc,
-    thread::sleep,
-    time::Duration,
 };
 
 // From external dependencies
@@ -27,9 +24,11 @@ use rayon::prelude::{
 
 // From src/*.rs
 use xmlhub_indexer::{
+    backoff::LoopWithBackoff,
     browser::spawn_browser,
     checkout_context::CheckoutContext,
     const_util::file_name,
+    daemon::forking_loop,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
@@ -37,7 +36,6 @@ use xmlhub_indexer::{
     read_xml::{read_xml_file, XMLDocumentComment},
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
-    unix::{easy_fork, waitpid_until_gone, Status},
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
@@ -2318,58 +2316,29 @@ fn main() -> Result<()> {
 
     // This function does not return after finishing, but exits the
     // process.
-    let build_index_once_noreturn = || match build_index(
-        &opts,
-        &base_path,
-        &git_log_version_checker,
-        &source_checkout,
-        &default_remote_for_push,
-    ) {
-        Ok(exit_code) => exit(exit_code),
-        Err(e) => {
-            eprintln!("Error: {e}");
-            exit(1);
-        }
+    let build_index_once = || {
+        build_index(
+            &opts,
+            &base_path,
+            &git_log_version_checker,
+            &source_checkout,
+            &default_remote_for_push,
+        )
     };
 
     if let Some(min_seconds) = opts.daemon {
         // Daemon mode: carry out the work in a new child process for
         // each run; never exit the controlling parent process which
         // re-runs the work forever.
-        let mut sleep_seconds = min_seconds;
-        loop {
-            let result = (|| -> Result<()> {
-                if let Some(pid) = unsafe { easy_fork() }? {
-                    // Parent process
-
-                    // XXX todo: set up a thread that kills the pid after a timeout.
-
-                    match waitpid_until_gone(pid)? {
-                        Status::Normalexit(code) => {
-                            if code != 0 {
-                                bail!("child {pid} exited with exit code {code}");
-                            }
-                            Ok(())
-                        }
-                        Status::Signalexit(signal) => {
-                            bail!("child {pid} terminated by signal {signal}");
-                        }
-                    }
-                } else {
-                    // Child process
-                    build_index_once_noreturn()
-                }
-            })();
-            if let Err(e) = result {
-                eprintln!("control loop: got error: {e}");
-                sleep_seconds = sleep_seconds * 1.05;
-            } else {
-                sleep_seconds = (sleep_seconds * 0.99).max(min_seconds);
-            }
-            eprintln!("sleeping {sleep_seconds} seconds");
-            sleep(Duration::from_secs_f64(sleep_seconds));
-        }
+        forking_loop(
+            LoopWithBackoff {
+                min_sleep_seconds: min_seconds,
+                max_sleep_seconds: 1000.,
+                ..Default::default()
+            },
+            || build_index_once().map(|_exit_code| ()),
+        )
     } else {
-        build_index_once_noreturn()
+        std::process::exit(build_index_once()?);
     }
 }

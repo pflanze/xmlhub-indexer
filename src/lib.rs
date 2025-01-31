@@ -1,8 +1,10 @@
+pub mod backoff;
 pub mod browser;
 pub mod cargo;
 pub mod checkout_context;
 pub mod command;
 pub mod const_util;
+pub mod daemon;
 pub mod effect;
 pub mod flattened;
 pub mod git;
