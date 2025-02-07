@@ -1,4 +1,4 @@
-// From the standard library
+// Use from the standard library
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-// From external dependencies
+// Use from external dependencies
 use ahtml::{
     att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, HtmlAllocatorPool, Node, Print,
     SerHtmlFrag, ToASlice,
@@ -22,7 +22,7 @@ use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-// From src/*.rs
+// Use from src/*.rs
 use xmlhub_indexer::{
     backoff::LoopWithBackoff,
     browser::spawn_browser,
