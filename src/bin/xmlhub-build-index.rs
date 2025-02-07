@@ -46,6 +46,7 @@ struct OutputFile {
     path_from_repo_top: &'static str,
 }
 
+// -------------------------------------------------------------------------
 // Various settings in addition to those imported from
 // `xmlhub_indexer_defaults` (see `xmlhub_indexer_defaults.rs` to edit
 // those!).
@@ -72,10 +73,22 @@ const OUTPUT_FILES: [&OutputFile; 3] = [&HTML_FILE, &MD_FILE, &ATTRIBUTES_FILE];
 /// information on how to contribute.
 const CONTRIBUTE_FILENAME: &str = "CONTRIBUTE";
 
-/// The unicode symbol to use in the index page for links to the original
+/// The symbol to use in the index page for links to the original
 /// XML file.
-const DOCUMENT_SYMBOL: &str = "🗎";
+const DOCUMENT_SYMBOL_PATH: &str = ".index/document.svg";
 
+/// Return the html code for loading the document symbol image
+fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
+    html.img(
+        [
+            att("src", DOCUMENT_SYMBOL_PATH),
+            att("style", "vertical-align: -2px;"),
+        ],
+        [],
+    )
+}
+
+// -------------------------------------------------------------------------
 // Derived values:
 
 /// The name of the command line program.
@@ -883,17 +896,21 @@ impl FileInfo {
                             html.b(
                                 [],
                                 html.a(
-                                    [att(
-                                        "href",
-                                        // (This would need path
-                                        // calculation if the index files
-                                        // weren't written to the
-                                        // top-level directory)
-                                        self.path.rel_path(),
-                                    )],
+                                    [
+                                        att(
+                                            "href",
+                                            // (This would need path
+                                            // calculation if the index files
+                                            // weren't written to the
+                                            // top-level directory)
+                                            self.path.rel_path(),
+                                        ),
+                                        att("title", "Open the file"),
+                                    ],
                                     [
                                         html.text(file_path_or_name)?,
-                                        html.text(format!(" {DOCUMENT_SYMBOL}"))?,
+                                        html.nbsp()?,
+                                        document_symbol(html)?,
                                     ],
                                 )?,
                             )?,
@@ -1452,7 +1469,7 @@ fn build_index_section(
                     html.nbsp()?,
                     html.a(
                         [att("href", rel_path), att("title", "Open the file")],
-                        html.text(DOCUMENT_SYMBOL)?,
+                        document_symbol(&*html)?,
                     )?,
                 ],
             )?;
@@ -1597,11 +1614,14 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
             )?,
             html.p(
                 [],
-                [html.text(format!(
-                    "From the index, click on a link to jump to the info box \
-                     about that file, or on the {DOCUMENT_SYMBOL} symbol to open \
-                     the XML file directly."
-                ))?],
+                [
+                    html.text(
+                        "From the index, click on a link to jump to the info box \
+                     about that file, or on the ",
+                    )?,
+                    document_symbol(html)?,
+                    html.text(" symbol to open the XML file directly.")?,
+                ],
             )?,
             html.p(
                 [],
