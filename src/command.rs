@@ -224,12 +224,16 @@ pub fn command_with_settings<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<O
     for (k, v) in set_env {
         c.env(k, v);
     }
-    if let Some(cap) = captures.stdout {
-        c.stdout(cap);
-    }
-    if let Some(cap) = captures.stderr {
-        c.stderr(cap);
-    }
+    c.stdout(if let Some(cap) = captures.stdout {
+        cap
+    } else {
+        Stdio::inherit()
+    });
+    c.stderr(if let Some(cap) = captures.stderr {
+        cap
+    } else {
+        Stdio::inherit()
+    });
     c
 }
 
