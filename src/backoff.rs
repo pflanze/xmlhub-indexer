@@ -12,6 +12,12 @@ use std::{fmt::Display, thread::sleep, time::Duration};
 /// instance setting only the fields that you want to change (most
 /// likely only the `*_sleep_seconds` values).
 pub struct LoopWithBackoff {
+    /// Whether to enable additional diagnostic messages to stderr
+    /// (default: false).
+    pub verbose: bool,
+    /// Whether to silence diagnostic messages to stderr about errors
+    /// (default: false).
+    pub quiet: bool,
     /// The number to multiply the sleep time with in case of error (should be > 1)
     pub error_sleep_factor: f64,
     /// The number to multiply the sleep time with in case of success
@@ -28,6 +34,8 @@ pub struct LoopWithBackoff {
 impl Default for LoopWithBackoff {
     fn default() -> Self {
         Self {
+            verbose: false,
+            quiet: false,
             error_sleep_factor: 1.05,
             success_sleep_factor: 0.99,
             min_sleep_seconds: 1.,
@@ -47,13 +55,17 @@ impl LoopWithBackoff {
                 // XX e:# ? but we only have Display! Can't require
                 // std::error::Error since anyhow::Error (in the
                 // version that I'm using) is not implementing that.
-                eprintln!("control loop: got error: {e:#}");
+                if !self.quiet {
+                    eprintln!("control loop: got error: {e:#}");
+                }
                 sleep_seconds =
                     (sleep_seconds * self.error_sleep_factor).min(self.max_sleep_seconds);
             } else {
                 sleep_seconds = (sleep_seconds * 0.99).max(self.min_sleep_seconds);
             }
-            eprintln!("sleeping {sleep_seconds} seconds");
+            if self.verbose {
+                eprintln!("sleeping {sleep_seconds} seconds");
+            }
             sleep(Duration::from_secs_f64(sleep_seconds));
         }
     }

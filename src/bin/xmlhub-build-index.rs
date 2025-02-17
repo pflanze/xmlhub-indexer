@@ -2198,7 +2198,9 @@ fn build_index(
                         )?
                     }
                 } else {
-                    println!("There were no changes to commit, thus not pushing.")
+                    if !opts.quiet {
+                        println!("There were no changes to commit, thus not pushing.")
+                    }
                 }
             }
         }
@@ -2369,6 +2371,7 @@ fn main() -> Result<()> {
             LoopWithBackoff {
                 min_sleep_seconds: min_seconds,
                 max_sleep_seconds: 1000.,
+                verbose: !opts.quiet,
                 ..Default::default()
             },
             // The action run in the child process: build the index
