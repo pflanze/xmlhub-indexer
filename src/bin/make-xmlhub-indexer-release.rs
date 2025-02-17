@@ -29,7 +29,7 @@ struct Opts {
     dry_run: bool,
 
     /// Carry out the actions without asking for confirmation
-    /// (basically the inverse of --dry-run).
+    /// (basically the opposite of --dry-run).
     #[clap(long)]
     yes: bool,
 
