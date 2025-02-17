@@ -137,9 +137,16 @@ struct Opts {
     #[clap(long = "version")]
     v: bool,
 
-    /// Show external modifying commands that are run.
+    /// Show external modifying commands that are run. Note that this
+    /// does not disable `--quiet`.
     #[clap(short, long)]
     verbose: bool,
+
+    /// Suppress some unimportant output; useful with `--daemon` to
+    /// reduce the amount of log space required. Note that this does
+    /// not disable `--verbose`.
+    #[clap(short, long)]
+    quiet: bool,
 
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
@@ -232,7 +239,8 @@ struct Opts {
     /// Run as a daemon, i.e. do not exit, but run batch conversion
     /// repeatedly with the given number of seconds slept inbetween;
     /// on errors this interval may be increased (exponential
-    /// backoff). Implies `--batch`.
+    /// backoff). Implies `--batch`. You may want to use `--quiet` at
+    /// the same time.
     #[clap(long)]
     daemon: Option<f64>,
 
@@ -1684,7 +1692,7 @@ fn build_index(
         if opts.pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(&base_path, &["pull"])? {
+                if !git(&base_path, &["pull"], opts.quiet)? {
                     bail!("git pull failed")
                 }
             }
@@ -1693,7 +1701,8 @@ fn build_index(
         if opts.batch {
             check_dry_run! {
                 message: format!("git remote update {default_remote_for_push:?}"),
-                if !git(&base_path, &["remote", "update", default_remote_for_push])? {
+                if !git(&base_path, &["remote", "update", default_remote_for_push],
+                        opts.quiet)? {
                     bail!("git remote update {default_remote_for_push:?} failed")
                 }
             }
@@ -1705,7 +1714,7 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_name:?}"),
-                if !git(&base_path, &["reset", "--hard", &remote_banch_name])? {
+                if !git(&base_path, &["reset", "--hard", &remote_banch_name], opts.quiet)? {
                     bail!("git reset --hard {remote_banch_name:?} failed")
                 }
             }
@@ -2089,6 +2098,7 @@ fn build_index(
                             html_file_has_changed = !git(
                                 source_checkout.working_dir_path,
                                 &["diff", "--no-patch", "--exit-code", "--", HTML_FILE.path_from_repo_top],
+                                false
                             )?
                         }
                     }
@@ -2149,7 +2159,8 @@ fn build_index(
                 message: format!("git add -f -- {written_files:?}"),
                 git(
                     source_checkout.working_dir_path,
-                    &append(&["add", "-f", "--"], &written_files)
+                    &append(&["add", "-f", "--"], &written_files),
+                    opts.quiet
                 )?
             }
 
@@ -2171,6 +2182,7 @@ fn build_index(
                         ],
                         &written_files,
                     ),
+                    opts.quiet
                 )?
             }
 
@@ -2181,7 +2193,8 @@ fn build_index(
                         git_push::<&str>(
                             source_checkout.working_dir_path,
                             &default_remote_for_push,
-                            &[]
+                            &[],
+                            opts.quiet
                         )?
                     }
                 } else {
@@ -2245,6 +2258,7 @@ fn main() -> Result<()> {
             base_path,
             no_branch_check,
             daemon,
+            quiet,
         } = Opts::from_args();
 
         // Create uninitialized variables without the underscores,
@@ -2303,6 +2317,7 @@ fn main() -> Result<()> {
             base_path,
             no_branch_check,
             daemon,
+            quiet,
         }
     };
 

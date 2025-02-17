@@ -5,7 +5,7 @@ use clap::Parser;
 
 use xmlhub_indexer::{
     cargo::check_cargo_toml_no_path,
-    command::run,
+    command::{run, Capturing},
     const_util::file_name,
     effect::{bind, Effect, NoOp},
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
@@ -126,6 +126,7 @@ impl Effect for PushSourceToRemote {
             SOURCE_CHECKOUT.working_dir_path(),
             &self.remote_name,
             &[SOURCE_CHECKOUT.branch_name, &self.tag_name],
+            false,
         )?;
         Ok(SourcePushed)
     }
@@ -227,11 +228,13 @@ impl Effect for ReleaseBinary {
             // earlier, hence there are no other changes that might be
             // committed accidentally.
             &["add", "."],
+            false,
         )?;
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
             &["commit", "-m", &binary_commit_message],
+            false,
         )?;
 
         if self.sign {
@@ -262,6 +265,7 @@ impl Effect for ReleaseBinary {
                 BINARIES_CHECKOUT.working_dir_path(),
                 remote_name,
                 &branches_and_tags,
+                false,
             )?;
         }
         Ok(Done)
@@ -269,7 +273,14 @@ impl Effect for ReleaseBinary {
 }
 
 fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
-    run(SOURCE_CHECKOUT.working_dir_path(), "cargo", args, &[], &[0])
+    run(
+        SOURCE_CHECKOUT.working_dir_path(),
+        "cargo",
+        args,
+        &[],
+        &[0],
+        Capturing::none(),
+    )
 }
 
 fn main() -> Result<()> {

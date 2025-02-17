@@ -42,7 +42,10 @@ fn check_exitstatus(exitstatus: &ExitStatus, acceptable_status_codes: &[i32]) ->
     }
 }
 
-/// Which outputs and how they should be captured.
+/// Which outputs and how they should be captured. Can't clone, the
+/// contained handles are not clonable; use `available` before
+/// consuming this if you need to retain the knowledge about available
+/// captures.
 #[derive(Debug)]
 pub struct Capturing {
     stdout: Option<Stdio>,
@@ -268,13 +271,15 @@ pub fn spawn<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 /// error if cmd exited with a code that is not in
 /// `acceptable_status_codes`.  Returns true when 0 is in
 /// acceptable_status_codes and cmd exited with status 0, false for
-/// other accepted status codes.
+/// other accepted status codes. `silencing` specifies captures that
+/// should be done, which are dropped unless there's an error.
 pub fn run<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
     in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
     acceptable_status_codes: &[i32],
+    silencing: Capturing,
 ) -> Result<bool> {
     let get_cmd_args_dir = || {
         (
@@ -282,20 +287,18 @@ pub fn run<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
             in_directory.as_ref().to_string_lossy().to_string(),
         )
     };
-    let mut c = spawn(
-        in_directory.as_ref(),
-        &cmd,
-        arguments,
-        set_env,
-        Capturing::none(),
-    )?;
-    let exitstatus = c.wait().with_context(|| {
-        let (cmd_args, in_dir) = get_cmd_args_dir();
-        anyhow!("running {cmd_args:?} in directory {in_dir:?}",)
-    })?;
+    let available_captures = silencing.available();
+    let output = run_output(in_directory.as_ref(), &cmd, arguments, set_env, silencing)?;
+    let exitstatus = output.status;
     check_exitstatus(&exitstatus, acceptable_status_codes).with_context(|| {
         let (cmd_args, in_dir) = get_cmd_args_dir();
-        anyhow!("running {cmd_args:?} in directory {in_dir:?}",)
+        let outputs = Outputs {
+            truthy: false,
+            available_captures,
+            output,
+            indent: "", // XX
+        };
+        anyhow!("running {cmd_args:?} in directory {in_dir:?}: {outputs}")
     })
 }
 

@@ -55,8 +55,23 @@ impl BaseAndRelPath {
 
 /// Returns true when git exited with code 0, false if 1; returns an
 /// error for other exit codes or errors.
-pub fn git<S: AsRef<OsStr> + Debug>(base_path: &Path, arguments: &[S]) -> Result<bool> {
-    run(base_path, "git", arguments, &[("PAGER", "")], &[0, 1])
+pub fn git<S: AsRef<OsStr> + Debug>(
+    base_path: &Path,
+    arguments: &[S],
+    quiet: bool,
+) -> Result<bool> {
+    run(
+        base_path,
+        "git",
+        arguments,
+        &[("PAGER", "")],
+        &[0, 1],
+        if quiet {
+            Capturing::stdout()
+        } else {
+            Capturing::none()
+        },
+    )
 }
 
 /// Only succeeds if Git exited with code 0.
@@ -524,12 +539,13 @@ pub fn git_push<S: AsRef<OsStr> + Debug>(
     base_path: &Path,
     repository: &str,
     refspecs: &[S],
+    quiet: bool,
 ) -> Result<()> {
     let mut args: Vec<&OsStr> = vec!["push".as_ref(), repository.as_ref()];
     for v in refspecs {
         args.push(v.as_ref());
     }
-    if !git(base_path, &args)? {
+    if !git(base_path, &args, quiet)? {
         bail!("git {args:?} in {base_path:?} failed")
     }
     Ok(())
