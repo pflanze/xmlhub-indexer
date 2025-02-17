@@ -2356,6 +2356,11 @@ fn main() -> Result<()> {
                 max_sleep_seconds: 1000.,
                 ..Default::default()
             },
+            // The action run in the child process: build the index
+            // once, throwing away the Ok return value (replacing it
+            // with `()`, since `forking_loop` expects that, since
+            // just exits the child with exit code 0 whenever the
+            // action returned Ok).
             || build_index_once().map(|_exit_code| ()),
         )
     } else {
