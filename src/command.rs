@@ -212,8 +212,8 @@ fn check_exitstatus_context<'t, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug
     }
 }
 
-pub fn command_with_settings<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn command_with_settings<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
@@ -242,18 +242,18 @@ pub fn command_with_settings<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 /// to `Captures::none()`, because otherwise the outputs will go
 /// nowhere, or even block the child process after filling the pipe
 /// buffer.
-pub fn spawn<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn spawn<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
     captures: Capturing,
 ) -> Result<Child> {
-    let mut c = command_with_settings(in_directory, &cmd, arguments, set_env, captures);
+    let mut c = command_with_settings(in_directory.as_ref(), &cmd, arguments, set_env, captures);
     c.spawn().with_context(|| {
         let (cmd_args, in_dir) = (
             cmd_args(&cmd, arguments),
-            in_directory.to_string_lossy().to_string(),
+            in_directory.as_ref().to_string_lossy().to_string(),
         );
         anyhow!("running {cmd_args:?} in directory {in_dir:?}",)
     })
@@ -265,8 +265,8 @@ pub fn spawn<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 /// `acceptable_status_codes`.  Returns true when 0 is in
 /// acceptable_status_codes and cmd exited with status 0, false for
 /// other accepted status codes.
-pub fn run<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn run<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
@@ -275,10 +275,16 @@ pub fn run<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
     let get_cmd_args_dir = || {
         (
             cmd_args(&cmd, arguments),
-            in_directory.to_string_lossy().to_string(),
+            in_directory.as_ref().to_string_lossy().to_string(),
         )
     };
-    let mut c = spawn(in_directory, &cmd, arguments, set_env, Capturing::none())?;
+    let mut c = spawn(
+        in_directory.as_ref(),
+        &cmd,
+        arguments,
+        set_env,
+        Capturing::none(),
+    )?;
     let exitstatus = c.wait().with_context(|| {
         let (cmd_args, in_dir) = get_cmd_args_dir();
         anyhow!("running {cmd_args:?} in directory {in_dir:?}",)
@@ -289,18 +295,18 @@ pub fn run<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
     })
 }
 
-pub fn run_output<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn run_output<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
     captures: Capturing,
 ) -> Result<Output> {
-    let mut c = command_with_settings(in_directory, &cmd, arguments, set_env, captures);
+    let mut c = command_with_settings(in_directory.as_ref(), &cmd, arguments, set_env, captures);
     c.output().with_context(|| {
         let (cmd_args, in_dir) = (
             cmd_args(&cmd, arguments),
-            in_directory.to_string_lossy().to_string(),
+            in_directory.as_ref().to_string_lossy().to_string(),
         );
         anyhow!("running {cmd_args:?} in directory {in_dir:?}",)
     })
@@ -308,8 +314,8 @@ pub fn run_output<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 
 /// Same as `run` but captures outputs, returning (exited_0, stdout,
 /// stderr)
-pub fn run_outputs<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn run_outputs<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
@@ -317,11 +323,11 @@ pub fn run_outputs<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 ) -> Result<Outputs<'static>> {
     let captures = Capturing::both();
     let available_captures = captures.available();
-    let output = run_output(in_directory, &cmd, arguments, set_env, captures)?;
+    let output = run_output(in_directory.as_ref(), &cmd, arguments, set_env, captures)?;
     let truthy = check_exitstatus(&output.status, acceptable_status_codes).with_context(|| {
         let (cmd_args, in_dir, output) = (
             cmd_args(&cmd, arguments),
-            in_directory.to_string_lossy().to_string(),
+            in_directory.as_ref().to_string_lossy().to_string(),
             DisplayOutput {
                 available_captures,
                 output: &output,
@@ -339,8 +345,8 @@ pub fn run_outputs<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 }
 
 /// Same as `run` but captures and returns stdout.
-pub fn run_stdout<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn run_stdout<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],
@@ -348,11 +354,11 @@ pub fn run_stdout<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 ) -> Result<Outputs<'static>> {
     let captures = Capturing::stdout();
     let available_captures = captures.available();
-    let output = run_output(in_directory, &cmd, arguments, set_env, captures)?;
+    let output = run_output(in_directory.as_ref(), &cmd, arguments, set_env, captures)?;
     let truthy = check_exitstatus(&output.status, acceptable_status_codes).with_context(|| {
         let (cmd_args, in_dir, output) = (
             cmd_args(&cmd, arguments),
-            in_directory.to_string_lossy().to_string(),
+            in_directory.as_ref().to_string_lossy().to_string(),
             DisplayOutput {
                 available_captures,
                 output: &output,
@@ -392,8 +398,8 @@ pub fn run_stderr<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
 }
 
 /// Same as `run_stdout` but returns stdout as a utf-8 decoded string.
-pub fn run_stdout_string<P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
-    in_directory: &Path,
+pub fn run_stdout_string<D: AsRef<Path>, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug>(
+    in_directory: D,
     cmd: P,
     arguments: &[A],
     set_env: &[(&str, &str)],

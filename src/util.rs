@@ -6,7 +6,7 @@ use std::{
     fs::{create_dir, OpenOptions},
     io::BufReader,
     io::{BufRead, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use crate::command::run_stdout_string;
@@ -110,7 +110,7 @@ pub fn prog_version(in_dir: &Path, prog_name: &str) -> Result<String> {
 }
 
 pub fn hostname() -> Result<String> {
-    run_stdout_string::<&str, &str>(&PathBuf::from("."), "hostname", &[], &[], &[0], true)
+    run_stdout_string::<_, &str, &str>(".", "hostname", &[], &[], &[0], true)
 }
 
 /// Calculate SHA-256 hash sum for the given path (currently by
