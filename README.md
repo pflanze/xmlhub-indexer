@@ -341,6 +341,13 @@ yours, both people can run `gpg --fingerprint "your name"` (or leave
 away the name string and get all keys) and then compare the
 fingerprints (hex number string with spaces) on the screen.
 
+(Note: the version tags start with a `v`. Christian sometimes also
+creates tags that start with `cj`, those do not represent version
+numbers, but just sign the code after reviewing on his secure machine;
+they might be useful to verify authenticity, but are ignored when
+deriving the version number compiled into the binary (and can be seen
+via the `--version` option).)
+
 While care has been taken to try to make the `xmlhub-build-index` source
 code easy to understand (newbie-friendly), for
 `make-xmlhub-indexer-release` that goal has been dropped; it does use
