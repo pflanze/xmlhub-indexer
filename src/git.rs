@@ -53,8 +53,10 @@ impl BaseAndRelPath {
     }
 }
 
-/// Returns true when git exited with code 0, false if 1; returns an
-/// error for other exit codes or errors.
+/// Execute the external "git" command with `base_path` as its current
+/// directory and with the given arguments. Returns true when git
+/// exited with code 0, false if 1; returns an error for other exit
+/// codes or errors.
 pub fn git<S: AsRef<OsStr> + Debug>(
     base_path: &Path,
     arguments: &[S],
