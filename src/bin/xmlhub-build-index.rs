@@ -264,10 +264,7 @@ struct Opts {
     no_branch_check: bool,
 
     /// The path to the base directory of the Git checkout of the XML
-    /// Hub; it is an error if this is omitted and no --paths option
-    /// was given. If given, writes the index as `README.html` and
-    /// `README.md` files into this directory (otherwise the HTML
-    /// variant is printed to standard output).
+    /// Hub.
     base_path: Option<PathBuf>,
 }
 
