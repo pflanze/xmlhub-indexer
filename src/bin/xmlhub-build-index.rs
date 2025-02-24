@@ -2,7 +2,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    fs::File,
+    fs::{create_dir, File},
     io::{stderr, BufWriter, Write},
     path::PathBuf,
     sync::Arc,
@@ -28,10 +28,13 @@ use xmlhub_indexer::{
     browser::spawn_browser,
     checkout_context::CheckoutContext,
     const_util::file_name,
-    daemon::forking_loop,
+    daemon::{Daemon, DaemonMode},
+    file_lock::{file_lock_nonblocking, FileLockError},
+    forking_loop::forking_loop,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
+    path_util::AppendToPath,
     rayon_util::ParRun,
     read_xml::{read_xml_file, XMLDocumentComment},
     string_tree::StringTree,
@@ -50,6 +53,19 @@ struct OutputFile {
 // Various settings in addition to those imported from
 // `xmlhub_indexer_defaults` (see `xmlhub_indexer_defaults.rs` to edit
 // those!).
+
+/// How many seconds to sleep at minimum between runs in daemon
+/// mode. Keep in sync with the `Opts` docs above!
+const MIN_SLEEP_SECONDS_DEFAULT: f64 = 10.;
+
+/// Do not sleep more than that many seconds between runs.
+const MAX_SLEEP_SECONDS: f64 = 1000.;
+
+/// Max size of a single log file in bytes before it is renamed.
+const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
+
+/// Max number of log files before they are deleted.
+const MAX_LOG_FILES_DEFAULT: usize = 100;
 
 /// The index file in HTML format (the one viewed when using `--open`
 /// locally).
@@ -237,12 +253,42 @@ struct Opts {
     batch: bool,
 
     /// Run as a daemon, i.e. do not exit, but run batch conversion
-    /// repeatedly with the given number of seconds slept inbetween;
-    /// on errors this interval may be increased (exponential
-    /// backoff). Implies `--batch`. You may want to use `--quiet` at
-    /// the same time.
+    /// repeatedly. The given mode string must be one of "run",
+    /// "start", "stop", "restart", "status". "run" does not put the
+    /// process into the background, "start" (and "restart") does.
+    /// Implies `--batch`. You may want to use `--quiet` at the same
+    /// time. Also see `--daemon-sleep-time`. When using "start" mode,
+    /// writes logs to the directory `.git/xmlhub-build-index/logs/`
+    /// under the given `BASE_PATH`.
     #[clap(long)]
-    daemon: Option<f64>,
+    daemon: Option<DaemonMode>,
+
+    /// When running in one of the `--daemon` modes, use the given
+    /// number of seconds as the minimum time to sleep between
+    /// conversion runs; on errors this interval may be increased
+    /// (exponential backoff). The default is 10 seconds.
+    #[clap(long)]
+    daemon_sleep_time: Option<f64>,
+
+    /// When running in `--daemon start` mode, for the log messages,
+    /// use time stamps in the local time zone. The default is to use
+    /// UTC.
+    #[clap(long)]
+    localtime: bool,
+
+    /// When running in `--daemon start` mode, the maximum size of a
+    /// log file in bytes before the current file is renamed and a new
+    /// one is created instead. Default: 1000000.
+    #[clap(long)]
+    max_log_file_size: Option<u64>,
+
+    /// When running in `--daemon start` mode, the number of numbered
+    /// log files before the oldest files are automatically
+    /// deleted. Careful: will delete as many files as needed to get
+    /// their count down to the given number (if you give 0 it will
+    /// delete them all.) Default: 100.
+    #[clap(long)]
+    max_log_files: Option<usize>,
 
     /// Do not run external processes like git or browsers,
     /// i.e. ignore all the options asking to do so. Instead just say
@@ -2257,7 +2303,11 @@ fn main() -> Result<()> {
             base_path,
             no_branch_check,
             daemon,
+            daemon_sleep_time,
             quiet,
+            localtime,
+            max_log_file_size,
+            max_log_files,
         } = Opts::from_args();
 
         // Create uninitialized variables without the underscores,
@@ -2316,7 +2366,11 @@ fn main() -> Result<()> {
             base_path,
             no_branch_check,
             daemon,
+            daemon_sleep_time,
             quiet,
+            localtime,
+            max_log_file_size,
+            max_log_files,
         }
     };
 
@@ -2342,11 +2396,13 @@ fn main() -> Result<()> {
     let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path);
 
     // Retrieve this early to avoid committing and then erroring out on pushing
-    let default_remote_for_push = if opts.push || opts.batch {
+    let default_remote_for_push = if opts.push {
         Some(source_checkout.git_remote_get_default()?)
     } else {
         None
     };
+
+    let min_sleep_seconds = opts.daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
     // This function does not return after finishing, but exits the
     // process.
@@ -2360,25 +2416,54 @@ fn main() -> Result<()> {
         )
     };
 
-    if let Some(min_seconds) = opts.daemon {
-        // Daemon mode: carry out the work in a new child process for
-        // each run; never exit the controlling parent process which
-        // re-runs the work forever.
-        forking_loop(
-            LoopWithBackoff {
-                min_sleep_seconds: min_seconds,
-                max_sleep_seconds: 1000.,
-                verbose: !opts.quiet,
-                ..Default::default()
+    let daemon_base_dir = base_path.append(".git").append("xmlhub-build-index");
+    let _ = create_dir(&daemon_base_dir);
+
+    let main_lock_path = (&daemon_base_dir).append("main.lock");
+    let get_main_lock = || {
+        file_lock_nonblocking(&main_lock_path, true).map_err(|e| match e {
+            FileLockError::AlreadyLocked => {
+                anyhow!("xmlhub-build-index is already running on this repository, {base_path:?}")
+            }
+            _ => anyhow!("locking {main_lock_path:?}: {e}"),
+        })
+    };
+
+    if let Some(daemon_mode) = opts.daemon {
+        let daemon = Daemon {
+            base_dir: daemon_base_dir,
+            use_local_time: opts.localtime,
+            max_log_file_size: opts.max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
+            max_log_files: opts.max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
+            run: move || {
+                let _main_lock = get_main_lock()?;
+
+                // Daemon: repeatedly carry out the work by starting a new
+                // child process to do it (so that the child crashing or being
+                // killed due to out of memory conditions does not stop the
+                // daemon).
+                forking_loop(
+                    LoopWithBackoff {
+                        min_sleep_seconds,
+                        max_sleep_seconds: MAX_SLEEP_SECONDS,
+                        verbose: !opts.quiet,
+                        ..Default::default()
+                    },
+                    // The action run in the child process: build the index
+                    // once, throwing away the Ok return value (replacing it
+                    // with `()`, since `forking_loop` expects that, since
+                    // just exits the child with exit code 0 whenever the
+                    // action returned Ok).
+                    || build_index_once().map(|_exit_code| ()),
+                )
             },
-            // The action run in the child process: build the index
-            // once, throwing away the Ok return value (replacing it
-            // with `()`, since `forking_loop` expects that, since
-            // just exits the child with exit code 0 whenever the
-            // action returned Ok).
-            || build_index_once().map(|_exit_code| ()),
-        )
+        };
+        // Safe because we haven't started any threads yet at this
+        // point (right? What about rayon?)
+        unsafe { daemon.execute(daemon_mode) }?;
+        std::process::exit(0);
     } else {
+        let _main_lock = get_main_lock()?;
         std::process::exit(build_index_once()?);
     }
 }

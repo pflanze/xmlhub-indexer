@@ -102,10 +102,26 @@ Git repository, and open your browser. You could put that into a
 (shell) script that you could run without having to remember the
 arguments.
 
-(It should also be possible to set up a CI pipeline (continuous
-integration) on GitLab to run `xmlhub-build-index` automatically whenever
-the xmlhub repository receives changes on GitLab, but maybe that's too
-much magic and not worth the additional complexity.)
+Whereas the above `--batch` option runs the conversion just once, you
+can instead use the `--daemon` option with a mode argument, to run the
+indexer in a loop forever. Have a look at the `--help` text for
+associated options. There are two daemon modes, `run`, which keeps the
+process running in the foreground and has logging output appear on
+stdout/stderr (thus in the terminal unless you redirect it), and
+`start`, which puts the daemon into the background and redirects
+output to a set of log files with time stamps. For the `start` mode,
+there are also `stop`, `restart` and `status` arguments to the
+`--daemon` option, to stop or restart a previously started daemon, or
+to query whether one is running. The log files are written into the
+`.git/xmlhub-build-index/logs/` directory of the local clone of the
+xmlhub repository that you've specified when starting the daemon.
+
+Only one instance of a daemon can be started on the same repository at
+the same time. `xmlhub-build-index` also detects whenever two
+instances are running at the same time (daemon or other) and will exit
+with an error in that case.
+
+### Additional settings
 
 Besides those settings changeable via command line options, there are
 various others hard coded but defined near the top of the main program
