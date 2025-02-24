@@ -18,7 +18,7 @@ is automatically run immediately when xmlhub receives changes.
 You can download pre-built binaries from
 [xmlhub-indexer-binaries](https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer-binaries),
 currently for macOS on ARM only as it's currently built on the machine
-of the person making a release from (I may change this).
+of the person making a release (I could change this).
 
 ### From source
 
@@ -65,7 +65,7 @@ push` the changes. There is also a `--push` option that lets
 Note that `xmlhub-build-index` only reads files that have the suffix
 `.xml` *and are added to the repository*. If you create a new XML
 file, first run `git add path/to/your.xml` before running
-`xmlhub-build-index`.
+`xmlhub-build-index` (`git commit` is not strictly necessary, `add` is).
 
 If there are errors in any of the XML files, `xmlhub-build-index` will not
 overwrite the files by default, and instead just writes the errors to
@@ -91,8 +91,8 @@ the short options shown in the `--help` text instead):
     xmlhub-build-index path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
 or if you run it on a repository you never use interactively (e.g. on
-a server), this is more fail proof for automatic action (but deletes
-local changes to the repo!):
+a server), this is more fail proof for automatic action (but **deletes
+local changes to the repo!**):
 
     xmlhub-build-index path/to/your/checkout/of/xmlhub --batch
 
@@ -108,12 +108,12 @@ the xmlhub repository receives changes on GitLab, but maybe that's too
 much magic and not worth the additional complexity.)
 
 Besides those settings changeable via command line options, there are
-various others hard coded but defined and easily changeable near the
-top of the main program file,
-[`xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs), that can
-easily be changed, although you will need to recompile the program for
-that--see the [From source](#from-source) and [Maintaining and
-changing the program](#Maintaining-and-changing-the-program) sections.
+various others hard coded but defined near the top of the main program
+file, [`xmlhub-build-index.rs`](src/bin/xmlhub-build-index.rs), and
+can be changed easily enough, although you will need to recompile the
+program for that--see the [From source](#from-source) and [Maintaining
+and changing the program](#Maintaining-and-changing-the-program)
+sections.
 
 ## Details
 
