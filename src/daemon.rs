@@ -351,6 +351,11 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
                 // Start logging process
                 let (logging_r, logging_w) = pipe()?;
                 if let Some(_logging_pid) = unsafe { easy_fork() }? {
+                    // In the daemon process.
+
+                    // Close the reading end of the pipe that we don't
+                    // use, and redirect stdout and stderr into the
+                    // pipe.
                     close(logging_r)?;
                     dup2(logging_w, 1)?;
                     dup2(logging_w, 2)?;
@@ -359,6 +364,16 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
 
                     (self.run)()?;
                 } else {
+                    // In the logging process.
+
+                    // Put us in a new session again, to prevent the
+                    // logging from being killed when the daemon is,
+                    // so that we get all output and can log when the
+                    // daemon goes away.
+                    let _logging_session_pid = setsid()?;
+
+                    // Never writing from this process, close so that
+                    // we will detect when the daemon ends.
                     close(logging_w)?;
 
                     // XX add a fall back to copying to stderr if
@@ -381,17 +396,28 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
                         input_line.clear();
                         output_line.clear();
                         let nread = messagesfh.read_line(&mut input_line)?;
-                        if nread == 0 {
-                            break;
-                        }
+                        let daemon_ended = nread == 0;
                         if self.use_local_time {
                             write!(&mut output_line, "{}", Local::now())?;
                         } else {
                             write!(&mut output_line, "{}", Utc::now())?;
                         };
-                        writeln!(&mut output_line, "\t{}", input_line.trim_end())?;
+                        writeln!(
+                            &mut output_line,
+                            "\t{}",
+                            if daemon_ended {
+                                "daemon ended"
+                            } else {
+                                input_line.trim_end()
+                            }
+                        )?;
+
                         logfh.write_all(&output_line)?;
                         total_written += output_line.len() as u64;
+
+                        if daemon_ended {
+                            break;
+                        }
 
                         if total_written >= self.max_log_file_size {
                             logfh.flush()?; // well, not buffering anyway
