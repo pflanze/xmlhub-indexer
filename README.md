@@ -102,6 +102,8 @@ Git repository, and open your browser. You could put that into a
 (shell) script that you could run without having to remember the
 arguments.
 
+### Running on a server
+
 Whereas the above `--batch` option runs the conversion just once, you
 can instead use the `--daemon` option with a mode argument, to run the
 indexer in a loop forever. Have a look at the `--help` text for
@@ -120,6 +122,13 @@ Only one instance of a daemon can be started on the same repository at
 the same time. `xmlhub-build-index` also detects whenever two
 instances are running at the same time (daemon or other) and will exit
 with an error in that case.
+
+There is a script
+[`examples/xmlhub-build-index-daemon`](examples/xmlhub-build-index-daemon)
+that you could adapt for starting the server process from
+e.g. crontab, with some limits to terminate the indexer if it uses too
+much RAM or CPU due to a bug or abuse by the people uploading XML
+files.
 
 ### Additional settings
 
