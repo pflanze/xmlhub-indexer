@@ -52,10 +52,15 @@ struct Opts {
     no_publish_binary: bool,
 
     /// Sign the Git tags with your PGP key, via the git tag -s
-    /// option. Note that you probably also need to give the
-    /// `--local-user` option.
+    /// option. This is the default. Note that you probably also need
+    /// to give the `--local-user` option.
     #[clap(long)]
     sign: bool,
+
+    /// Do not sign the Git tags. Use this only if you have decided
+    /// not to sign releases and binaries. The default is to sign.
+    #[clap(long)]
+    no_sign: bool,
 
     /// When signing, the name of the key to use. This is passed on to
     /// `git tag`, which passes it to `gpg`. The key fingerprint works
@@ -296,12 +301,18 @@ fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
 fn main() -> Result<()> {
     let opts = Opts::from_args();
 
-    if opts.sign {
+    let sign = if opts.sign && opts.no_sign {
+        bail!("conflicting sign options given")
+    } else {
+        !opts.no_sign
+    };
+
+    if sign {
         if opts.local_user.is_none() {
             if !opts.no_require_local_user {
                 bail!(
-                    "you have given --sign but no --local-user option; this will \
-                     likely fail; if you want to try that, please add the \
+                    "you want signing but have not provided the --local-user option; \
+                     this will likely fail; if you want to try that, please add the \
                      --no-require-local-user option"
                 )
             }
@@ -383,7 +394,7 @@ fn main() -> Result<()> {
     let tag_effect: Box<dyn Effect<Requires = (), Provides = SourceReleaseTag>> = if need_tag {
         Box::new(CreateTag {
             tag_name: new_version_tag_string.clone(),
-            sign: opts.sign,
+            sign,
             local_user: opts.local_user.clone(),
         })
     } else {
@@ -485,7 +496,7 @@ fn main() -> Result<()> {
                     source_version_tag: new_version_tag_string.clone(),
                     hostname: hostname.clone(),
                     partial_commit_message,
-                    sign: opts.sign,
+                    sign,
                     local_user: opts.local_user.clone(),
                     push_to_remote,
                 })
