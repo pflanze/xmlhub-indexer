@@ -78,9 +78,13 @@ struct Opts {
     no_require_local_user: bool,
 
     /// Push the branch and Git tag to the default remote (presumed to
-    /// be the upstream repository).
+    /// be the upstream repository). This is the default.
     #[clap(long)]
     push: bool,
+
+    /// Do not push the branch and Git tag. The default is to push.
+    #[clap(long)]
+    no_push: bool,
 }
 
 // Don't need to store tag_name String in here since it's constant and
@@ -307,6 +311,12 @@ fn main() -> Result<()> {
         !opts.no_sign
     };
 
+    let push = if opts.push && opts.no_push {
+        bail!("conflicting push options given")
+    } else {
+        !opts.no_push
+    };
+
     if sign {
         if opts.local_user.is_none() {
             if !opts.no_require_local_user {
@@ -405,7 +415,7 @@ fn main() -> Result<()> {
     };
 
     let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
-        if opts.push {
+        if push {
             Box::new(PushSourceToRemote {
                 tag_name: new_version_tag_string.clone(),
                 remote_name: SOURCE_CHECKOUT.git_remote_get_default()?,
@@ -413,7 +423,7 @@ fn main() -> Result<()> {
         } else {
             NoOp::providing(
                 SourcePushed,
-                "not pushing tag/branch because --push option was not given".into(),
+                "not pushing tag/branch because the --no-push option was given".into(),
             )
         };
 
@@ -462,7 +472,7 @@ fn main() -> Result<()> {
             BINARIES_CHECKOUT.check_current_branch()?;
             BINARIES_CHECKOUT.check_status()?;
 
-            let push_to_remote = if opts.push {
+            let push_to_remote = if push {
                 Some(BINARIES_CHECKOUT.git_remote_get_default()?)
             } else {
                 None

@@ -84,7 +84,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             || {
                 anyhow!(
                     "branch {:?} in {:?} does not have a default remote set, \
-                     you can't use the `--push` option because of that",
+                     you can't push because of that",
                     self.branch_name,
                     self.working_dir_path()
                 )
