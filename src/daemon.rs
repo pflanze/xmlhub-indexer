@@ -386,7 +386,14 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
                     // (Instead of BufReader and read_line, just read
                     // chunks? No, since the sending side doesn't
                     // actually buffer ~at all by default!)
-                    let mut messagesfh = BufReader::new(unsafe { File::from_raw_fd(logging_r) });
+                    let mut messagesfh = BufReader::new(unsafe {
+                        // Safe because we're careful not to mess up
+                        // with the file descriptors (we're not giving
+                        // access to `messagesfh` from outside this
+                        // function, and we're not calling `close` on
+                        // this fd in this process)
+                        File::from_raw_fd(logging_r)
+                    });
 
                     let mut input_line = String::new();
                     let mut output_line = Vec::new();
