@@ -329,16 +329,18 @@ of the above steps automatically. It runs tests and collects
 information, then shows a summary of the changes that will be carried
 out and asks for confirmation before acting.
 
-Use the `--help` option for more information. It is recommended to use
-both the `--push` and `--sign` options. From within the
-"xmlhub-indexer" directory run:
+Use the `--help` option for more information. By default, both
+`--sign` and `--push` are active, which is recommended; you can
+disable those with the `--no-sign` or `--no-push` options. From within
+the "xmlhub-indexer" directory run (see below for how to get your key
+fingerprint):
 
-    cargo run --bin make-xmlhub-indexer-release -- --sign --push
+    cargo run --bin make-xmlhub-indexer-release -- --local-user "...your key fingerprint.."
 
 Caveats:
 
 - Unlike `xmlhub-build-index`, it does not currently have a `--pull`
-  option; if you use the `--push` option and the "git push" step fails
+  option; if you use pushing and the "git push" step fails
   due to the remote (GitLab) having been updated by someone else in
   the meantime, you're expected to pull (and verify) the changes
   yourself, then re-run the `make-xmlhub-indexer-release` program.
