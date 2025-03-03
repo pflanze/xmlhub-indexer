@@ -60,9 +60,17 @@ struct Opts {
     /// When signing, the name of the key to use. This is passed on to
     /// `git tag`, which passes it to `gpg`. The key fingerprint works
     /// best. If not given, signing assumes the default key name,
-    /// which may fail if there are multiple keys.
+    /// which may fail; you now need to give the
+    /// `--no-require-local-user` option to allow that.
     #[clap(long)]
     local_user: Option<String>,
+
+    /// In my experience on the Mac, the `--local-user` option is
+    /// needed when signing; if you want to try it anyway, omit the
+    /// `--local-user` option and give this option instead, then tell
+    /// me to change the program if it works.
+    #[clap(long)]
+    no_require_local_user: bool,
 
     /// Push the branch and Git tag to the default remote (presumed to
     /// be the upstream repository).
@@ -287,6 +295,18 @@ fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
 
 fn main() -> Result<()> {
     let opts = Opts::from_args();
+
+    if opts.sign {
+        if opts.local_user.is_none() {
+            if !opts.no_require_local_user {
+                bail!(
+                    "you have given --sign but no --local-user option; this will \
+                     likely fail; if you want to try that, please add the \
+                     --no-require-local-user option"
+                )
+            }
+        }
+    }
 
     let unless_dry_run = |res: Result<()>| -> Result<()> {
         match res {
