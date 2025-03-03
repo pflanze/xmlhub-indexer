@@ -78,7 +78,8 @@ struct Opts {
     no_require_local_user: bool,
 
     /// Push the branch and Git tag to the default remote (presumed to
-    /// be the upstream repository). This is the default.
+    /// be the upstream repository), for both the source and binary
+    /// repositories. This is the default.
     #[clap(long)]
     push: bool,
 
