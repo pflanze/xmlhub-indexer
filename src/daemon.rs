@@ -295,7 +295,8 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
         Ok(())
     }
 
-    // XX this should be marked (thread-)unsafe
+    /// Note: must be run while there are no running threads, panics
+    /// otherwise!
     pub fn start(self) -> anyhow::Result<()> {
         // 1. get exclusive lock on pid file; 2. get exclusive
         // `is_running` lock; 3. empty the pid file ASAP to invalidate
@@ -329,7 +330,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
         pid_lock.seek(std::io::SeekFrom::Start(0))?;
 
         // 4. fork
-        if let Some(_pid) = unsafe { easy_fork() }? {
+        if let Some(_pid) = easy_fork()? {
             // The child is holding onto the locks; apparently flock
             // acts globally when on the same filehandle, so we have
             // to disable the locks here.
@@ -350,7 +351,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
 
                 // Start logging process
                 let (logging_r, logging_w) = pipe()?;
-                if let Some(_logging_pid) = unsafe { easy_fork() }? {
+                if let Some(_logging_pid) = easy_fork()? {
                     // In the daemon process.
 
                     // Close the reading end of the pipe that we don't
@@ -453,10 +454,9 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
         Ok(())
     }
 
-    /// The unsafety refers to threads (right?); you can use this
-    /// safely if you haven't started any threads yet. (todo: could we
-    /// runtime check for running threads and omit the unsafe marker?)
-    pub unsafe fn execute(self, mode: DaemonMode) -> anyhow::Result<()> {
+    /// Note: must be run while there are no running threads, panics
+    /// otherwise!
+    pub fn execute(self, mode: DaemonMode) -> anyhow::Result<()> {
         match mode {
             DaemonMode::Run => {
                 (self.run)()?;

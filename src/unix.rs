@@ -12,18 +12,25 @@ use nix::{
     sys::signal::Signal,
     unistd::{fork, ForkResult, Pid},
 };
+use num_threads::is_single_threaded;
 
 // Don't make it overly complicated, please. The original API is
 // simple enough. If a Pid is given, it's the parent.
 //
-// Do not swallow the unsafe. Fork should be safe in our usage
-// though: it should be safe even with allocation in the child as:
-//  - we should not be using threading in this program (libs, though?)
-//  - isn't libc's malloc safe anyway with fork?
-//  - and we're not (consciously) touching any other mutexes in the children.
-//
-pub unsafe fn easy_fork() -> Result<Option<Pid>, Errno> {
-    match fork()? {
+/// This function can only be run if there are no other threads
+/// running; it checks and panics if there are!
+pub fn easy_fork() -> Result<Option<Pid>, Errno> {
+    if let Some(single) = is_single_threaded() {
+        if !single {
+            panic!("easy_fork: other threads are running, refusing to fork")
+        }
+    } else {
+        panic!("easy_fork: can't determine if other threads are running")
+    }
+    match unsafe {
+        // Safe because there are no other threads (we checked above).
+        fork()
+    }? {
         ForkResult::Parent { child, .. } => Ok(Some(child)),
         ForkResult::Child => Ok(None),
     }

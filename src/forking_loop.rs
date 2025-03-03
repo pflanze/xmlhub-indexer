@@ -12,6 +12,9 @@ use crate::{
 /// treat both error returns and crashes / non-0 exits as errors that
 /// make it back off before retrying, using the given
 /// `LoopWithBackoff` config.
+///
+/// Note: must be run while there are no running threads, panics
+/// otherwise!
 pub fn forking_loop<E: Display>(
     config: LoopWithBackoff,
     // TODO: job could really be an FnOnce, since it's the last thing
@@ -23,7 +26,7 @@ where
     anyhow::Error: From<E>,
 {
     config.run(|| -> Result<()> {
-        if let Some(pid) = unsafe { easy_fork() }? {
+        if let Some(pid) = easy_fork()? {
             // Parent process
 
             // XXX todo: set up a thread that kills the pid after a timeout.

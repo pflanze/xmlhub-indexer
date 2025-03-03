@@ -28,3 +28,4 @@ rayon = "=1.5.3"
 # dependencies
 toml = "0.5"
 nix = "0.24.3"
+num_threads  = "=0.1.6"

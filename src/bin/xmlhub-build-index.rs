@@ -2456,9 +2456,7 @@ fn main() -> Result<()> {
                 )
             },
         };
-        // Safe because we haven't started any threads yet at this
-        // point (right? What about rayon?)
-        unsafe { daemon.execute(daemon_mode) }?;
+        daemon.execute(daemon_mode)?;
         std::process::exit(0);
     } else {
         let _main_lock = get_main_lock()?;
