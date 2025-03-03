@@ -2404,8 +2404,6 @@ fn main() -> Result<()> {
 
     let min_sleep_seconds = opts.daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
-    // This function does not return after finishing, but exits the
-    // process.
     let build_index_once = || {
         build_index(
             &opts,
