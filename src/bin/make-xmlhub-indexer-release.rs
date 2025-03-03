@@ -51,7 +51,9 @@ struct Opts {
     #[clap(long)]
     no_publish_binary: bool,
 
-    /// Sign the Git tags with your PGP key, via the git tag -s option
+    /// Sign the Git tags with your PGP key, via the git tag -s
+    /// option. Note that you probably also need to give the
+    /// `--local-user` option.
     #[clap(long)]
     sign: bool,
 
