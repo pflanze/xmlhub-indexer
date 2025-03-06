@@ -179,7 +179,7 @@ impl SemVersion {
 
     /// Increment the second part.
     pub fn next_minor(&self) -> Self {
-        let mut ns: Vec<u32> = self.0[0..1].iter().copied().collect();
+        let mut ns: Vec<u32> = self.0[0..1].to_vec();
         ns.push(self.0.get(1).copied().unwrap_or(0) + 1);
         Self(ns)
     }
@@ -262,7 +262,11 @@ impl Display for SemVersion {
 }
 
 fn parse_semversion_without_context(s: &str) -> Result<SemVersion> {
-    let versionstring = if s.starts_with("v") { &s[1..] } else { s };
+    let versionstring = if let Some(rest) = s.strip_prefix("v") {
+        rest
+    } else {
+        s
+    };
     if versionstring.is_empty() {
         bail!("missing version number after optional 'v' character")
     }
@@ -455,7 +459,7 @@ impl PartialOrd for GitVersion<SemVersion> {
         if let Some((depth_left, _sha1_left)) = &self.past_tag {
             if let Some((depth_right, _sha1_right)) = &other.past_tag {
                 if self.version == other.version {
-                    depth_left.partial_cmp(&depth_right)
+                    depth_left.partial_cmp(depth_right)
                 } else {
                     // XX proper logging
                     // eprintln!(
@@ -538,7 +542,7 @@ impl SemVerOrd for GitVersion<SemVersion> {
 
         // Use this as ordering in SemVerOrdResult? If it is given,
         // anyway.
-        let ord_partialord = self.partial_cmp(&other);
+        let ord_partialord = self.partial_cmp(other);
 
         let cmp = self.version.semver_cmp(&other.version);
         match cmp {

@@ -3,6 +3,10 @@ name = "xmlhub-indexer"
 version = "0.1.0"
 edition = "2021"
 
+[lints.clippy]
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+
 [dependencies]
 ahtml = { version = "0.7.0" }
 auri = { version = "0.1.1" }

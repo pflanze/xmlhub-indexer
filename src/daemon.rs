@@ -161,7 +161,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
             let entry = entry?;
             let file_name = entry.file_name();
             if let Some(file_name) = file_name.to_str() {
-                if let Some((numstr, _)) = file_name.split_once(|c| c == '.') {
+                if let Some((numstr, _)) = file_name.split_once('.') {
                     if let Ok(num) = usize::from_str(numstr) {
                         numbered_logfiles.push((num, entry.path()));
                     }
@@ -181,7 +181,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
         if num_numbered_logfiles > self.max_log_files {
             let delete_n = num_numbered_logfiles - self.max_log_files;
             for (_, path) in &numbered_logfiles[0..delete_n] {
-                remove_file(&path).with_context(|| anyhow!("deleting log file {path:?}"))?;
+                remove_file(path).with_context(|| anyhow!("deleting log file {path:?}"))?;
                 // eprintln!("deleted log file {path:?}"); --ah, can't, no logging output
             }
         };

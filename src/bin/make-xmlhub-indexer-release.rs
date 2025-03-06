@@ -218,8 +218,7 @@ impl Effect for ReleaseBinary {
         );
 
         create_dir_levels_if_necessary(
-            &self
-                .copy_binary_to
+            self.copy_binary_to
                 .parent()
                 .expect("file path has parent dir"),
             2,

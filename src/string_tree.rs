@@ -24,7 +24,7 @@ impl<'s> StringTree<'s> {
         match self {
             StringTree::Leaf(s) => out.push_str(s),
             StringTree::StrLeaf(s) => out.push_str(s),
-            StringTree::ArcLeaf(s) => out.push_str(&*s),
+            StringTree::ArcLeaf(s) => out.push_str(s),
             StringTree::Branching(vec) => {
                 for v in vec {
                     v.print_to_string(out);
@@ -41,6 +41,11 @@ impl<'s> StringTree<'s> {
             StringTree::ArcLeaf(s) => s.len(),
             StringTree::Branching(v) => v.iter().map(|s| s.len()).sum(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        // XX optimize?
+        self.len() == 0
     }
 
     pub fn write_all(&self, out: &mut impl Write) -> Result<(), std::io::Error> {
@@ -64,17 +69,19 @@ impl<'s> StringTree<'s> {
         // knows the size of the buffer to allocate, but needs more
         // temporary space.
         if false {
-            let mut out = File::create(&path)?;
+            let mut out = File::create(path)?;
             out.write_all(self.to_string().as_bytes())?;
             out.flush()
         } else {
-            let mut out = BufWriter::new(File::create(&path)?);
+            let mut out = BufWriter::new(File::create(path)?);
             self.write_all(&mut out)?;
             out.flush()
         }
     }
 }
 
+// XX clippy: "prefer implementing `Display` instead" (but I know; I
+// was thinking simplicity or performance?)
 impl<'s> ToString for StringTree<'s> {
     fn to_string(&self) -> String {
         let mut out = String::with_capacity(self.len());

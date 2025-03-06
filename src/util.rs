@@ -65,9 +65,7 @@ pub fn normalize_whitespace(s: &str) -> String {
     let mut last_was_whitespace = false;
     for c in s.chars() {
         if c.is_whitespace() {
-            if last_was_whitespace {
-                ()
-            } else {
+            if !last_was_whitespace {
                 result.push(' ');
                 last_was_whitespace = true;
             }

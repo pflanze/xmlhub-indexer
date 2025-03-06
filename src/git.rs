@@ -212,7 +212,7 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
             continue;
         }
         let line = decode_line(line_bytes)?;
-        let record = parse_git_status_record(&line).with_context(|| {
+        let record = parse_git_status_record(line).with_context(|| {
             anyhow!(
                 "decoding git status output from directory {:?}: {:?}",
                 base_path.to_string_lossy(),
@@ -280,11 +280,11 @@ impl Iterator for GitLogIterator {
         let mut parts_i = 0;
         let try_finish = |parts_i: usize, parts: [Option<String>; NUM_PARTS]| {
             if parts_i == NUM_PARTS {
-                return parts_to_entry(parts);
+                parts_to_entry(parts)
             } else if parts_i == 0 {
-                return None;
+                None
             } else {
-                return Some(Err(anyhow!("unfinished entry reading from git log")));
+                Some(Err(anyhow!("unfinished entry reading from git log")))
             }
         };
         loop {
@@ -347,12 +347,12 @@ impl Iterator for GitLogIterator {
                         // Commit message
                         if line == "\n" {
                             // ignore; sigh
-                        } else if line.starts_with("    ") {
+                        } else if let Some(rest) = line.strip_prefix("    ") {
                             if parts[parts_i].is_none() {
                                 parts[parts_i] = Some(String::new());
                             }
                             let message = parts[parts_i].as_mut().unwrap();
-                            message.push_str(&line[4..]);
+                            message.push_str(rest);
                         } else if line.starts_with(':') {
                             // ignore for now; but switch forward
                             parts_i += 1;

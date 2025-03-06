@@ -22,14 +22,11 @@ pub struct CheckoutContext<'s, P: AsRef<Path>> {
 }
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
-    pub fn replace_working_dir_path<'p, P2: AsRef<Path>>(
-        &'s self,
-        path: P2,
-    ) -> CheckoutContext<'p, P2>
+    pub fn replace_working_dir_path<'p, P2>(&'s self, path: P2) -> CheckoutContext<'p, P2>
     where
         's: 'p,
         P: Clone,
-        P2: 'p, // ?
+        P2: AsRef<Path> + 'p, // ?
     {
         let CheckoutContext {
             working_dir_path: _,

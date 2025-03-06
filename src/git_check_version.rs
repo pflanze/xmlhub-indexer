@@ -143,20 +143,23 @@ fn check_version(
         }
     }
 
-    match program_version.semver_cmp(&data_version) {
+    match program_version.semver_cmp(data_version) {
         // XX so, equivalent only happens when there is no wip right?
-        SemVerOrdResult::Equivalent(ord) => return Ok(ord),
+        SemVerOrdResult::Equivalent(ord) => Ok(ord),
         SemVerOrdResult::Upgrade(ord) => {
-            return decide_on_ord!(ord, {}, GitCheckVersionError::ProgramTooOld)
+            decide_on_ord!(ord, {}, GitCheckVersionError::ProgramTooOld)
         }
         // XX so, we can't reconstruct if semantic version was same ?
         SemVerOrdResult::Undecidable(reason, ord) => {
             let ok = || Ok(ord);
             let potentially_too_old = || {
-                decide_on_ord!(ord, {reason: reason,},
-                                  GitCheckVersionError::ProgramPotentiallyTooOld)
+                decide_on_ord!(
+                    ord,
+                    { reason: reason, },
+                    GitCheckVersionError::ProgramPotentiallyTooOld
+                )
             };
-            return match reason {
+            match reason {
                 UndecidabilityReason::Wip(prog_is_wip, data_is_wip) => {
                     match (prog_is_wip, data_is_wip, ord) {
                         (true, false, Ordering::Less) => potentially_too_old(),
@@ -167,10 +170,10 @@ fn check_version(
                     }
                 }
                 _ => potentially_too_old(),
-            };
+            }
         }
         SemVerOrdResult::FailedPartialOrd(vals_string) => {
-            return Err(GitCheckVersionError::CouldNotCompare {
+            Err(GitCheckVersionError::CouldNotCompare {
                 message: vals_string,
                 program_version: program_version.clone(),
                 data_version: data_version.clone(),

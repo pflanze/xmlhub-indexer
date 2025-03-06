@@ -4,7 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{create_dir, File},
     io::{stderr, BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -902,14 +902,14 @@ struct FileInfo {
 // below), it needs to be orderable. Only `id` is relevant for that
 // (and the other types have no Ord implementation), thus write
 // implementations manually:
-impl PartialOrd for FileInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
-    }
-}
 impl Ord for FileInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.id.cmp(&other.id)
+    }
+}
+impl PartialOrd for FileInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 impl PartialEq for FileInfo {
@@ -1253,7 +1253,7 @@ impl<'f> Folder<'f> {
             for (file_name, file_info) in &self.files {
                 file_info_boxes.push(file_info.to_info_box_html(&html, "box", file_name)?)?;
             }
-            Some(html.preserialize(html.div([], file_info_boxes)?)?.into())
+            Some(html.preserialize(html.div([], file_info_boxes)?)?)
         };
 
         let subsections = self
@@ -1520,7 +1520,7 @@ fn build_index_section(
                     html.nbsp()?,
                     html.a(
                         [att("href", rel_path), att("title", "Open the file")],
-                        document_symbol(&*html)?,
+                        document_symbol(&html)?,
                     )?,
                 ],
             )?;
@@ -1536,10 +1536,7 @@ fn build_index_section(
     Ok(Section {
         in_red: false,
         title: Some(attribute_key.as_ref().into()),
-        intro: Some(
-            html.preserialize(html.dl([att("class", "key_dl")], body)?)?
-                .into(),
-        ),
+        intro: Some(html.preserialize(html.dl([att("class", "key_dl")], body)?)?),
         subsections: vec![],
     })
 }
@@ -1708,7 +1705,7 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
 /// the exit code to exit the program with.
 fn build_index(
     opts: &Opts,
-    base_path: &PathBuf,
+    base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
     source_checkout: &CheckoutContext<&PathBuf>,
     default_remote_for_push: &Option<String>,
@@ -1735,7 +1732,7 @@ fn build_index(
         if opts.pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(&base_path, &["pull"], opts.quiet)? {
+                if !git(base_path, &["pull"], opts.quiet)? {
                     bail!("git pull failed")
                 }
             }
@@ -1744,7 +1741,7 @@ fn build_index(
         if opts.batch {
             check_dry_run! {
                 message: format!("git remote update {default_remote_for_push:?}"),
-                if !git(&base_path, &["remote", "update", default_remote_for_push],
+                if !git(base_path, &["remote", "update", default_remote_for_push],
                         opts.quiet)? {
                     bail!("git remote update {default_remote_for_push:?} failed")
                 }
@@ -1757,7 +1754,7 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_name:?}"),
-                if !git(&base_path, &["reset", "--hard", &remote_banch_name], opts.quiet)? {
+                if !git(base_path, &["reset", "--hard", &remote_banch_name], opts.quiet)? {
                     bail!("git reset --hard {remote_banch_name:?} failed")
                 }
             }
@@ -1773,7 +1770,7 @@ fn build_index(
         if !opts.no_version_check {
             // Verify that this is not an outdated version of the program.
             let found = git_log_version_checker.check_git_log(
-                &base_path,
+                base_path,
                 &[HTML_FILE.path_from_repo_top, MD_FILE.path_from_repo_top],
                 Some(format!(
                     "you should update your copy of the {PROGRAM_NAME} program. \
@@ -1796,17 +1793,14 @@ fn build_index(
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = git_ls_files(&base_path)?;
-        paths = paths
-            .into_iter()
-            .filter(|path| {
-                if let Some(ext) = path.extension() {
-                    ext.eq_ignore_ascii_case("xml")
-                } else {
-                    false
-                }
-            })
-            .collect();
+        let mut paths = git_ls_files(base_path)?;
+        paths.retain(|path| {
+            if let Some(ext) = path.extension() {
+                ext.eq_ignore_ascii_case("xml")
+            } else {
+                false
+            }
+        });
         // Sort entries ourselves out of a worry that git ls-files
         // might not guarantee a sort order. (The sort order
         // determines the ID assignment that happens later, and those
@@ -1922,7 +1916,7 @@ fn build_index(
                 Ok(Some(Section {
                     in_red: true,
                     title: Some("Errors".into()),
-                    intro: Some(html.preserialize(html.dl([], vec)?)?.into()),
+                    intro: Some(html.preserialize(html.dl([], vec)?)?),
                     subsections: vec![],
                 }))
             }
@@ -1988,10 +1982,10 @@ fn build_index(
                     [],
                     [
                         html.h1([], html.text(title)?)?,
-                        make_intro(false, &html)?,
+                        make_intro(false, html)?,
                         html.h2([], html.text("Contents")?)?,
                         html.preserialized(toc_html.clone())?,
-                        html.div([], toplevel_section.to_html(NumberPath::empty(), &html)?)?,
+                        html.div([], toplevel_section.to_html(NumberPath::empty(), html)?)?,
                         if opts.timestamp {
                             html.div(
                                 [],
@@ -2003,14 +1997,14 @@ fn build_index(
                         } else {
                             html.empty_node()?
                         },
-                        empty_space_element(40, &*html)?,
+                        empty_space_element(40, html)?,
                     ],
                 )?,
             ],
         )
     };
 
-    fn flatten_as_paragraphs<'t>(vecs: Vec<Vec<StringTree<'t>>>) -> Vec<StringTree<'t>> {
+    fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {
         intersperse_with(vecs.into_iter().flatten(), || "\n\n".into()).collect()
     }
 
@@ -2110,7 +2104,7 @@ fn build_index(
     if write_errors_to_stderr {
         let mut out = stderr().lock();
         (|| -> Result<()> {
-            write!(&mut out, "Indexing errors:\n")?;
+            writeln!(&mut out, "Indexing errors:")?;
             for file_errors in file_errorss {
                 file_errors.print_plain(&mut out)?
             }
@@ -2235,7 +2229,7 @@ fn build_index(
                         message: format!("git push {default_remote_for_push:?}"),
                         git_push::<&str>(
                             source_checkout.working_dir_path,
-                            &default_remote_for_push,
+                            default_remote_for_push,
                             &[],
                             opts.quiet
                         )?
@@ -2261,7 +2255,7 @@ fn build_index(
             // let mut path = base_path.clone();
             // path.push(HTML_FILENAME);
             // path.canonicalize().as_os_str()
-            spawn_browser(&base_path, &[HTML_FILE.path_from_repo_top.as_ref()])?;
+            spawn_browser(base_path, &[HTML_FILE.path_from_repo_top.as_ref()])?;
         } else {
             eprintln!(
                 "Note: not opening browser because the files weren't written due \
@@ -2407,7 +2401,7 @@ fn main() -> Result<()> {
     let build_index_once = || {
         build_index(
             &opts,
-            &base_path,
+            base_path,
             &git_log_version_checker,
             &source_checkout,
             &default_remote_for_push,

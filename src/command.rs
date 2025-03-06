@@ -203,11 +203,11 @@ fn check_exitstatus_context<'t, P: AsRef<OsStr> + Debug, A: AsRef<OsStr> + Debug
 ) -> impl Fn() -> anyhow::Error + 't {
     move || {
         let (cmd_args, in_dir, output) = (
-            cmd_args(&cmd, arguments),
+            cmd_args(cmd, arguments),
             in_directory.to_string_lossy().to_string(),
             DisplayOutput {
                 available_captures,
-                output: &output,
+                output,
                 indent: "\t",
             },
         );

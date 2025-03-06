@@ -24,7 +24,7 @@ impl<'p> AppendToPath for &'p PathBuf {
     }
 }
 
-impl<'p> AppendToPath for PathBuf {
+impl AppendToPath for PathBuf {
     fn append(mut self, segment: &str) -> PathBuf {
         self.push(segment);
         self

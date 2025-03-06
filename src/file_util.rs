@@ -16,7 +16,6 @@ pub fn open_rw<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<File> {
     // truncates before we have the lock.
     OpenOptions::new()
         .read(true)
-        .write(true)
         .create(true)
         .append(true)
         .open(path.as_ref())
@@ -29,7 +28,6 @@ pub fn open_append<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<File> {
     // Can`t use `File::create` since that
     // truncates before we have the lock.
     OpenOptions::new()
-        .write(true)
         .create(true)
         .append(true)
         .open(path.as_ref())
