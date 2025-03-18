@@ -13,7 +13,7 @@ cargo build --quiet --release
 # Limits on real memory (RSS) is complicated on Linux, thus set limit
 # on virtual memory only, for now.
 
-# Virtual memory limit in KB, must be large because xmlhub-build-index
+# Virtual memory limit in KB, must be large because xmlhub
 # allocates some large vectors that are only partially used, so even
 # though the real used memory is much lower, we must allow for it to
 # allocate those large vectors.
@@ -26,7 +26,7 @@ ulimit -v 3000000
 # time. Should set this limit in the child from within Rust!
 ulimit -t 3
 
-exec target/release/xmlhub-build-index "${XMLHUB_CHECKOUT-$HOME/tmp/xmlhub}" \
+exec target/release/xmlhub "${XMLHUB_CHECKOUT-$HOME/tmp/xmlhub}" \
      --localtime --max-log-file-size 100000 --max-log-files 20 --quiet \
      --daemon "$@"
 

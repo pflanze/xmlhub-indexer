@@ -227,7 +227,7 @@ struct Opts {
     pull: bool,
 
     /// Do not add and commit the output files to the Git
-    /// repository. It's better to let `xmlhub-build-index` do that (the
+    /// repository. It's better to let `xmlhub` do that (the
     /// default) rather than doing it manually, since it adds its
     /// version information to the commit message and later
     /// invocations of it check whether it needs upgrading. So this
@@ -258,7 +258,7 @@ struct Opts {
     /// process into the background, "start" (and "restart") does.
     /// Implies `--batch`. You may want to use `--quiet` at the same
     /// time. Also see `--daemon-sleep-time`. When using "start" mode,
-    /// writes logs to the directory `.git/xmlhub-build-index/logs/`
+    /// writes logs to the directory `.git/xmlhub/logs/`
     /// under the given `BASE_PATH`.
     #[clap(long)]
     daemon: Option<DaemonMode>,
@@ -2408,14 +2408,14 @@ fn main() -> Result<()> {
         )
     };
 
-    let daemon_base_dir = base_path.append(".git").append("xmlhub-build-index");
+    let daemon_base_dir = base_path.append(".git").append("xmlhub");
     let _ = create_dir(&daemon_base_dir);
 
     let main_lock_path = (&daemon_base_dir).append("main.lock");
     let get_main_lock = || {
         file_lock_nonblocking(&main_lock_path, true).map_err(|e| match e {
             FileLockError::AlreadyLocked => {
-                anyhow!("xmlhub-build-index is already running on this repository, {base_path:?}")
+                anyhow!("xmlhub is already running on this repository, {base_path:?}")
             }
             _ => anyhow!("locking {main_lock_path:?}: {e}"),
         })

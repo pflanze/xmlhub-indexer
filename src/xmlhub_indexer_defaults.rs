@@ -2,13 +2,13 @@ use crate::checkout_context::CheckoutContext;
 
 /// The relative path from `SOURCE_CHECKOUT.working_dir_path` to the
 /// compiled binary of the main program.
-pub const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub-build-index";
+pub const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub";
 
 /// Information on the Git checkout of the xmlhub-indexer repo; used
-/// by both xmlhub-build-index.rs and make-xmlhub-indexer-release.rs
+/// by both xmlhub.rs and make-xmlhub-indexer-release.rs
 pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     // This path is only used by make-xmlhub-indexer-release.rs and
-    // replaced with the program argument for xmlhub-build-index.rs
+    // replaced with the program argument for xmlhub.rs
     working_dir_path: ".",
     branch_name: "master",
     supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git",

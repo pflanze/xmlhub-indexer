@@ -19,7 +19,7 @@ use xmlhub_indexer::{
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
 /// Produce a new release of the xmlhub-indexer repository, both the
-/// source code as well as a `xmlhub-build-index` binary if on macOS
+/// source code as well as a `xmlhub` binary if on macOS
 /// or Linux. Also creates a new version tag if necessary.
 struct Opts {
     /// By default, the program shows the actions to be carried out
@@ -34,7 +34,7 @@ struct Opts {
     yes: bool,
 
     /// Use this option if you're confident that the files written by
-    /// `xmlhub-build-index` are not created differently due to changes in
+    /// `xmlhub` are not created differently due to changes in
     /// the program (note: even formatting changes matter: the aim of
     /// the versioning is to prevent a situation where different
     /// people each run different versions of the xmlhub-indexer and
