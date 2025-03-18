@@ -55,7 +55,7 @@ Once installed, you should be able to run the program via
 or giving it the path to your local git clone of the
 [xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub) repository
 
-    xmlhub path/to/your/checkout/of/xmlhub
+    xmlhub build path/to/your/checkout/of/xmlhub
 
 which will update the `README.md` and `README.html` files in the
 xmlhub directory and commit any changes to those. You can then `git
@@ -88,7 +88,7 @@ command line (the order of options doesn't actually matter, the
 program executes them in the sensible order anyway; you can also use
 the short options shown in the `--help` text instead):
 
-    xmlhub path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
+    xmlhub build path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
 Running this will pull, convert, write the output even if there are
 errors, and if there were changes, commit and push them back to the
@@ -100,7 +100,7 @@ If you run it on a repository you never use interactively (e.g. on
 a server), this is more fail proof for automatic action (but **deletes
 local changes to the repo!**):
 
-    xmlhub path/to/your/checkout/of/xmlhub --batch
+    xmlhub build path/to/your/checkout/of/xmlhub --batch
 
 ### Running on a server
 
@@ -223,7 +223,7 @@ go. Run it e.g. like this (the `--` are needed to stop processing of
 options by `cargo` itself; `--no-commit` if you want to verify the
 output before committing to it):
 
-    cargo run --bin xmlhub -- ~/tmp/xmlhub/ --no-commit
+    cargo run --bin xmlhub -- build ~/tmp/xmlhub/ --no-commit
 
 You will also want to use an IDE for editing Rust code. The standard
 recommendation is VSCode with the Rust-Analyzer extension (see [Rust
@@ -283,7 +283,7 @@ which location an error originates from, run the default debug build
 (i.e. do *not* use the `--release` option) with the environment
 variable setting `RUST_BACKTRACE=1`, e.g.
 
-    RUST_BACKTRACE=1 cargo run --bin xmlhub -- ~/tmp/xmlhub
+    RUST_BACKTRACE=1 cargo run --bin xmlhub -- build ~/tmp/xmlhub
 
 ### Release process
 

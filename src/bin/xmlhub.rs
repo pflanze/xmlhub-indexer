@@ -309,6 +309,9 @@ struct Opts {
     #[clap(long)]
     no_branch_check: bool,
 
+    /// The subcommand to run; for now, only `build` is supported.
+    sub_command: String,
+
     /// The path to the base directory of the Git checkout of the XML
     /// Hub.
     base_path: Option<PathBuf>,
@@ -2294,7 +2297,6 @@ fn main() -> Result<()> {
             batch: batch_,
             dry_run,
             no_version_check,
-            base_path,
             no_branch_check,
             daemon,
             daemon_sleep_time,
@@ -2302,6 +2304,8 @@ fn main() -> Result<()> {
             localtime,
             max_log_file_size,
             max_log_files,
+            sub_command,
+            base_path,
         } = Opts::from_args();
 
         // Create uninitialized variables without the underscores,
@@ -2357,7 +2361,6 @@ fn main() -> Result<()> {
             batch,
             dry_run,
             no_version_check,
-            base_path,
             no_branch_check,
             daemon,
             daemon_sleep_time,
@@ -2365,8 +2368,14 @@ fn main() -> Result<()> {
             localtime,
             max_log_file_size,
             max_log_files,
+            sub_command,
+            base_path,
         }
     };
+
+    if opts.sub_command != "build" {
+        bail!("the first argument must be one of: currently only `build` is supported")
+    }
 
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
