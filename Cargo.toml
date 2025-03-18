@@ -24,6 +24,7 @@ chrono = "0.4"
 lazy_static = "1.4"
 itertools = "0.11.0"
 thiserror = "1.0.37"
+walkdir = "2"
 # use older version to avoid additional, unknown, dependencies
 # (separate newer versions of the windows dependencies)
 os_info = "=3.7"
