@@ -4,12 +4,14 @@ IFS=
 
 cd ~/xmlhub-indexer
 
+# XXX todo: fetch, signature check.
+
 cargo build --quiet --release
 
 # Set up limits before potentially starting the daemon:
 
 # Limits on real memory (RSS) is complicated on Linux, thus set limit
-# on virtual memory only.
+# on virtual memory only, for now.
 
 # Virtual memory limit in KB, must be large because xmlhub-build-index
 # allocates some large vectors that are only partially used, so even
@@ -18,10 +20,10 @@ cargo build --quiet --release
 ulimit -v 3000000
 
 # CPU seconds across all cores; this is mostly just for 1 run, because
-# those happen in a fresh child process each time. XX but there is a
-# slight problem that the controlling parent process will accumulate
-# CPU time and will hit the limit, too, after a long time. Should set
-# this limit in the child from within Rust!
+# those happen in a fresh child process each time. XXX but there will
+# be a problem (theoretical only?) that the controlling parent process
+# will accumulate CPU time and will hit the limit, too, after a long
+# time. Should set this limit in the child from within Rust!
 ulimit -t 3
 
 exec target/release/xmlhub-build-index "${XMLHUB_CHECKOUT-$HOME/tmp/xmlhub}" \
