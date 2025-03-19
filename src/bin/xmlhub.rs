@@ -2233,11 +2233,17 @@ fn build_index(
                 .filter(|item| !written_files.contains(&item.path.as_str()))
                 .collect();
             if !changed_items.is_empty() {
-                bail!(
-                    "won't run git commit due to uncommitted changes in {:?} \
-                         (you could use the --no-commit option): {changed_items:?}",
+                // Avoid making this message look like a failure?
+                // Hence do not use `bail!`, but just `eprintln!` with
+                // a multi-line message, and return an error exit code
+                // explicitly.
+                eprintln!(
+                    "\nFinished build, but won't run git commit due to uncommitted changes in {:?}:\n\
+                     {changed_items:?}\n\
+                     (Note: use the --no-commit option to suppress this error.)",
                     source_checkout.working_dir_path
-                )
+                );
+                return Ok(1);
             }
 
             check_dry_run! {
