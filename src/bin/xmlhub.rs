@@ -254,7 +254,7 @@ struct Opts {
     batch: bool,
 
     /// Run as a daemon, i.e. do not exit, but run batch conversion
-    /// repeatedly. The given mode string must be one of "run",
+    /// repeatedly. The given string must be one of "run",
     /// "start", "stop", "restart", "status". "run" does not put the
     /// process into the background, "start" (and "restart") does.
     /// Implies `--batch`. You may want to use `--quiet` at the same
