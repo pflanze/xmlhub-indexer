@@ -1,7 +1,7 @@
 // Use from the standard library
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs::{create_dir, File},
     io::{stderr, BufWriter, Write},
     path::{Path, PathBuf},
@@ -22,6 +22,7 @@ use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
+use walkdir::WalkDir;
 // Use from src/*.rs
 use xmlhub_indexer::{
     backoff::LoopWithBackoff,
@@ -308,6 +309,12 @@ struct Opts {
     /// branch.
     #[clap(long)]
     no_branch_check: bool,
+
+    /// Ignore untracked files (local files not added to the xmlhub
+    /// repository). By default, files are read regardless of whether
+    /// they are in Git or not.
+    #[clap(long)]
+    ignore_untracked: bool,
 
     /// The subcommand to run; for now, only `build` is supported.
     sub_command: String,
@@ -1796,7 +1803,45 @@ fn build_index(
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = git_ls_files(base_path)?;
+        let mut paths = if opts.ignore_untracked {
+            // Ask Git for the list of files
+            git_ls_files(base_path)?
+        } else {
+            // Ask the filesystem for the list of files, but do not
+            // waste time listing paths in the .git subdir
+            let ignored_file_names = HashSet::from([".git"]);
+            let entries = WalkDir::new(base_path)
+                .follow_links(false)
+                .min_depth(1)
+                .into_iter()
+                .filter_entry(|entry| {
+                    if let Some(file_name) = entry.file_name().to_str() {
+                        !ignored_file_names.contains(file_name)
+                    } else {
+                        // invalid encoding; XX: what to do? Try to keep those:
+                        true
+                    }
+                });
+            let shared_base_path = Arc::new(base_path.to_owned());
+            let mut paths: Vec<BaseAndRelPath> = Vec::new();
+            for entry in entries {
+                let entry = entry
+                    .with_context(|| anyhow!("listing contents of directory {base_path:?}"))?;
+                let relative_path = entry.path().strip_prefix(base_path).with_context(|| {
+                    // Could happen via folder rename races, right? So don't panic.
+                    anyhow!(
+                        "listed files of directory {base_path:?} \
+                         should be prefixed with that path, but got {:?}",
+                        entry.path()
+                    )
+                })?;
+                paths.push(BaseAndRelPath::new(
+                    Some(shared_base_path.clone()),
+                    relative_path.to_owned(),
+                ));
+            }
+            paths
+        };
         paths.retain(|path| {
             if let Some(ext) = path.extension() {
                 ext.eq_ignore_ascii_case("xml")
@@ -2306,6 +2351,7 @@ fn main() -> Result<()> {
             max_log_files,
             sub_command,
             base_path,
+            ignore_untracked,
         } = Opts::from_args();
 
         // Create uninitialized variables without the underscores,
@@ -2334,6 +2380,7 @@ fn main() -> Result<()> {
             no_commit_errors = false;
             silent_on_written_errors = true;
             timestamp = false;
+            // Should we force `ignore_untracked` false?
         } else {
             pull = pull_;
             push = push_;
@@ -2370,6 +2417,7 @@ fn main() -> Result<()> {
             max_log_files,
             sub_command,
             base_path,
+            ignore_untracked,
         }
     };
 
