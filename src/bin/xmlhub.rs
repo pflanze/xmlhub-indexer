@@ -2436,7 +2436,7 @@ fn main() -> Result<()> {
         .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
 
     if opts.v {
-        println!("{PROGRAM_NAME} {program_version}");
+        println!("{REPO_NAME} {program_version}");
         return Ok(());
     }
 
