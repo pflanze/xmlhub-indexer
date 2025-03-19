@@ -2,6 +2,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
+    ffi::OsString,
     fs::{create_dir, File},
     io::{stderr, BufWriter, Write},
     path::{Path, PathBuf},
@@ -153,6 +154,11 @@ struct Opts {
     // in Clap.
     #[clap(long = "version")]
     v: bool,
+
+    /// Open the XML Hub CONTRIBUTING page in the web browser. If this
+    /// doesn't work for you, see the notes for the `--open` option.
+    #[clap(long)]
+    help_contributing: bool,
 
     /// Show external modifying commands that are run. Note that this
     /// does not disable `--quiet`.
@@ -317,7 +323,7 @@ struct Opts {
     ignore_untracked: bool,
 
     /// The subcommand to run; for now, only `build` is supported.
-    sub_command: String,
+    sub_command: Option<String>,
 
     /// The path to the base directory of the Git checkout of the XML
     /// Hub.
@@ -2358,6 +2364,7 @@ fn main() -> Result<()> {
             sub_command,
             base_path,
             ignore_untracked,
+            help_contributing,
         } = Opts::from_args();
 
         // Create uninitialized variables without the underscores,
@@ -2424,10 +2431,21 @@ fn main() -> Result<()> {
             sub_command,
             base_path,
             ignore_untracked,
+            help_contributing,
         }
     };
 
-    if opts.sub_command != "build" {
+    if opts.help_contributing {
+        // XX sigh, spawn_browser is badly prepared for external urls,
+        // (1) should not need a directory, (2) should not require
+        // arguments to be OsStr.
+        spawn_browser(&PathBuf::from("/"), &[&OsString::from(
+            "https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md?ref_type=heads"
+        )])?;
+        return Ok(());
+    }
+
+    if opts.sub_command.as_ref().map(|s| s.as_ref()) != Some("build") {
         bail!("the first argument must be one of: currently only `build` is supported")
     }
 
