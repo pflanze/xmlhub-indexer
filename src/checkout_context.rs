@@ -77,6 +77,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
     }
 
     pub fn git_remote_get_default(&self) -> Result<String> {
+        self.check_current_branch()?;
         git_remote_get_default_for_branch(self.working_dir_path(), self.branch_name)?.ok_or_else(
             || {
                 anyhow!(
