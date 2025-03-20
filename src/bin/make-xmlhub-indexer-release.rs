@@ -357,10 +357,10 @@ fn main() -> Result<()> {
         }
     }
 
-    // Check that we are on the correct branch
-    SOURCE_CHECKOUT.check_current_branch()?;
+    // Check that we are on the correct branch etc.
+    let source_checkout = SOURCE_CHECKOUT.check2()?;
     // Check that everything is committed
-    unless_dry_run(SOURCE_CHECKOUT.check_status())?;
+    unless_dry_run(source_checkout.check_status())?;
 
     // Check that Cargo.toml does not refer to any packages by path,
     // as that would fail to compile on other people's machines (if
@@ -379,13 +379,13 @@ fn main() -> Result<()> {
     // Pass "--tags ..." as in `build.rs`, keeping in sync by sharing the code
     let args = &include!("../../include/git_describe_arguments.rs")[1..];
     let old_version: GitVersion<SemVersion> =
-        git_describe(SOURCE_CHECKOUT.working_dir_path(), args)?
+        git_describe(source_checkout.working_dir_path(), args)?
             .parse()
             .with_context(|| {
                 anyhow!(
                     "the version number from running `git describe` {args:?} in {:?} \
                      uses an invalid format",
-                    SOURCE_CHECKOUT.working_dir_path()
+                    source_checkout.working_dir_path()
                 )
             })?;
 
@@ -418,7 +418,7 @@ fn main() -> Result<()> {
         if push {
             Box::new(PushSourceToRemote {
                 tag_name: new_version_tag_string.clone(),
-                remote_name: SOURCE_CHECKOUT.git_remote_get_default()?,
+                remote_name: source_checkout.default_remote.clone(),
             })
         } else {
             NoOp::providing(
@@ -431,9 +431,9 @@ fn main() -> Result<()> {
 
     // Collect build information
     let commit_id =
-        git_stdout_string_trimmed(SOURCE_CHECKOUT.working_dir_path(), &["rev-parse", "HEAD"])?;
-    let rustc_version = stringify_error(prog_version(SOURCE_CHECKOUT.working_dir_path(), "rustc"));
-    let cargo_version = stringify_error(prog_version(SOURCE_CHECKOUT.working_dir_path(), "cargo"));
+        git_stdout_string_trimmed(source_checkout.working_dir_path(), &["rev-parse", "HEAD"])?;
+    let rustc_version = stringify_error(prog_version(source_checkout.working_dir_path(), "rustc"));
+    let cargo_version = stringify_error(prog_version(source_checkout.working_dir_path(), "cargo"));
     let hostname = hostname()?;
     let (os_arch, os_version) = {
         let info = os_info::get();
@@ -461,25 +461,17 @@ fn main() -> Result<()> {
                 "not publishing binary because --no-publish-binary option was given".into(),
             )
         } else {
-            if !BINARIES_CHECKOUT.checkout_dir_exists() {
-                bail!(
-                    "missing the git working directory at {:?}; \
-                       please run: `cd ..; git clone {}; cd -`",
-                    BINARIES_CHECKOUT.working_dir_path,
-                    BINARIES_CHECKOUT.supposed_upstream_git_url
-                )
-            }
-            BINARIES_CHECKOUT.check_current_branch()?;
-            BINARIES_CHECKOUT.check_status()?;
+            let binaries_checkout = BINARIES_CHECKOUT.check2()?;
+            binaries_checkout.check_status()?;
 
             let push_to_remote = if push {
-                Some(BINARIES_CHECKOUT.git_remote_get_default()?)
+                Some(binaries_checkout.default_remote.clone())
             } else {
                 None
             };
 
             let in_dir = |dir_segments: &[&str]| {
-                let mut binary_target_path = PathBuf::from(BINARIES_CHECKOUT.working_dir_path());
+                let mut binary_target_path = PathBuf::from(binaries_checkout.working_dir_path());
                 for segment in dir_segments {
                     binary_target_path.push(segment)
                 }

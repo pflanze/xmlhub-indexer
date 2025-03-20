@@ -28,7 +28,7 @@ use walkdir::WalkDir;
 use xmlhub_indexer::{
     backoff::LoopWithBackoff,
     browser::spawn_browser,
-    checkout_context::CheckoutContext,
+    checkout_context::{CheckedCheckoutContext1, CheckedCheckoutContext2},
     const_util::file_name,
     daemon::{Daemon, DaemonMode},
     file_lock::{file_lock_nonblocking, FileLockError},
@@ -1723,8 +1723,8 @@ fn build_index(
     opts: &Opts,
     base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
-    source_checkout: &CheckoutContext<&PathBuf>,
-    default_remote_for_push: &Option<String>,
+    source_checkout: &CheckedCheckoutContext1<&PathBuf>,
+    maybe_checked_source_checkout: &Option<CheckedCheckoutContext2<&PathBuf>>,
 ) -> Result<i32> {
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
@@ -1744,7 +1744,7 @@ fn build_index(
     }
 
     // Update repository if requested
-    if let Some(default_remote_for_push) = &default_remote_for_push {
+    if let Some(checked_source_checkout) = maybe_checked_source_checkout {
         if opts.pull {
             check_dry_run! {
                 message: "git pull",
@@ -1755,23 +1755,22 @@ fn build_index(
         }
 
         if opts.batch {
+            let default_remote = &checked_source_checkout.default_remote;
+
             check_dry_run! {
-                message: format!("git remote update {default_remote_for_push:?}"),
-                if !git(base_path, &["remote", "update", default_remote_for_push],
+                message: format!("git remote update {default_remote:?}"),
+                if !git(base_path, &["remote", "update", default_remote],
                         opts.quiet)? {
-                    bail!("git remote update {default_remote_for_push:?} failed")
+                    bail!("git remote update {default_remote:?} failed")
                 }
             }
 
-            let remote_banch_name = format!(
-                "remotes/{default_remote_for_push}/{}",
-                SOURCE_CHECKOUT.branch_name
-            );
+            let remote_banch_reference = checked_source_checkout.remote_branch_reference();
 
             check_dry_run! {
-                message: format!("git reset --hard {remote_banch_name:?}"),
-                if !git(base_path, &["reset", "--hard", &remote_banch_name], opts.quiet)? {
-                    bail!("git reset --hard {remote_banch_name:?} failed")
+                message: format!("git reset --hard {remote_banch_reference:?}"),
+                if !git(base_path, &["reset", "--hard", &remote_banch_reference], opts.quiet)? {
+                    bail!("git reset --hard {remote_banch_reference:?} failed")
                 }
             }
         }
@@ -2170,48 +2169,50 @@ fn build_index(
     let html_file_has_changed;
     if write_files {
         (html_file_has_changed, (), ()) = (
-                move || -> Result<_> {
-                    let html = HTML_ALLOCATOR_POOL.get();
+            || -> Result<_> {
+                let html = HTML_ALLOCATOR_POOL.get();
 
-                    // Get an owned version of the base path and then
-                    // append path segments to it.
-                    let mut path = source_checkout.working_dir_path.to_owned();
-                    path.push(HTML_FILE.path_from_repo_top);
-                    let mut out = BufWriter::new(File::create(&path)?);
-                    html.print_html_document(make_htmldocument(&html)?, &mut out)?;
-                    out.flush()?;
+                // Get an owned version of the base path and then
+                // append path segments to it.
+                let mut path = source_checkout.working_dir_path.to_owned();
+                path.push(HTML_FILE.path_from_repo_top);
+                let mut out = BufWriter::new(File::create(&path)?);
+                html.print_html_document(make_htmldocument(&html)?, &mut out)?;
+                out.flush()?;
 
-                    let mut html_file_has_changed = false;
-                    if opts.open_if_changed {
-                        // Need to remember whether the file has changed
-                        check_dry_run! {
-                            message: "git diff",
-                            html_file_has_changed = !git(
-                                source_checkout.working_dir_path,
-                                &["diff", "--no-patch", "--exit-code", "--", HTML_FILE.path_from_repo_top],
-                                false
-                            )?
-                        }
+                let mut html_file_has_changed = false;
+                if opts.open_if_changed {
+                    // Need to remember whether the file has changed
+                    check_dry_run! {
+                        message: "git diff",
+                        html_file_has_changed = !git(
+                            source_checkout.working_dir_path,
+                            &["diff", "--no-patch", "--exit-code", "--",
+                              HTML_FILE.path_from_repo_top],
+                            false
+                        )?
                     }
-                    Ok(html_file_has_changed)
-                },
-                || -> Result<_> {
-                    let mut path = source_checkout.working_dir_path.to_owned();
-                    path.push(MD_FILE.path_from_repo_top);
-                    make_mddocument()?
-                        .write_to_file(&path)
-                        .with_context(|| anyhow!("writing to file {path:?}"))?;
-                    Ok(())
-                },
-                || -> Result<_> {
-                    let mut path = source_checkout.working_dir_path.to_owned();
-                    path.push(ATTRIBUTES_FILE.path_from_repo_top);
-                    make_attributes_md()?
-                        .write_to_file(&path)
-                        .with_context(|| anyhow!("writing to file {path:?}"))?;
-                    Ok(())
                 }
-            ).par_run()
+                Ok(html_file_has_changed)
+            },
+            || -> Result<_> {
+                let mut path = source_checkout.working_dir_path.to_owned();
+                path.push(MD_FILE.path_from_repo_top);
+                make_mddocument()?
+                    .write_to_file(&path)
+                    .with_context(|| anyhow!("writing to file {path:?}"))?;
+                Ok(())
+            },
+            || -> Result<_> {
+                let mut path = source_checkout.working_dir_path.to_owned();
+                path.push(ATTRIBUTES_FILE.path_from_repo_top);
+                make_attributes_md()?
+                    .write_to_file(&path)
+                    .with_context(|| anyhow!("writing to file {path:?}"))?;
+                Ok(())
+            },
+        )
+            .par_run()
             .transpose()?;
 
         let written_files = OUTPUT_FILES.map(|o| o.path_from_repo_top);
@@ -2224,7 +2225,10 @@ fn build_index(
         let do_commit_files = !no_commit_files;
         if do_commit_files {
             if !opts.no_branch_check {
-                // Are we on the expected branch?
+                // Are we on the expected branch? NOTE: unlike most
+                // checks on the repository, this one occurs late, but
+                // we can't move it earlier if we want it to be
+                // conditional on the need to actually commit.
                 source_checkout.check_current_branch()?;
             }
 
@@ -2283,7 +2287,8 @@ fn build_index(
                 )?
             }
 
-            if let Some(default_remote_for_push) = default_remote_for_push {
+            if let Some(checked_source_checkout) = maybe_checked_source_checkout {
+                let default_remote_for_push = &checked_source_checkout.default_remote;
                 if did_commit {
                     check_dry_run! {
                         message: format!("git push {default_remote_for_push:?}"),
@@ -2468,11 +2473,15 @@ fn main() -> Result<()> {
         program_version,
     };
 
-    let source_checkout = SOURCE_CHECKOUT.replace_working_dir_path(base_path);
+    let source_checkout = SOURCE_CHECKOUT
+        .replace_working_dir_path(base_path)
+        .check1()?;
 
-    // Retrieve this early to avoid committing and then erroring out on pushing
-    let default_remote_for_push = if opts.push {
-        Some(source_checkout.git_remote_get_default()?)
+    // For pushing, need the `CheckedCheckoutContext` (which has the
+    // `default_remote`). Retrieve this early to avoid committing and
+    // then erroring out on pushing
+    let maybe_checked_source_checkout = if opts.push {
+        Some(source_checkout.clone().check2()?)
     } else {
         None
     };
@@ -2485,7 +2494,7 @@ fn main() -> Result<()> {
             base_path,
             &git_log_version_checker,
             &source_checkout,
-            &default_remote_for_push,
+            &maybe_checked_source_checkout,
         )
     };
 
