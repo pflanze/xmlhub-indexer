@@ -151,7 +151,7 @@ lazy_static! {
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-/// Build an index of the files in the (non-public) XML Hub of the
+/// Build an index of the files in the XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
     /// Show the program version. It was copied from `git describe
