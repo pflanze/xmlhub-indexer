@@ -2260,9 +2260,13 @@ fn build_index(
                 message: "git status",
                 items = git_status(source_checkout.working_dir_path)?
             }
+            let daemon_folder_name_with_slash = format!("{}/", *DAEMON_FOLDER_NAME);
+            let ignore_path = |path: &str| -> bool {
+                written_files.contains(&path) || path == daemon_folder_name_with_slash
+            };
             let changed_items: Vec<String> = items
                 .iter()
-                .filter(|item| !written_files.contains(&item.path.as_str()))
+                .filter(|item| !ignore_path(item.path.as_str()))
                 .map(|item| item.to_string())
                 .collect();
             if !changed_items.is_empty() {
