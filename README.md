@@ -48,16 +48,29 @@ You can build the program yourself:
 
 ## Usage
 
-Once installed, you should be able to run the program via
+Once installed, you should be able to run the program via its name. To
+get help on the global options, run:
 
     xmlhub --help
+
+The program expects a subcommand name, like `build`--the valid
+subcommands are listed in the help text above. Running the program
+with the `--help` option *after* the subcommand gives you the options
+which are specific to that subcommand, e.g.:
+
+    xmlhub build --help
     
-or giving it the path to your local git clone of the
-[xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub) repository
+or also
+
+    xmlhub help build
+
+To build the index, you need to use the `build` command and give it
+the path to your local git clone of the
+[xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub) repository:
 
     xmlhub build path/to/your/checkout/of/xmlhub
 
-which will update the `README.md` and `README.html` files in the
+This will update the `README.md` and `README.html` files in the
 xmlhub directory and commit any changes to those. You can then `git
 push` the changes. There is also a `--push` option that lets
 `xmlhub` do the latter, too.

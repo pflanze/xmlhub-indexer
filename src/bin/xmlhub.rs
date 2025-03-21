@@ -177,6 +177,52 @@ struct Opts {
     #[clap(short, long)]
     quiet: bool,
 
+    /// When running in `--daemon start` mode, for the log messages,
+    /// use time stamps in the local time zone. The default is to use
+    /// UTC.
+    #[clap(long)]
+    localtime: bool,
+
+    /// When running in `--daemon start` mode, the maximum size of a
+    /// log file in bytes before the current file is renamed and a new
+    /// one is created instead. Default: 1000000.
+    #[clap(long)]
+    max_log_file_size: Option<u64>,
+
+    /// When running in `--daemon start` mode, the number of numbered
+    /// log files before the oldest files are automatically
+    /// deleted. Careful: will delete as many files as needed to get
+    /// their count down to the given number (if you give 0 it will
+    /// delete them all.) Default: 100.
+    #[clap(long)]
+    max_log_files: Option<usize>,
+
+    /// Do not run external processes like git or browsers,
+    /// i.e. ignore all the options asking to do so. Instead just say
+    /// on stderr what would be done. Still writes to the output
+    /// files, though.
+    #[clap(long)]
+    dry_run: bool,
+
+    /// Do not check the program version against versions specified in
+    /// the automatic commit messages in the xmlhub repo. Only use if
+    /// you know what you're doing.
+    #[clap(long)]
+    no_version_check: bool,
+
+    /// The subcommand to run. Use `--help` after the sub-command to
+    /// get a list of the allowed options there.
+    #[clap(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Command {
+    Build(BuildOpts),
+}
+
+#[derive(clap::Parser, Debug)]
+struct BuildOpts {
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
     /// that will be commited even when there were no actual changes,
@@ -283,39 +329,6 @@ struct Opts {
     #[clap(long)]
     daemon_sleep_time: Option<f64>,
 
-    /// When running in `--daemon start` mode, for the log messages,
-    /// use time stamps in the local time zone. The default is to use
-    /// UTC.
-    #[clap(long)]
-    localtime: bool,
-
-    /// When running in `--daemon start` mode, the maximum size of a
-    /// log file in bytes before the current file is renamed and a new
-    /// one is created instead. Default: 1000000.
-    #[clap(long)]
-    max_log_file_size: Option<u64>,
-
-    /// When running in `--daemon start` mode, the number of numbered
-    /// log files before the oldest files are automatically
-    /// deleted. Careful: will delete as many files as needed to get
-    /// their count down to the given number (if you give 0 it will
-    /// delete them all.) Default: 100.
-    #[clap(long)]
-    max_log_files: Option<usize>,
-
-    /// Do not run external processes like git or browsers,
-    /// i.e. ignore all the options asking to do so. Instead just say
-    /// on stderr what would be done. Still writes to the output
-    /// files, though.
-    #[clap(long)]
-    dry_run: bool,
-
-    /// Do not check the program version against versions specified in
-    /// the automatic commit messages in the xmlhub repo. Only use if
-    /// you know what you're doing.
-    #[clap(long)]
-    no_version_check: bool,
-
     /// Do not check that the correct branch is checked out in the
     /// xmlhub repository. Only use if you're experimenting on another
     /// branch.
@@ -327,9 +340,6 @@ struct Opts {
     /// they are in Git or not.
     #[clap(long)]
     ignore_untracked: bool,
-
-    /// The subcommand to run; for now, only `build` is supported.
-    sub_command: Option<String>,
 
     /// The path to the base directory of the Git checkout of the XML
     /// Hub.
@@ -1726,7 +1736,8 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
 /// Run one conversion from the XML files to the index files. Returns
 /// the exit code to exit the program with.
 fn build_index(
-    opts: &Opts,
+    global_opts: &Opts,
+    build_opts: &BuildOpts,
     base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
     source_checkout: &CheckedCheckoutContext1<&PathBuf>,
@@ -1738,10 +1749,10 @@ fn build_index(
     macro_rules! check_dry_run {
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
-            if opts.dry_run {
+            if global_opts.dry_run {
                 eprintln!("+ --dry-run: would run: {}", s());
             } else {
-                if opts.verbose {
+                if global_opts.verbose {
                     eprintln!("+ running: {}", s());
                 }
                 $body;
@@ -1751,22 +1762,22 @@ fn build_index(
 
     // Update repository if requested
     if let Some(checked_source_checkout) = maybe_checked_source_checkout {
-        if opts.pull {
+        if build_opts.pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(base_path, &["pull"], opts.quiet)? {
+                if !git(base_path, &["pull"], global_opts.quiet)? {
                     bail!("git pull failed")
                 }
             }
         }
 
-        if opts.batch {
+        if build_opts.batch {
             let default_remote = &checked_source_checkout.default_remote;
 
             check_dry_run! {
                 message: format!("git remote update {default_remote:?}"),
                 if !git(base_path, &["remote", "update", default_remote],
-                        opts.quiet)? {
+                        global_opts.quiet)? {
                     bail!("git remote update {default_remote:?} failed")
                 }
             }
@@ -1775,7 +1786,8 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_reference:?}"),
-                if !git(base_path, &["reset", "--hard", &remote_banch_reference], opts.quiet)? {
+                if !git(base_path, &["reset", "--hard", &remote_banch_reference],
+                        global_opts.quiet)? {
                     bail!("git reset --hard {remote_banch_reference:?} failed")
                 }
             }
@@ -1788,7 +1800,9 @@ fn build_index(
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
     let paths: Vec<BaseAndRelPath> = {
-        if !opts.no_version_check {
+        if !global_opts.no_version_check {
+            // (XXX actually move this check to the global level?
+            // requires Git though. OR move the option to BuildOpts.)
             // Verify that this is not an outdated version of the program.
             let found = git_log_version_checker.check_git_log(
                 base_path,
@@ -1814,7 +1828,7 @@ fn build_index(
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = if opts.ignore_untracked {
+        let mut paths = if build_opts.ignore_untracked {
             // Ask Git for the list of files
             git_ls_files(base_path)?
         } else {
@@ -2046,7 +2060,7 @@ fn build_index(
                         html.h2([], html.text("Contents")?)?,
                         html.preserialized(toc_html.clone())?,
                         html.div([], toplevel_section.to_html(NumberPath::empty(), html)?)?,
-                        if opts.timestamp {
+                        if build_opts.timestamp {
                             html.div(
                                 [],
                                 [
@@ -2086,7 +2100,7 @@ fn build_index(
                     .to_html_fragment_string(&html)?
                     .into(),
             ],
-            if opts.timestamp {
+            if build_opts.timestamp {
                 vec![
                     "-------------------------------------------------------".into(),
                     format!("Last updated: {now}\n").into(),
@@ -2141,14 +2155,14 @@ fn build_index(
         write_errors_to_stderr = false;
         write_files = true;
     } else {
-        if opts.write_errors {
+        if build_opts.write_errors {
             write_files = true;
-            if opts.silent_on_written_errors {
+            if build_opts.silent_on_written_errors {
                 exit_code = 0;
                 write_errors_to_stderr = false;
             } else {
                 write_errors_to_stderr = true;
-                if opts.ok_on_written_errors {
+                if build_opts.ok_on_written_errors {
                     exit_code = 0;
                 } else {
                     exit_code = 1;
@@ -2188,7 +2202,7 @@ fn build_index(
                 out.flush()?;
 
                 let mut html_file_has_changed = false;
-                if opts.open_if_changed {
+                if build_opts.open_if_changed {
                     // Need to remember whether the file has changed
                     check_dry_run! {
                         message: "git diff",
@@ -2227,11 +2241,12 @@ fn build_index(
         // Commit files if not prevented by --no-commit, and any
         // were written, and --no-commit-errors was not given or
         // there were no errors. I.e. reasons not to commit:
-        let no_commit_files =
-            opts.no_commit || written_files.is_empty() || (have_errors && opts.no_commit_errors);
+        let no_commit_files = build_opts.no_commit
+            || written_files.is_empty()
+            || (have_errors && build_opts.no_commit_errors);
         let do_commit_files = !no_commit_files;
         if do_commit_files {
-            if !opts.no_branch_check {
+            if !build_opts.no_branch_check {
                 // Are we on the expected branch? NOTE: unlike most
                 // checks on the repository, this one occurs late, but
                 // we can't move it earlier if we want it to be
@@ -2268,7 +2283,7 @@ fn build_index(
                 git(
                     source_checkout.working_dir_path,
                     &append(&["add", "-f", "--"], &written_files),
-                    opts.quiet
+                    global_opts.quiet
                 )?
             }
 
@@ -2290,7 +2305,7 @@ fn build_index(
                         ],
                         &written_files,
                     ),
-                    opts.quiet
+                    global_opts.quiet
                 )?
             }
 
@@ -2303,11 +2318,11 @@ fn build_index(
                             source_checkout.working_dir_path,
                             default_remote_for_push,
                             &[],
-                            opts.quiet
+                            global_opts.quiet
                         )?
                     }
                 } else {
-                    if !opts.quiet {
+                    if !global_opts.quiet {
                         println!("There were no changes to commit, thus not pushing.")
                     }
                 }
@@ -2318,7 +2333,7 @@ fn build_index(
     }
 
     // Open a web browser if appropriate
-    if opts.open || (opts.open_if_changed && html_file_has_changed) {
+    if build_opts.open || (build_opts.open_if_changed && html_file_has_changed) {
         if write_files {
             // Hopefully all browsers take relative paths? Firefox
             // on Linux and macOS are OK, Safari (via open -a) as
@@ -2340,137 +2355,14 @@ fn build_index(
     Ok(exit_code)
 }
 
-fn main() -> Result<()> {
-    let opts = {
-        // Retrieve the command line options / arguments, and fix
-        // those that are overridden by others.
-
-        // Create an `Opts` from program arguments then deconstruct it
-        // immediately, binding the values in the fields to same-named
-        // variables, except where followed by `:`, in which case
-        // binding the value to a variable with an underscore appended
-        // to the field name.
-        let Opts {
-            v,
-            verbose,
-            timestamp: timestamp_,
-            write_errors: write_errors_,
-            no_commit_errors: no_commit_errors_,
-            ok_on_written_errors,
-            silent_on_written_errors: silent_on_written_errors_,
-            open,
-            open_if_changed,
-            pull: pull_,
-            no_commit: no_commit_,
-            push: push_,
-            batch: batch_,
-            dry_run,
-            no_version_check,
-            no_branch_check,
-            daemon,
-            daemon_sleep_time,
-            quiet,
-            localtime,
-            max_log_file_size,
-            max_log_files,
-            sub_command,
-            base_path,
-            ignore_untracked,
-            help_contributing,
-        } = Opts::from_args();
-
-        // Create uninitialized variables without the underscores,
-        // then initialize them differently depending on some of the
-        // options (--batch, --daemon).
-        let (
-            pull,
-            push,
-            no_commit,
-            write_errors,
-            no_commit_errors,
-            silent_on_written_errors,
-            timestamp,
-            batch,
-        );
-        if daemon.is_some() {
-            batch = true;
-        } else {
-            batch = batch_;
-        }
-        if batch {
-            pull = false;
-            push = true;
-            no_commit = false;
-            write_errors = true;
-            no_commit_errors = false;
-            silent_on_written_errors = true;
-            timestamp = false;
-            // Should we force `ignore_untracked` false?
-        } else {
-            pull = pull_;
-            push = push_;
-            no_commit = no_commit_;
-            write_errors = write_errors_;
-            no_commit_errors = no_commit_errors_;
-            silent_on_written_errors = silent_on_written_errors_;
-            timestamp = timestamp_;
-        }
-
-        // Pack up the variables in a new `Opts` struct.
-        Opts {
-            v,
-            verbose,
-            timestamp,
-            write_errors,
-            no_commit_errors,
-            ok_on_written_errors,
-            silent_on_written_errors,
-            open,
-            open_if_changed,
-            pull,
-            no_commit,
-            push,
-            batch,
-            dry_run,
-            no_version_check,
-            no_branch_check,
-            daemon,
-            daemon_sleep_time,
-            quiet,
-            localtime,
-            max_log_file_size,
-            max_log_files,
-            sub_command,
-            base_path,
-            ignore_untracked,
-            help_contributing,
-        }
-    };
-
-    if opts.help_contributing {
-        // XX sigh, spawn_browser is badly prepared for external urls,
-        // (1) should not need a directory, (2) should not require
-        // arguments to be OsStr.
-        spawn_browser(&PathBuf::from("/"), &[&OsString::from(
-            "https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md?ref_type=heads"
-        )])?;
-        return Ok(());
-    }
-
-    if opts.sub_command.as_ref().map(|s| s.as_ref()) != Some("build") {
-        bail!("the first argument must be one of: currently only `build` is supported")
-    }
-
-    let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
-        .parse()
-        .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
-
-    if opts.v {
-        println!("{REPO_NAME} {program_version}");
-        return Ok(());
-    }
-
-    let base_path = opts
+/// Execute a `build` command: prepare and run `build_index` in the
+/// requested mode (interactive, batch, daemon).
+fn build_command(
+    program_version: GitVersion<SemVersion>,
+    global_opts: &Opts,
+    build_opts: &BuildOpts,
+) -> Result<()> {
+    let base_path = build_opts
         .base_path
         .as_ref()
         .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
@@ -2487,17 +2379,20 @@ fn main() -> Result<()> {
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
     // then erroring out on pushing
-    let maybe_checked_source_checkout = if opts.push {
+    let maybe_checked_source_checkout = if build_opts.push {
         Some(source_checkout.clone().check2()?)
     } else {
         None
     };
 
-    let min_sleep_seconds = opts.daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
+    let min_sleep_seconds = build_opts
+        .daemon_sleep_time
+        .unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
     let build_index_once = || {
         build_index(
-            &opts,
+            &global_opts,
+            &build_opts,
             base_path,
             &git_log_version_checker,
             &source_checkout,
@@ -2518,12 +2413,14 @@ fn main() -> Result<()> {
         })
     };
 
-    if let Some(daemon_mode) = opts.daemon {
+    if let Some(daemon_mode) = build_opts.daemon {
         let daemon = Daemon {
             base_dir: daemon_base_dir,
-            use_local_time: opts.localtime,
-            max_log_file_size: opts.max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
-            max_log_files: opts.max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
+            use_local_time: global_opts.localtime,
+            max_log_file_size: global_opts
+                .max_log_file_size
+                .unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
+            max_log_files: global_opts.max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
             run: move || {
                 let _main_lock = get_main_lock()?;
 
@@ -2535,7 +2432,7 @@ fn main() -> Result<()> {
                     LoopWithBackoff {
                         min_sleep_seconds,
                         max_sleep_seconds: MAX_SLEEP_SECONDS,
-                        verbose: !opts.quiet,
+                        verbose: !global_opts.quiet,
                         ..Default::default()
                     },
                     // The action run in the child process: build the
@@ -2554,5 +2451,151 @@ fn main() -> Result<()> {
     } else {
         let _main_lock = get_main_lock()?;
         std::process::exit(build_index_once()?);
+    }
+}
+
+fn main() -> Result<()> {
+    let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
+        .parse()
+        .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
+
+    // Retrieve the command line options / arguments, and fix
+    // those that are overridden by others.
+    let global_opts = {
+        // Create an `Opts` from program arguments then deconstruct it
+        // immediately, binding the values in the fields to same-named
+        // variables, except where followed by `:`, in which case
+        // binding the value to a variable with an underscore appended
+        // to the field name.
+        let Opts {
+            v,
+            verbose,
+            dry_run,
+            no_version_check,
+            quiet,
+            localtime,
+            max_log_file_size,
+            max_log_files,
+            help_contributing,
+            command,
+        } = Opts::parse();
+
+        if help_contributing {
+            // XX sigh, spawn_browser is badly prepared for external urls,
+            // (1) should not need a directory, (2) should not require
+            // arguments to be OsStr.
+            spawn_browser(&PathBuf::from("/"), &[&OsString::from(
+            "https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md?ref_type=heads"
+        )])?;
+            return Ok(());
+        }
+
+        if v {
+            println!("{REPO_NAME} {program_version}");
+            return Ok(());
+        }
+
+        match command {
+            Some(command) => match command {
+                Command::Build(BuildOpts {
+                    timestamp: timestamp_,
+                    write_errors: write_errors_,
+                    no_commit_errors: no_commit_errors_,
+                    ok_on_written_errors,
+                    silent_on_written_errors: silent_on_written_errors_,
+                    open,
+                    open_if_changed,
+                    pull: pull_,
+                    no_commit: no_commit_,
+                    push: push_,
+                    batch: batch_,
+                    no_branch_check,
+                    daemon,
+                    daemon_sleep_time,
+                    base_path,
+                    ignore_untracked,
+                }) => {
+                    // Create uninitialized variables without the underscores,
+                    // then initialize them differently depending on some of the
+                    // options (--batch, --daemon).
+                    let (
+                        pull,
+                        push,
+                        no_commit,
+                        write_errors,
+                        no_commit_errors,
+                        silent_on_written_errors,
+                        timestamp,
+                        batch,
+                    );
+                    if daemon.is_some() {
+                        batch = true;
+                    } else {
+                        batch = batch_;
+                    }
+                    if batch {
+                        pull = false;
+                        push = true;
+                        no_commit = false;
+                        write_errors = true;
+                        no_commit_errors = false;
+                        silent_on_written_errors = true;
+                        timestamp = false;
+                        // Should we force `ignore_untracked` false?
+                    } else {
+                        pull = pull_;
+                        push = push_;
+                        no_commit = no_commit_;
+                        write_errors = write_errors_;
+                        no_commit_errors = no_commit_errors_;
+                        silent_on_written_errors = silent_on_written_errors_;
+                        timestamp = timestamp_;
+                    }
+
+                    // Pack the variables into a new struct
+                    Opts {
+                        v,
+                        help_contributing,
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                        command: Some(Command::Build(BuildOpts {
+                            timestamp,
+                            write_errors,
+                            no_commit_errors,
+                            ok_on_written_errors,
+                            silent_on_written_errors,
+                            open,
+                            open_if_changed,
+                            pull,
+                            no_commit,
+                            push,
+                            batch,
+                            daemon,
+                            daemon_sleep_time,
+                            no_branch_check,
+                            ignore_untracked,
+                            base_path,
+                        })),
+                    }
+                }
+            },
+            None => {
+                bail!("missing command argument. Please run with the `--help` option for help.")
+            }
+        }
+    };
+
+    // Run the requested command
+    match global_opts
+        .command
+        .as_ref()
+        .expect("`None` is dispatched above already")
+    {
+        Command::Build(build_opts) => build_command(program_version, &global_opts, build_opts),
     }
 }
