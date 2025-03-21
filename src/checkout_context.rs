@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -69,14 +70,19 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         if !self.checkout_dir_exists() {
             let working_dir_path: &Path = self.working_dir_path.as_ref();
             bail!(
-                "missing the git working directory at {:?}; \
-                 please run: `cd {:?}; git clone {}; cd -`",
+                "missing git working directory at the path {:?}; \
+                 if you have given the correct path then please run: \
+                 `cd {:?}; git clone {} {:?}; cd -`",
                 working_dir_path,
                 working_dir_path
                     .parent()
                     .map(ToOwned::to_owned)
                     .unwrap_or_else(|| PathBuf::from("???")),
-                self.supposed_upstream_git_url
+                self.supposed_upstream_git_url,
+                working_dir_path
+                    .file_name()
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| OsString::from("???")),
             )
         }
         Ok(CheckedCheckoutContext1 {
