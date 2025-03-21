@@ -2538,11 +2538,13 @@ fn main() -> Result<()> {
                         verbose: !opts.quiet,
                         ..Default::default()
                     },
-                    // The action run in the child process: build the index
-                    // once, throwing away the Ok return value (replacing it
-                    // with `()`, since `forking_loop` expects that, since
-                    // just exits the child with exit code 0 whenever the
-                    // action returned Ok).
+                    // The action run in the child process: build the
+                    // index once, throwing away the Ok return value
+                    // (replacing it with `()`, since `forking_loop`
+                    // expects that (it exits the child with exit code
+                    // 0 whenever the action returned Ok, and that's
+                    // OK for us, thus we can and need to drop the
+                    // code from `build_index`).
                     || build_index_once().map(|_exit_code| ()),
                 )
             },
