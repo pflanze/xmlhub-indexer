@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
-    fmt::Debug,
+    fmt::{Debug, Display},
     io::{BufRead, BufReader},
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
@@ -174,6 +174,16 @@ pub struct GitStatusItem {
     /// Could include "->" for symlinks
     pub path: String,
     pub target_path: Option<String>,
+}
+
+impl Display for GitStatusItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}{}  {}", self.x, self.y, self.path))?;
+        if let Some(target_path) = &self.target_path {
+            f.write_fmt(format_args!("-> {}", target_path))?;
+        }
+        Ok(())
+    }
 }
 
 fn parse_git_status_record(line: &str) -> Result<GitStatusItem> {

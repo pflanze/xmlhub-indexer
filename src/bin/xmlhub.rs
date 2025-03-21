@@ -33,7 +33,7 @@ use xmlhub_indexer::{
     daemon::{Daemon, DaemonMode},
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
-    git::{git, git_ls_files, git_push, git_status, BaseAndRelPath},
+    git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     path_util::AppendToPath,
@@ -2255,14 +2255,15 @@ fn build_index(
             }
 
             // Check that there are no uncommitted changes
-            let mut items = vec![];
+            let mut items: Vec<GitStatusItem> = vec![];
             check_dry_run! {
                 message: "git status",
                 items = git_status(source_checkout.working_dir_path)?
             }
-            let changed_items: Vec<_> = items
+            let changed_items: Vec<String> = items
                 .iter()
                 .filter(|item| !written_files.contains(&item.path.as_str()))
+                .map(|item| item.to_string())
                 .collect();
             if !changed_items.is_empty() {
                 // Avoid making this message look like a failure?
@@ -2271,9 +2272,11 @@ fn build_index(
                 // explicitly.
                 eprintln!(
                     "\nFinished build, but won't run git commit due to uncommitted changes in {:?}:\n\
-                     {changed_items:?}\n\
+                     {}{}\n\
                      (Note: use the --no-commit option to suppress this error.)",
-                    source_checkout.working_dir_path
+                    source_checkout.working_dir_path,
+                    "  ",
+                    changed_items.join("\n  "),
                 );
                 return Ok(1);
             }
