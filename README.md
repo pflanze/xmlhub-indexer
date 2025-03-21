@@ -62,10 +62,14 @@ xmlhub directory and commit any changes to those. You can then `git
 push` the changes. There is also a `--push` option that lets
 `xmlhub` do the latter, too.
 
-Note that `xmlhub` only reads files that have the suffix
-`.xml` *and are added to the repository*. If you create a new XML
-file, first run `git add path/to/your.xml` before running
-`xmlhub` (`git commit` is not strictly necessary, `add` is).
+Note that `xmlhub` reads all files that have the suffix `.xml` that it
+finds under the given directory, *even if they have not been added to
+the Git repository* (the `--ignore-untracked` changes it to only read
+files that are tracked by Git). But `xmlhub` then refuses to commit
+the resulting index changes as it sees the uncommitted
+files. Nonetheless, it has finished the conversion by that point. (The
+`--no-commit` option prevents it from reporting the error, and makes
+it continue to execute any `--open`.. option you may have given.)
 
 If there are errors in any of the XML files, `xmlhub` will not
 overwrite the files by default, and instead just writes the errors to
