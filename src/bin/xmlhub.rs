@@ -218,7 +218,10 @@ struct Opts {
 
 #[derive(clap::Subcommand, Debug)]
 enum Command {
+    /// Rebuild the XML Hub index
     Build(BuildOpts),
+    /// Clone the XML Hub repository and apply merge config change
+    CloneTo(CloneOpts),
 }
 
 #[derive(clap::Parser, Debug)]
@@ -343,6 +346,21 @@ struct BuildOpts {
 
     /// The path to the base directory of the Git checkout of the XML
     /// Hub.
+    base_path: Option<PathBuf>,
+}
+
+#[derive(clap::Parser, Debug)]
+struct CloneOpts {
+    /// Do not show the Git commands that are run (by default, they
+    /// are shown even if the global `--verbose` option was not given)
+    #[clap(long)]
+    no_verbose: bool,
+
+    /// The desired path to the future base directory of the Git
+    /// checkout of the XML Hub, i.e. the directory and subdirectory
+    /// name where the xmlhub repository should be cloned to. The
+    /// parent directory of the given path must exist, the
+    /// subdirectory must not exist before running the command.
     base_path: Option<PathBuf>,
 }
 
@@ -1733,6 +1751,15 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
     )
 }
 
+// Helpers for the varous check_dry_run macros. Do not actually use
+// `eprintln!` since that can panic.
+fn eprintln_dry_run(s: String) {
+    _ = writeln!(&mut stderr(), "+ --dry-run: would run: {s}");
+}
+fn eprintln_running(s: String) {
+    _ = writeln!(&mut stderr(), "+ running: {s}");
+}
+
 /// Run one conversion from the XML files to the index files. Returns
 /// the exit code to exit the program with.
 fn build_index(
@@ -1750,10 +1777,10 @@ fn build_index(
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
             if global_opts.dry_run {
-                eprintln!("+ --dry-run: would run: {}", s());
+                eprintln_dry_run(s());
             } else {
                 if global_opts.verbose {
-                    eprintln!("+ running: {}", s());
+                    eprintln_running(s());
                 }
                 $body;
             }
@@ -2461,6 +2488,84 @@ fn build_command(
     }
 }
 
+/// Execute a `clone-to` command.
+fn clone_to_command(
+    _program_version: GitVersion<SemVersion>,
+    global_opts: &Opts,
+    command_opts: &CloneOpts,
+) -> Result<()> {
+    let CloneOpts {
+        no_verbose,
+        base_path,
+    } = command_opts;
+
+    let base_path = base_path
+        .as_ref()
+        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
+
+    // Define a macro to only run $body if opts.dry_run is false,
+    // otherwise show $message instead, or show $message anyway if
+    // command_opts.no_verbose is false.
+    macro_rules! check_dry_run {
+        { message: $message:expr, $body:expr } => {
+            let s = || -> String { $message.into() };
+            if global_opts.dry_run {
+                eprintln_dry_run(s());
+            } else {
+                if ! no_verbose {
+                    eprintln_running(s());
+                }
+                $body;
+            }
+        }
+    }
+
+    let checkout = XMLHUB_CHECKOUT.replace_working_dir_path(base_path);
+
+    if base_path.is_dir() && base_path.append(".git").is_dir() {
+        eprintln!("git checkout at {base_path:?} already exists, just configuring it");
+    } else {
+        let parent_dir = base_path.parent().ok_or_else(
+            // XX this should never happen, or replace with "."?  But ""
+            // does happen in fact! But that's treated as "." by cd, XXX but?
+            || anyhow!("the given path {base_path:?} has no parent directory"),
+        )?;
+
+        let url = checkout.supposed_upstream_git_url;
+
+        let subfolder_name = base_path.file_name().ok_or_else(|| {
+            anyhow!("the given path {base_path:?} is missing the subdirectory name")
+        })?;
+
+        check_dry_run! {
+            message: format!("cd {:?} && git clone {:?} {:?}",
+                             parent_dir,
+                             url,
+                             subfolder_name),
+            git(
+                parent_dir,
+                &[ OsString::from("clone"), OsString::from(url), subfolder_name.into() ],
+                false
+            )?
+        }
+
+        if !global_opts.dry_run {
+            checkout.check1()?;
+        }
+    }
+
+    check_dry_run! {
+        message: format!("cd {:?} && git config pull.rebase false", base_path),
+        git(
+            base_path,
+            &[ "config", "pull.rebase", "false" ],
+            false
+        )?
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
@@ -2590,6 +2695,24 @@ fn main() -> Result<()> {
                         })),
                     }
                 }
+                Command::CloneTo(CloneOpts {
+                    no_verbose,
+                    base_path,
+                }) => Opts {
+                    v,
+                    help_contributing,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::CloneTo(CloneOpts {
+                        no_verbose,
+                        base_path,
+                    })),
+                },
             },
             None => {
                 bail!("missing command argument. Please run with the `--help` option for help.")
@@ -2603,6 +2726,9 @@ fn main() -> Result<()> {
         .as_ref()
         .expect("`None` is dispatched above already")
     {
-        Command::Build(build_opts) => build_command(program_version, &global_opts, build_opts),
+        Command::Build(command_opts) => build_command(program_version, &global_opts, command_opts),
+        Command::CloneTo(command_opts) => {
+            clone_to_command(program_version, &global_opts, command_opts)
+        }
     }
 }
