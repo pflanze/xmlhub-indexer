@@ -115,8 +115,9 @@ output to a set of log files with time stamps. For the `start` mode,
 there are also `stop`, `restart` and `status` arguments to the
 `--daemon` option, to stop or restart a previously started daemon, or
 to query whether one is running. The log files are written into the
-`.git/xmlhub/logs/` directory of the local clone of the
-xmlhub repository that you've specified when starting the daemon.
+`.xmlhub/logs/` directory at BASE\_PATH (the root of the working
+directory of the local clone of the xmlhub repository) that you've
+specified when starting the daemon.
 
 Only one instance of a daemon can be started on the same repository at
 the same time. `xmlhub` also detects whenever two

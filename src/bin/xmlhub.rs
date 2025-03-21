@@ -120,6 +120,12 @@ const REPO_NAME: &str = file_name(SOURCE_CHECKOUT.supposed_upstream_web_url);
 /// in `build.rs`.
 const PROGRAM_VERSION: &str = env!("GIT_DESCRIBE");
 
+lazy_static! {
+    /// Name of the folder where the lock and log files are saved,
+    /// placed at the root of the working directory.
+    static ref DAEMON_FOLDER_NAME: String = format!(".{PROGRAM_NAME}");
+}
+
 // `HtmlAllocator` is an allocator for HTML elements (it manages
 // memory efficiently, and provides a method for each HTML element by
 // its name, e.g. `html.p(...)` creates a `<p>...</p>`
@@ -265,7 +271,7 @@ struct Opts {
     /// process into the background, "start" (and "restart") does.
     /// Implies `--batch`. You may want to use `--quiet` at the same
     /// time. Also see `--daemon-sleep-time`. When using "start" mode,
-    /// writes logs to the directory `.git/xmlhub/logs/`
+    /// writes logs to the directory `.xmlhub/logs/`
     /// under the given `BASE_PATH`.
     #[clap(long)]
     daemon: Option<DaemonMode>,
@@ -1813,8 +1819,9 @@ fn build_index(
             git_ls_files(base_path)?
         } else {
             // Ask the filesystem for the list of files, but do not
-            // waste time listing paths in the .git subdir
-            let ignored_file_names = HashSet::from([".git"]);
+            // waste time listing paths in the .git nor .xmlhub
+            // subdirs
+            let ignored_file_names = HashSet::from([".git", &*DAEMON_FOLDER_NAME]);
             let entries = WalkDir::new(base_path)
                 .follow_links(false)
                 .min_depth(1)
@@ -2498,7 +2505,7 @@ fn main() -> Result<()> {
         )
     };
 
-    let daemon_base_dir = base_path.append(".git").append("xmlhub");
+    let daemon_base_dir = base_path.append(&*DAEMON_FOLDER_NAME);
     let _ = create_dir(&daemon_base_dir);
 
     let main_lock_path = (&daemon_base_dir).append("main.lock");
