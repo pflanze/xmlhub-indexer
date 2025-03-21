@@ -43,7 +43,7 @@ use xmlhub_indexer::{
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
-    xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
+    xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
 struct OutputFile {
@@ -1740,8 +1740,8 @@ fn build_index(
     build_opts: &BuildOpts,
     base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
-    source_checkout: &CheckedCheckoutContext1<&PathBuf>,
-    maybe_checked_source_checkout: &Option<CheckedCheckoutContext2<&PathBuf>>,
+    xmlhub_checkout: &CheckedCheckoutContext1<&PathBuf>,
+    maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&PathBuf>>,
 ) -> Result<i32> {
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
@@ -1761,7 +1761,7 @@ fn build_index(
     }
 
     // Update repository if requested
-    if let Some(checked_source_checkout) = maybe_checked_source_checkout {
+    if let Some(checked_xmlhub_checkout) = maybe_checked_xmlhub_checkout {
         if build_opts.pull {
             check_dry_run! {
                 message: "git pull",
@@ -1772,7 +1772,7 @@ fn build_index(
         }
 
         if build_opts.batch {
-            let default_remote = &checked_source_checkout.default_remote;
+            let default_remote = &checked_xmlhub_checkout.default_remote;
 
             check_dry_run! {
                 message: format!("git remote update {default_remote:?}"),
@@ -1782,7 +1782,7 @@ fn build_index(
                 }
             }
 
-            let remote_banch_reference = checked_source_checkout.remote_branch_reference();
+            let remote_banch_reference = checked_xmlhub_checkout.remote_branch_reference();
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_reference:?}"),
@@ -2195,7 +2195,7 @@ fn build_index(
 
                 // Get an owned version of the base path and then
                 // append path segments to it.
-                let mut path = source_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path.to_owned();
                 path.push(HTML_FILE.path_from_repo_top);
                 let mut out = BufWriter::new(File::create(&path)?);
                 html.print_html_document(make_htmldocument(&html)?, &mut out)?;
@@ -2207,7 +2207,7 @@ fn build_index(
                     check_dry_run! {
                         message: "git diff",
                         html_file_has_changed = !git(
-                            source_checkout.working_dir_path,
+                            xmlhub_checkout.working_dir_path,
                             &["diff", "--no-patch", "--exit-code", "--",
                               HTML_FILE.path_from_repo_top],
                             false
@@ -2217,7 +2217,7 @@ fn build_index(
                 Ok(html_file_has_changed)
             },
             || -> Result<_> {
-                let mut path = source_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path.to_owned();
                 path.push(MD_FILE.path_from_repo_top);
                 make_mddocument()?
                     .write_to_file(&path)
@@ -2225,7 +2225,7 @@ fn build_index(
                 Ok(())
             },
             || -> Result<_> {
-                let mut path = source_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path.to_owned();
                 path.push(ATTRIBUTES_FILE.path_from_repo_top);
                 make_attributes_md()?
                     .write_to_file(&path)
@@ -2251,14 +2251,14 @@ fn build_index(
                 // checks on the repository, this one occurs late, but
                 // we can't move it earlier if we want it to be
                 // conditional on the need to actually commit.
-                source_checkout.check_current_branch()?;
+                xmlhub_checkout.check_current_branch()?;
             }
 
             // Check that there are no uncommitted changes
             let mut items: Vec<GitStatusItem> = vec![];
             check_dry_run! {
                 message: "git status",
-                items = git_status(source_checkout.working_dir_path)?
+                items = git_status(xmlhub_checkout.working_dir_path)?
             }
             let daemon_folder_name_with_slash = format!("{}/", *DAEMON_FOLDER_NAME);
             let ignore_path = |path: &str| -> bool {
@@ -2278,7 +2278,7 @@ fn build_index(
                     "\nFinished build, but won't run git commit due to uncommitted changes in {:?}:\n\
                      {}{}\n\
                      (Note: use the --no-commit option to suppress this error.)",
-                    source_checkout.working_dir_path,
+                    xmlhub_checkout.working_dir_path,
                     "  ",
                     changed_items.join("\n  "),
                 );
@@ -2288,7 +2288,7 @@ fn build_index(
             check_dry_run! {
                 message: format!("git add -f -- {written_files:?}"),
                 git(
-                    source_checkout.working_dir_path,
+                    xmlhub_checkout.working_dir_path,
                     &append(&["add", "-f", "--"], &written_files),
                     global_opts.quiet
                 )?
@@ -2298,7 +2298,7 @@ fn build_index(
             check_dry_run! {
                 message: format!("git commit -m .. -- {written_files:?}"),
                 did_commit = git(
-                    source_checkout.working_dir_path,
+                    xmlhub_checkout.working_dir_path,
                     &append(
                         &[
                             "commit",
@@ -2316,13 +2316,13 @@ fn build_index(
                 )?
             }
 
-            if let Some(checked_source_checkout) = maybe_checked_source_checkout {
-                let default_remote_for_push = &checked_source_checkout.default_remote;
+            if let Some(checked_xmlhub_checkout) = maybe_checked_xmlhub_checkout {
+                let default_remote_for_push = &checked_xmlhub_checkout.default_remote;
                 if did_commit {
                     check_dry_run! {
                         message: format!("git push {default_remote_for_push:?}"),
                         git_push::<&str>(
-                            source_checkout.working_dir_path,
+                            xmlhub_checkout.working_dir_path,
                             default_remote_for_push,
                             &[],
                             global_opts.quiet
@@ -2379,15 +2379,15 @@ fn build_command(
         program_version,
     };
 
-    let source_checkout = SOURCE_CHECKOUT
+    let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path)
         .check1()?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
     // then erroring out on pushing
-    let maybe_checked_source_checkout = if build_opts.push {
-        Some(source_checkout.clone().check2()?)
+    let maybe_checked_xmlhub_checkout = if build_opts.push {
+        Some(xmlhub_checkout.clone().check2()?)
     } else {
         None
     };
@@ -2402,8 +2402,8 @@ fn build_command(
             &build_opts,
             base_path,
             &git_log_version_checker,
-            &source_checkout,
-            &maybe_checked_source_checkout,
+            &xmlhub_checkout,
+            &maybe_checked_xmlhub_checkout,
         )
     };
 
