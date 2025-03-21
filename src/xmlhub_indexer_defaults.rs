@@ -4,6 +4,16 @@ use crate::checkout_context::CheckoutContext;
 /// compiled binary of the main program.
 pub const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub";
 
+/// Information on the Git checkout of the xmlhub repo; used
+/// by xmlhub.rs
+pub const XMLHUB_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
+    // This path is replaced with the BASE_PATH argument
+    working_dir_path: ".",
+    branch_name: "master",
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub.git",
+    supposed_upstream_web_url: "https://cevo-git.ethz.ch/cevo-resources/xmlhub",
+};
+
 /// Information on the Git checkout of the xmlhub-indexer repo; used
 /// by both xmlhub.rs and make-xmlhub-indexer-release.rs
 pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
