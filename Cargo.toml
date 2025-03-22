@@ -12,6 +12,9 @@ ahtml = { version = "0.7.0" }
 auri = { version = "0.1.1" }
 chj-util = { version = "0.2.1" }
 
+# Note: generally using older version since I know/verified those and
+# they are compatible with rustc from Debian stable.
+
 #xmlparser = "0.13.6"
 # ^ OH careful, recent owner change, was abandoned and merged into
 #   roxmltree but not publicly accessible!
@@ -20,13 +23,12 @@ ouroboros = "0.18.5"
 
 anyhow = "1.0.65"
 clap = { version = "3", features = ["derive"] }
+terminal_size = "0.2"
 chrono = "0.4"
 lazy_static = "1.4"
 itertools = "0.11.0"
 thiserror = "1.0.37"
 walkdir = "2"
-# use older version to avoid additional, unknown, dependencies
-# (separate newer versions of the windows dependencies)
 os_info = "=3.7"
 rayon = "=1.5.3"
 # use old version since it's known, and doesn't have additional
