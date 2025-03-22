@@ -36,7 +36,7 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
-    path_util::AppendToPath,
+    path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
     read_xml::{read_xml_file, XMLDocumentComment},
     string_tree::StringTree,
@@ -2525,11 +2525,13 @@ fn clone_to_command(
     if base_path.is_dir() && base_path.append(".git").is_dir() {
         eprintln!("git checkout at {base_path:?} already exists, just configuring it");
     } else {
-        let parent_dir = base_path.parent().ok_or_else(
-            // XX this should never happen, or replace with "."?  But ""
-            // does happen in fact! But that's treated as "." by cd, XXX but?
-            || anyhow!("the given path {base_path:?} has no parent directory"),
-        )?;
+        let parent_dir = base_path
+            .parent()
+            .ok_or_else(
+                // This only happens for the path "".
+                || anyhow!("the given path {base_path:?} has no parent directory"),
+            )?
+            .fixup();
 
         let url = checkout.supposed_upstream_git_url;
 
@@ -2543,7 +2545,7 @@ fn clone_to_command(
                              url,
                              subfolder_name),
             git(
-                parent_dir,
+                &parent_dir,
                 &[ OsString::from("clone"), OsString::from(url), subfolder_name.into() ],
                 false
             )?
