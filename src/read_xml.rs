@@ -99,7 +99,7 @@ pub fn read_xml_file(path: &Path) -> Result<XMLDocument> {
     // Back to reading the whole file to memory first since roxmltree
     // requires that.
     let string = std::fs::read_to_string(path)
-        .context("reading file")?
+        .context("opening or reading the file contents")?
         .into_boxed_str();
 
     XMLDocument::try_new(string, |string| {
