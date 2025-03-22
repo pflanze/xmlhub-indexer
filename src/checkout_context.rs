@@ -9,7 +9,10 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 
-use crate::git::{git_branch_show_current, git_remote_get_default_for_branch, git_status};
+use crate::{
+    git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
+    path_util::FixupPath,
+};
 
 #[derive(Debug, Clone)]
 pub struct CheckoutContext<'s, P: AsRef<Path>> {
@@ -77,7 +80,8 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
                 working_dir_path
                     .parent()
                     .map(ToOwned::to_owned)
-                    .unwrap_or_else(|| PathBuf::from("???")),
+                    .unwrap_or_else(|| PathBuf::from("???"))
+                    .fixup(),
                 self.supposed_upstream_git_url,
                 working_dir_path
                     .file_name()
