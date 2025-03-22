@@ -9,11 +9,11 @@ use nix::NixPath;
 pub trait AppendToPath {
     /// Note: `segment` should be a single file/folder name and *not*
     /// contain `/` or `\\` characters!
-    fn append(self, segment: &str) -> PathBuf;
+    fn append<P: AsRef<Path>>(self, segment: P) -> PathBuf;
 }
 
 impl<'p> AppendToPath for &'p Path {
-    fn append(self, segment: &str) -> PathBuf {
+    fn append<P: AsRef<Path>>(self, segment: P) -> PathBuf {
         let mut path = self.to_owned();
         path.push(segment);
         path
@@ -21,7 +21,7 @@ impl<'p> AppendToPath for &'p Path {
 }
 
 impl<'p> AppendToPath for &'p PathBuf {
-    fn append(self, segment: &str) -> PathBuf {
+    fn append<P: AsRef<Path>>(self, segment: P) -> PathBuf {
         let mut path = self.clone();
         path.push(segment);
         path
@@ -29,7 +29,7 @@ impl<'p> AppendToPath for &'p PathBuf {
 }
 
 impl AppendToPath for PathBuf {
-    fn append(mut self, segment: &str) -> PathBuf {
+    fn append<P: AsRef<Path>>(mut self, segment: P) -> PathBuf {
         self.push(segment);
         self
     }
