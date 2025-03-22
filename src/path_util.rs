@@ -1,7 +1,11 @@
-//! Make it easy to append a segment to an existing path.
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
-use std::path::{Path, PathBuf};
+use nix::NixPath;
 
+/// Make it easy to append a segment to an existing path.
 pub trait AppendToPath {
     /// Note: `segment` should be a single file/folder name and *not*
     /// contain `/` or `\\` characters!
@@ -28,5 +32,52 @@ impl AppendToPath for PathBuf {
     fn append(mut self, segment: &str) -> PathBuf {
         self.push(segment);
         self
+    }
+}
+
+// XXX: how does this fare with Windows?
+/// Replace the "" path with "."
+pub trait FixupPath<'t> {
+    fn fixup(self) -> Cow<'t, Path>
+    where
+        Self: 't;
+}
+
+impl<'t> FixupPath<'t> for &'t Path {
+    fn fixup(self) -> Cow<'t, Path>
+    where
+        Self: 't,
+    {
+        if self.is_empty() {
+            PathBuf::from(".").into()
+        } else {
+            self.into()
+        }
+    }
+}
+
+impl<'t> FixupPath<'t> for &'t PathBuf {
+    fn fixup(self) -> Cow<'t, Path>
+    where
+        Self: 't,
+    {
+        if self.is_empty() {
+            PathBuf::from(".").into()
+        } else {
+            self.into()
+        }
+    }
+}
+
+impl<'t> FixupPath<'t> for PathBuf {
+    fn fixup(self) -> Cow<'t, Path>
+    where
+        Self: 't,
+    {
+        if self.is_empty() {
+            PathBuf::from(".").into()
+        } else {
+            self.into()
+        }
     }
 }
