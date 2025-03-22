@@ -145,12 +145,22 @@ lazy_static! {
     );
 }
 
+fn get_terminal_width() -> usize {
+    let default = 120;
+    if let Some((terminal_size::Width(width), _height)) = terminal_size::terminal_size() {
+        usize::from(width).checked_sub(4).unwrap_or(default)
+    } else {
+        default
+    }
+}
+
 // =============================================================================
 // Specification of the command line interface, using the `clap`
 // library crate.
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
+#[clap(set_term_width = get_terminal_width())]
 /// Build an index of the files in the XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 struct Opts {
