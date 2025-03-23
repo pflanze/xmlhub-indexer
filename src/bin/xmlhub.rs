@@ -36,12 +36,13 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
+    modified_xml_document::ModifiedXMLDocument,
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
-    util::{append, list_get_by_key, InsertValue},
+    util::{append, english_plural, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
@@ -55,6 +56,10 @@ struct OutputFile {
 // Various settings in addition to those imported from
 // `xmlhub_indexer_defaults` (see `xmlhub_indexer_defaults.rs` to edit
 // those!).
+
+/// Comment added to XML files when blinding `<data>` XML elements
+const DEFAULT_COMMENT_FOR_BLINDED_DATA: &str =
+    "Sequences removed to comply with GISAID terms of use";
 
 /// How many seconds to sleep at minimum between runs in daemon
 /// mode. Keep in sync with the `Opts` docs above!
@@ -228,10 +233,14 @@ struct Opts {
 
 #[derive(clap::Subcommand, Debug)]
 enum Command {
-    /// Rebuild the XML Hub index
+    /// Rebuild the XML Hub index.
     Build(BuildOpts),
-    /// Clone the XML Hub repository and apply merge config change
+    /// Clone the XML Hub repository and apply merge config change.
     CloneTo(CloneOpts),
+    /// Add new XML files to a XML Hub repository clone and add
+    /// metadata templates to them so that the metadata can more
+    /// easily be entered via a text editor.
+    Add(AddOpts),
 }
 
 #[derive(clap::Parser, Debug)]
@@ -372,6 +381,37 @@ struct CloneOpts {
     /// parent directory of the given path must exist, the
     /// subdirectory must not exist before running the command.
     base_path: Option<PathBuf>,
+}
+
+#[derive(clap::Parser, Debug)]
+struct AddOpts {
+    /// The path to an existing directory inside the Git checkout of
+    /// the XML Hub, where the file(s) should be copied to. .
+    target_directory: Option<PathBuf>,
+
+    /// The path(s) to the XML file(s), outside of the XML Hub
+    /// repository, that you want to add to XML Hub. They are copied,
+    /// and a metainformation template is added to them while doing
+    /// so. .
+    files_to_add: Vec<PathBuf>,
+
+    /// Create the `TARGET_DIRECTORY` if it doesn't exist yet. .
+    #[clap(long)]
+    mkdir: bool,
+
+    /// Do *not* strip the sequences (`<data>` element contents); by
+    /// default they are stripped, as safety measure to avoid
+    /// accidental exposure of private data. If you can publish the
+    /// data and it's not overly large, feel free to use this option!
+    #[clap(long)]
+    no_blind: bool,
+
+    /// The comment to put above `<data>` elements when blinding the
+    /// data (i.e. `--no-blind` is not given). By default, a comment
+    /// with regards to terms of use with regards to GISAID is given.
+    #[clap(long)]
+    blind_comment: Option<String>,
+    // XX FUTURE idea: --set "header: value"
 }
 
 // =============================================================================
@@ -2578,6 +2618,102 @@ fn clone_to_command(
     Ok(())
 }
 
+/// Execute an `add` command.
+fn add_command(
+    _program_version: GitVersion<SemVersion>,
+    global_opts: &Opts,
+    command_opts: &AddOpts,
+) -> Result<()> {
+    let AddOpts {
+        target_directory,
+        files_to_add,
+        mkdir,
+        no_blind,
+        blind_comment,
+    } = command_opts;
+
+    let target_directory = target_directory
+        .as_ref()
+        .ok_or_else(|| anyhow!("missing TARGET_DIRECTORY argument. Run --help for help."))?;
+
+    if !target_directory.is_dir() {
+        if *mkdir {
+            create_dir(target_directory)
+                .with_context(|| anyhow!("creating target directory {target_directory:?}"))?
+        } else {
+            bail!(
+                "given TARGET_DIRECTORY path {target_directory:?} does not exist. \
+                   Add the --mkdir option if you want to create it."
+            )
+        }
+    }
+
+    let file_or_files = english_plural(files_to_add.len(), "files");
+
+    if !global_opts.quiet {
+        println!("Reading the {file_or_files}...");
+    }
+
+    let mut outputs = Vec::new();
+    for source_path in files_to_add {
+        let file_name = source_path
+            .file_name()
+            .with_context(|| anyhow!("given path {source_path:?} is missing file name"))?;
+        let target_path = target_directory.append(file_name);
+
+        let xmldocument = read_xml_file(source_path)
+            .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
+
+        // XX TODO: check if the document already has an xmlhub header?
+
+        let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
+
+        // Add header template
+        for att in METADATA_SPECIFICATION {
+            let comment = format!(
+                "{}: {}",
+                att.key.as_ref(),
+                if att.need == AttributeNeed::Optional {
+                    "NA"
+                } else {
+                    ""
+                }
+            );
+            modified_document.insert_comment_at_the_top(&comment, "  ");
+        }
+
+        // Optionally, delete (blind) data
+        if !no_blind {
+            let comment = blind_comment
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
+            modified_document.clear_elements_named("data", Some((comment, "    ")));
+        }
+
+        outputs.push((target_path, modified_document.to_string()?));
+    }
+
+    if !global_opts.quiet {
+        println!("Writing the {file_or_files}...");
+    }
+
+    // Now that all files were read successfully, write them out
+    for (target_path, output_string) in outputs {
+        std::fs::write(&target_path, output_string)
+            .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+    }
+
+    if !global_opts.quiet {
+        println!(
+            "Done. Now edit the new {file_or_files} in {target_directory:?} \
+             to complete the metadata."
+        );
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
@@ -2725,6 +2861,30 @@ fn main() -> Result<()> {
                         base_path,
                     })),
                 },
+                Command::Add(AddOpts {
+                    target_directory,
+                    files_to_add,
+                    mkdir,
+                    no_blind,
+                    blind_comment,
+                }) => Opts {
+                    v,
+                    help_contributing,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::Add(AddOpts {
+                        target_directory,
+                        files_to_add,
+                        mkdir,
+                        no_blind,
+                        blind_comment,
+                    })),
+                },
             },
             None => {
                 bail!("missing command argument. Please run with the `--help` option for help.")
@@ -2742,5 +2902,6 @@ fn main() -> Result<()> {
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &global_opts, command_opts)
         }
+        Command::Add(command_opts) => add_command(program_version, &global_opts, command_opts),
     }
 }

@@ -13,6 +13,8 @@ pub mod forking_loop;
 pub mod git;
 pub mod git_check_version;
 pub mod git_version;
+pub mod modified_document;
+pub mod modified_xml_document;
 pub mod path_util;
 pub mod rayon_util;
 pub mod string_tree;

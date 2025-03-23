@@ -1,3 +1,8 @@
+//! Load an XML document and parse it into a read-only tree
+//! representation efficiently. See
+//! [`xml_document_map`](xml_document_map.rs) for carrying out simple
+//! modifications.
+
 use std::{fmt::Display, ops::Range, path::Path};
 
 use anyhow::{Context, Result};
@@ -12,8 +17,16 @@ pub struct XMLDocumentLocation<'a> {
     byte_range: Range<usize>,
 }
 
+impl<'a> XMLDocumentLocation<'a> {
+    pub fn start_line_and_col(&self) -> (usize, usize) {
+        let start = str_line_col((0, 0), &self.xmldocument.as_str()[0..self.byte_range.start]);
+        start
+    }
+}
+
 /// Returns (line, column), based on `start`, of the end of `s` with
-/// respect of the start of `s`.
+/// respect of the start of `s`, 0-based (for columns--for lines it
+/// depends what you feed in).
 fn str_line_col(start: (usize, usize), s: &str) -> (usize, usize) {
     let (mut line, mut col) = start;
     for c in s.chars() {
@@ -76,6 +89,14 @@ impl XMLDocument {
 
     pub fn document<'a>(&'a self) -> &'a Document<'a> {
         self.borrow_document()
+    }
+
+    /// Convert a position index into a `XMLDocumentLocation`.
+    pub fn index_to_location(&self, index: usize) -> XMLDocumentLocation {
+        XMLDocumentLocation {
+            xmldocument: self,
+            byte_range: index..index,
+        }
     }
 
     /// The comments above the first element in the document.
