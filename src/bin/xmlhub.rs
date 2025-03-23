@@ -38,11 +38,11 @@ use xmlhub_indexer::{
     git_version::{GitVersion, SemVersion},
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
-    read_xml::{read_xml_file, XMLDocumentComment},
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
+    xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
