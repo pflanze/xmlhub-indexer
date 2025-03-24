@@ -81,6 +81,19 @@ impl<'d> ModifiedDocument<'d> {
         }
     }
 
+    /// Whether edits have been carried out; no check is done whether
+    /// edits were done that yield the original document. For the
+    /// latter, use `to_string_and_modified` instead.
+    pub fn has_modifiations(&self) -> bool {
+        !self.modifications.is_empty()
+    }
+
+    /// Add a modification; each modification's positions are with
+    /// respect to the original document, independent of those pushed
+    /// before. Overlaps lead to an error when applying the
+    /// modifications. Positions must match UTF-8 boundaries,
+    /// otherwise a panic will happen in `to_string`, and `write_to`
+    /// will output invalid UTF-8!
     pub fn push(&mut self, modification: Modification) {
         self.modifications.push(modification)
     }
@@ -105,6 +118,7 @@ impl<'d> ModifiedDocument<'d> {
         Ok(())
     }
 
+    /// Write the resulting string
     pub fn write_to<O: Write>(&mut self, output: &mut O) -> Result<()> {
         self.sort_and_check_modifications()?;
         let bytes = self.string.as_bytes();
@@ -131,10 +145,19 @@ impl<'d> ModifiedDocument<'d> {
         Ok(())
     }
 
+    /// Return the resulting string
     pub fn to_string(&mut self) -> Result<String> {
         let mut output = Vec::new();
         self.write_to(&mut output)?;
         Ok(String::from_utf8(output).expect("modification ranges are correct; XX not ensured"))
+    }
+
+    /// Return the resulting string, and whether that string is
+    /// different from the original.
+    pub fn to_string_and_modified(&mut self) -> Result<(String, bool)> {
+        let output = self.to_string()?;
+        let modified = output != self.string;
+        Ok((output, modified))
     }
 }
 
