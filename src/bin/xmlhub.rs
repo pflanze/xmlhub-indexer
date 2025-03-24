@@ -2696,6 +2696,23 @@ fn prepare_file(
     Ok(modified_document.to_string_and_modified()?)
 }
 
+fn overwrite_file_moving_to_trash_if_exists(
+    target_path: &Path,
+    content: &str,
+    quiet: bool,
+) -> Result<()> {
+    if target_path.exists() {
+        trash::delete(&target_path)
+            .with_context(|| anyhow!("moving existing target file {target_path:?} to trash"))?;
+        if !quiet {
+            println!("moved existing target {target_path:?} to trash");
+        }
+    }
+    std::fs::write(&target_path, content)
+        .with_context(|| anyhow!("writing contents to file {target_path:?}"))?;
+    Ok(())
+}
+
 /// Execute a `prepare` command.
 fn prepare_command(
     _program_version: GitVersion<SemVersion>,
@@ -2712,7 +2729,7 @@ fn prepare_command(
     // writing only some of them (which would then exist when
     // re-running the same command, also it will be a bit
     // confusing). With regards to IO, only reading happens here.
-    let converted: Vec<_> = files_to_prepare
+    let converted: Vec<(&PathBuf, (String, bool))> = files_to_prepare
         .into_iter()
         .map(|source_path| {
             Ok((
@@ -2726,9 +2743,11 @@ fn prepare_command(
     // them out. With regards to IO, only writing happens here.
     for (target_path, (output_string, modified)) in converted {
         if modified {
-            // XXX keep existing files in trash
-            std::fs::write(&target_path, output_string)
-                .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+            overwrite_file_moving_to_trash_if_exists(
+                &target_path,
+                &output_string,
+                global_opts.quiet,
+            )?;
         } else {
             if !global_opts.quiet {
                 println!("note: the file {target_path:?} is unchanged (already prepared)");
@@ -2828,9 +2847,8 @@ fn add_command(
         // file even if no modification is carried out at the same
         // time!
 
-        // XXX keep existing files in trash, even with --force?
-        std::fs::write(&target_path, output_string)
-            .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+        // Keep existing files in trash, even with --force?
+        overwrite_file_moving_to_trash_if_exists(&target_path, &output_string, global_opts.quiet)?;
     }
 
     if !global_opts.quiet {
