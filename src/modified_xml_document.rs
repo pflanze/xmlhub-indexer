@@ -185,7 +185,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         }
     }
 
-    pub fn to_string(&mut self) -> Result<String> {
-        self.document.to_string()
+    pub fn to_string_and_modified(&mut self) -> Result<(String, bool)> {
+        self.document.to_string_and_modified()
     }
 }

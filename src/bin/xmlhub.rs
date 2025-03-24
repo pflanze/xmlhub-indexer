@@ -2656,11 +2656,13 @@ fn clone_to_command(
     Ok(())
 }
 
+/// Returns the converted file contents, and whether that content is
+/// different from the original.
 fn prepare_file(
     source_path: &Path,
     no_blind: bool,
     blind_comment: &Option<String>,
-) -> Result<String> {
+) -> Result<(String, bool)> {
     let xmldocument = read_xml_file(source_path)
         .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
 
@@ -2691,13 +2693,13 @@ fn prepare_file(
         modified_document.clear_elements_named("data", Some((comment, "    ")));
     }
 
-    Ok(modified_document.to_string()?)
+    Ok(modified_document.to_string_and_modified()?)
 }
 
 /// Execute a `prepare` command.
 fn prepare_command(
     _program_version: GitVersion<SemVersion>,
-    _global_opts: &Opts, // XX anything to check from Opts?
+    global_opts: &Opts,
     command_opts: &PrepareOpts,
 ) -> Result<()> {
     let PrepareOpts {
@@ -2722,10 +2724,16 @@ fn prepare_command(
 
     // Now that all files were read and converted successfully, write
     // them out. With regards to IO, only writing happens here.
-    for (target_path, output_string) in converted {
-        // XXX keep existing files in trash
-        std::fs::write(&target_path, output_string)
-            .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+    for (target_path, (output_string, modified)) in converted {
+        if modified {
+            // XXX keep existing files in trash
+            std::fs::write(&target_path, output_string)
+                .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+        } else {
+            if !global_opts.quiet {
+                println!("note: the file {target_path:?} is unchanged (already prepared)");
+            }
+        }
     }
     Ok(())
 }
@@ -2782,7 +2790,7 @@ fn add_command(
         .collect::<Result<_>>()?;
 
     // Convert the paths to the output paths; no IO happens here.
-    let outputs: Vec<(PathBuf, String)> = converted
+    let outputs: Vec<(PathBuf, (String, bool))> = converted
         .into_iter()
         .map(|(source_path, converted_contents)| -> Result<_> {
             let file_name = source_path
@@ -2814,7 +2822,12 @@ fn add_command(
     // Now that all files were read, converted and target-checked
     // successfully, write them out. With regards to IO, only writing
     // happens here.
-    for (target_path, output_string) in outputs {
+    for (target_path, (output_string, _modified)) in outputs {
+        // Note: ignore _modified as that is with regards to the
+        // source path, which is a different path. We need to copy the
+        // file even if no modification is carried out at the same
+        // time!
+
         // XXX keep existing files in trash, even with --force?
         std::fs::write(&target_path, output_string)
             .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
