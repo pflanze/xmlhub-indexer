@@ -59,7 +59,7 @@ struct OutputFile {
 
 /// Comment added to XML files when blinding `<data>` XML elements
 const DEFAULT_COMMENT_FOR_BLINDED_DATA: &str =
-    "Sequences removed to comply with GISAID terms of use";
+    "Sequences removed due to terms of use or privacy concerns";
 
 /// How many seconds to sleep at minimum between runs in daemon
 /// mode. Keep in sync with the `Opts` docs above!
