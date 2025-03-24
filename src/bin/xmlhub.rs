@@ -165,6 +165,7 @@ fn get_terminal_width() -> usize {
 enum BeastMajorVersion {
     One,
     Two,
+    Future(u16),
 }
 
 impl TryFrom<u16> for BeastMajorVersion {
@@ -172,9 +173,10 @@ impl TryFrom<u16> for BeastMajorVersion {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
+            0 => bail!("not a BEAST major version number: {value}"),
             1 => Ok(BeastMajorVersion::One),
             2 => Ok(BeastMajorVersion::Two),
-            _ => bail!("not a BEAST major version number: {value}"),
+            n => Ok(BeastMajorVersion::Future(n)),
         }
     }
 }
