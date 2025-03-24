@@ -2659,46 +2659,60 @@ fn add_command(
         println!("Reading the {file_or_files}...");
     }
 
-    let mut outputs = Vec::new();
-    for source_path in files_to_add {
-        let file_name = source_path
-            .file_name()
-            .with_context(|| anyhow!("given path {source_path:?} is missing file name"))?;
-        let target_path = target_directory.append(file_name);
+    // First, convert them all without writing them out, to avoid
+    // writing only some of them (which would then exist when
+    // re-running the same command, also it will be a bit
+    // confusing). With regards to IO, only reading happens here.
+    let converted: Vec<_> = files_to_add
+        .into_iter()
+        .map(|source_path| -> Result<_> {
+            let xmldocument = read_xml_file(source_path)
+                .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
 
-        let xmldocument = read_xml_file(source_path)
-            .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
+            // XX TODO: check if the document already has an xmlhub header?
 
-        // XX TODO: check if the document already has an xmlhub header?
+            let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
 
-        let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
+            // Add header template
+            for att in METADATA_SPECIFICATION {
+                let comment = format!(
+                    "{}: {}",
+                    att.key.as_ref(),
+                    if att.need == AttributeNeed::Optional {
+                        "NA"
+                    } else {
+                        ""
+                    }
+                );
+                modified_document.insert_comment_at_the_top(&comment, "  ");
+            }
 
-        // Add header template
-        for att in METADATA_SPECIFICATION {
-            let comment = format!(
-                "{}: {}",
-                att.key.as_ref(),
-                if att.need == AttributeNeed::Optional {
-                    "NA"
-                } else {
-                    ""
-                }
-            );
-            modified_document.insert_comment_at_the_top(&comment, "  ");
-        }
+            // Optionally, delete (blind) data
+            if !no_blind {
+                let comment = blind_comment
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
+                modified_document.clear_elements_named("data", Some((comment, "    ")));
+            }
 
-        // Optionally, delete (blind) data
-        if !no_blind {
-            let comment = blind_comment
-                .as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-            modified_document.clear_elements_named("data", Some((comment, "    ")));
-        }
+            Ok((source_path, modified_document.to_string()?))
+        })
+        .collect::<Result<_>>()?;
 
-        outputs.push((target_path, modified_document.to_string()?));
-    }
+    // Convert the paths to the output paths; no IO happens here.
+    let outputs: Vec<(PathBuf, String)> = converted
+        .into_iter()
+        .map(|(source_path, converted_contents)| -> Result<_> {
+            let file_name = source_path
+                .file_name()
+                .with_context(|| anyhow!("given path {source_path:?} is missing file name"))?;
+            let target_path = target_directory.append(file_name);
+            Ok((target_path, converted_contents))
+        })
+        .collect::<Result<_>>()?;
 
+    // Stop if any of the files exist, by default.
     if !force {
         let existing_target_paths: Vec<&PathBuf> = outputs
             .iter()
@@ -2716,7 +2730,9 @@ fn add_command(
         println!("Writing the {file_or_files}...");
     }
 
-    // Now that all files were read successfully, write them out
+    // Now that all files were read, converted and target-checked
+    // successfully, write them out. With regards to IO, only writing
+    // happens here.
     for (target_path, output_string) in outputs {
         std::fs::write(&target_path, output_string)
             .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
