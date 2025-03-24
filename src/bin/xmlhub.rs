@@ -2735,13 +2735,6 @@ fn prepare_file(
     let beast_version = get_beast_version(xmldocument.document())
         .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
 
-    if beast_version.major != BeastMajorVersion::Two {
-        bail!(
-            "file is not a BEAST 2 file, it specifies version {:?}: {source_path:?}",
-            beast_version.string
-        )
-    }
-
     // XX TODO: check if the document already has an xmlhub header?
 
     let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
@@ -2762,6 +2755,16 @@ fn prepare_file(
 
     // Optionally, delete (blind) data
     if !no_blind {
+        if beast_version.major != BeastMajorVersion::Two {
+            bail!(
+                "currently, can only blind BEAST 2 files, but this file specifies version {:?}: \
+                 {source_path:?} (for BEAST 1 or 3.. files, blind manually or via the \
+                 `beast1blinder.py` script and specify the `--no-blind` \
+                 option)",
+                beast_version.string
+            )
+        }
+
         let comment = blind_comment
             .as_ref()
             .map(|s| s.as_str())
