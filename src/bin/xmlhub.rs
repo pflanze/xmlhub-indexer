@@ -411,6 +411,10 @@ struct AddOpts {
     /// with regards to terms of use with regards to GISAID is given.
     #[clap(long)]
     blind_comment: Option<String>,
+
+    /// Force overwriting of existing files at the target location. .
+    #[clap(long, short)]
+    force: bool,
     // XX FUTURE idea: --set "header: value"
 }
 
@@ -2630,6 +2634,7 @@ fn add_command(
         mkdir,
         no_blind,
         blind_comment,
+        force,
     } = command_opts;
 
     let target_directory = target_directory
@@ -2692,6 +2697,19 @@ fn add_command(
         }
 
         outputs.push((target_path, modified_document.to_string()?));
+    }
+
+    if !force {
+        let existing_target_paths: Vec<&PathBuf> = outputs
+            .iter()
+            .filter_map(|(path, _)| if path.exists() { Some(path) } else { None })
+            .collect();
+        if !existing_target_paths.is_empty() {
+            bail!(
+                "these target paths already exist--specify the --force option to overwrite: \
+                 {existing_target_paths:#?}"
+            )
+        }
     }
 
     if !global_opts.quiet {
@@ -2867,6 +2885,7 @@ fn main() -> Result<()> {
                     mkdir,
                     no_blind,
                     blind_comment,
+                    force,
                 }) => Opts {
                     v,
                     help_contributing,
@@ -2883,6 +2902,7 @@ fn main() -> Result<()> {
                         mkdir,
                         no_blind,
                         blind_comment,
+                        force,
                     })),
                 },
             },
