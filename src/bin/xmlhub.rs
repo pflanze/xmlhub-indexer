@@ -241,11 +241,6 @@ struct Opts {
     #[clap(long = "version")]
     v: bool,
 
-    /// Open the XML Hub CONTRIBUTING page in the web browser. If this
-    /// doesn't work for you, see the notes for the `--open` option.
-    #[clap(long)]
-    help_contributing: bool,
-
     /// Show external modifying commands that are run. Note that this
     /// does not disable `--quiet`.
     #[clap(short, long)]
@@ -298,6 +293,10 @@ struct Opts {
 
 #[derive(clap::Subcommand, Debug)]
 enum Command {
+    /// Open the CONTRIBUTING documentation in the web browser. If it
+    /// doesn't open the browser, see the notes for the `--open`
+    /// option of the `build` subcommand.
+    HelpContributing,
     /// Rebuild the XML Hub index.
     Build(BuildOpts),
     /// Clone the XML Hub repository and apply merge config change.
@@ -2940,6 +2939,20 @@ fn add_command(
     Ok(())
 }
 
+fn help_contributing_command() -> Result<()> {
+    // XX sigh, spawn_browser is badly prepared for external urls,
+    // (1) should not need a directory, (2) should not require
+    // arguments to be OsStr.
+    spawn_browser(
+        &PathBuf::from("/"),
+        &[&OsString::from(
+            "https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md\
+             ?ref_type=heads",
+        )],
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
@@ -2962,19 +2975,8 @@ fn main() -> Result<()> {
             localtime,
             max_log_file_size,
             max_log_files,
-            help_contributing,
             command,
         } = Opts::parse();
-
-        if help_contributing {
-            // XX sigh, spawn_browser is badly prepared for external urls,
-            // (1) should not need a directory, (2) should not require
-            // arguments to be OsStr.
-            spawn_browser(&PathBuf::from("/"), &[&OsString::from(
-            "https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md?ref_type=heads"
-        )])?;
-            return Ok(());
-        }
 
         if v {
             println!("{REPO_NAME} {program_version}");
@@ -3041,7 +3043,6 @@ fn main() -> Result<()> {
                     // Pack the variables into a new struct
                     Opts {
                         v,
-                        help_contributing,
                         verbose,
                         quiet,
                         localtime,
@@ -3074,7 +3075,6 @@ fn main() -> Result<()> {
                     base_path,
                 }) => Opts {
                     v,
-                    help_contributing,
                     verbose,
                     quiet,
                     localtime,
@@ -3093,7 +3093,6 @@ fn main() -> Result<()> {
                     blind_comment,
                 }) => Opts {
                     v,
-                    help_contributing,
                     verbose,
                     quiet,
                     localtime,
@@ -3116,7 +3115,6 @@ fn main() -> Result<()> {
                     force,
                 }) => Opts {
                     v,
-                    help_contributing,
                     verbose,
                     quiet,
                     localtime,
@@ -3132,6 +3130,17 @@ fn main() -> Result<()> {
                         blind_comment,
                         force,
                     })),
+                },
+                Command::HelpContributing => Opts {
+                    v,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::HelpContributing),
                 },
             },
             None => {
@@ -3154,5 +3163,6 @@ fn main() -> Result<()> {
             prepare_command(program_version, &global_opts, command_opts)
         }
         Command::Add(command_opts) => add_command(program_version, &global_opts, command_opts),
+        Command::HelpContributing => help_contributing_command(),
     }
 }
