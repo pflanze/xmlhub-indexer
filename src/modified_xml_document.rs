@@ -151,6 +151,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         comment_and_indent: Option<(&str, &str)>,
     ) {
         for element in self.elements_named(element_name) {
+            let is_modified;
             {
                 let mut delete_range: Option<Range<usize>> = None;
                 for node in element.children() {
@@ -160,27 +161,30 @@ impl<'d> ModifiedXMLDocument<'d> {
                         delete_range = Some(node.range());
                     }
                 }
+                is_modified = delete_range.is_some();
                 if let Some(range) = delete_range {
                     self.document.push(Modification::Delete(range));
                 }
-            }
+            };
 
-            if let Some((comment, indent)) = &comment_and_indent {
-                let escaped_comment = escape_comment(comment, indent);
+            if is_modified {
+                if let Some((comment, indent)) = &comment_and_indent {
+                    let escaped_comment = escape_comment(comment, indent);
 
-                // How to know how much to indent on the next line?
-                // Check the horizontal position of the position where
-                // we insert the comment:
-                let (_element_start_line, element_start_col) = self
-                    .xml_document
-                    .index_to_location(element.range().start)
-                    .start_line_and_col();
-                let indent = " ".repeat(element_start_col);
+                    // How to know how much to indent on the next line?
+                    // Check the horizontal position of the position where
+                    // we insert the comment:
+                    let (_element_start_line, element_start_col) = self
+                        .xml_document
+                        .index_to_location(element.range().start)
+                        .start_line_and_col();
+                    let indent = " ".repeat(element_start_col);
 
-                self.document.push(Modification::Insert(
-                    element.range().start,
-                    format!("{escaped_comment}\n{indent}").into(),
-                ));
+                    self.document.push(Modification::Insert(
+                        element.range().start,
+                        format!("{escaped_comment}\n{indent}").into(),
+                    ));
+                }
             }
         }
     }
