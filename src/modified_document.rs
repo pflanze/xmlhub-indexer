@@ -109,7 +109,7 @@ impl<'d> ModifiedDocument<'d> {
                 if modification.start() < last.end() {
                     bail!(
                         "overlapping document modifications: \
-                         {last_modification:?} and {modification:?}"
+                         {last:?} and {modification:?}"
                     )
                 }
             }
@@ -182,7 +182,7 @@ mod tests {
         doc.push(Modification::Delete(6..s.len()));
         assert_eq!(
             doc.to_string().err().unwrap().to_string(),
-            "overlapping document modifications: Some(Delete(6..8)) and Delete(7..8)"
+            "overlapping document modifications: Delete(6..8) and Delete(7..8)"
         );
         Ok(())
     }
@@ -201,7 +201,7 @@ mod tests {
         doc.push(Modification::Insert(4, "H".into()));
         assert_eq!(
             doc.to_string().err().unwrap().to_string(),
-            "overlapping document modifications: Some(Delete(3..5)) and Insert(4, \"H\")"
+            "overlapping document modifications: Delete(3..5) and Insert(4, \"H\")"
         );
 
         Ok(())
