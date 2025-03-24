@@ -237,9 +237,17 @@ enum Command {
     Build(BuildOpts),
     /// Clone the XML Hub repository and apply merge config change.
     CloneTo(CloneOpts),
-    /// Add new XML files to a XML Hub repository clone and add
-    /// metadata templates to them so that the metadata can more
-    /// easily be entered via a text editor.
+    /// Prepare some XML file(s) by adding a metadata template to
+    /// it/them so that the metadata can more easily be entered via a
+    /// text editor, and by default, deleting sequence data.  Careful!: this
+    /// replaces the files in place, but keeps the original in the
+    /// system trash bin. Also see the `add` subcommand, which leaves
+    /// the original file untouched but creates a prepared copy in a
+    /// separate directory.
+    Prepare(PrepareOpts),
+    /// Add some XML file(s) to a XML Hub repository clone and carry
+    /// out the `prepare` action on them at the same time. This leaves
+    /// the original file unchanged.
     Add(AddOpts),
 }
 
@@ -384,6 +392,31 @@ struct CloneOpts {
 }
 
 #[derive(clap::Parser, Debug)]
+struct PrepareOpts {
+    /// The path(s) to the XML file(s) which should be
+    /// modified. Careful: they are modified in place (although the
+    /// original is kept in the system trash bin)! Use the `add`
+    /// subcommand instead if you really want to copy them. The
+    /// metainformation template is added and sequence data is
+    /// stripped (unless you provide the `--no-blind` option). .
+    files_to_prepare: Vec<PathBuf>,
+
+    /// Do *not* strip the sequences (`<data>` element contents); by
+    /// default they are stripped, as safety measure to avoid
+    /// accidental exposure of private data. If you can publish the
+    /// data and it's not overly large, feel free to use this option!
+    #[clap(long)]
+    no_blind: bool,
+
+    /// The comment to put above `<data>` elements when blinding the
+    /// data (i.e. `--no-blind` is not given). By default, a comment
+    /// with regards to terms of use and privacy is given.
+    #[clap(long)]
+    blind_comment: Option<String>,
+    // XX FUTURE idea: --set "header: value"
+}
+
+#[derive(clap::Parser, Debug)]
 struct AddOpts {
     /// The path to an existing directory inside the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
@@ -392,7 +425,8 @@ struct AddOpts {
     /// The path(s) to the XML file(s), outside of the XML Hub
     /// repository, that you want to add to XML Hub. They are copied,
     /// and a metainformation template is added to them while doing
-    /// so. .
+    /// so, and sequence data is stripped (unless you provide the
+    /// `--no-blind` option). .
     files_to_add: Vec<PathBuf>,
 
     /// Create the `TARGET_DIRECTORY` if it doesn't exist yet. .
@@ -408,7 +442,7 @@ struct AddOpts {
 
     /// The comment to put above `<data>` elements when blinding the
     /// data (i.e. `--no-blind` is not given). By default, a comment
-    /// with regards to terms of use with regards to GISAID is given.
+    /// with regards to terms of use and privacy is given.
     #[clap(long)]
     blind_comment: Option<String>,
 
@@ -2622,6 +2656,80 @@ fn clone_to_command(
     Ok(())
 }
 
+fn prepare_file(
+    source_path: &Path,
+    no_blind: bool,
+    blind_comment: &Option<String>,
+) -> Result<String> {
+    let xmldocument = read_xml_file(source_path)
+        .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
+
+    // XX TODO: check if the document already has an xmlhub header?
+
+    let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
+
+    // Add header template
+    for att in METADATA_SPECIFICATION {
+        let comment = format!(
+            "{}: {}",
+            att.key.as_ref(),
+            if att.need == AttributeNeed::Optional {
+                "NA"
+            } else {
+                ""
+            }
+        );
+        modified_document.insert_comment_at_the_top(&comment, "  ");
+    }
+
+    // Optionally, delete (blind) data
+    if !no_blind {
+        let comment = blind_comment
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
+        modified_document.clear_elements_named("data", Some((comment, "    ")));
+    }
+
+    Ok(modified_document.to_string()?)
+}
+
+/// Execute a `prepare` command.
+fn prepare_command(
+    _program_version: GitVersion<SemVersion>,
+    _global_opts: &Opts, // XX anything to check from Opts?
+    command_opts: &PrepareOpts,
+) -> Result<()> {
+    let PrepareOpts {
+        files_to_prepare,
+        no_blind,
+        blind_comment,
+    } = command_opts;
+
+    // First, convert them all without writing them out, to avoid
+    // writing only some of them (which would then exist when
+    // re-running the same command, also it will be a bit
+    // confusing). With regards to IO, only reading happens here.
+    let converted: Vec<_> = files_to_prepare
+        .into_iter()
+        .map(|source_path| {
+            Ok((
+                source_path,
+                prepare_file(source_path, *no_blind, blind_comment)?,
+            ))
+        })
+        .collect::<Result<_>>()?;
+
+    // Now that all files were read and converted successfully, write
+    // them out. With regards to IO, only writing happens here.
+    for (target_path, output_string) in converted {
+        // XXX keep existing files in trash
+        std::fs::write(&target_path, output_string)
+            .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
+    }
+    Ok(())
+}
+
 /// Execute an `add` command.
 fn add_command(
     _program_version: GitVersion<SemVersion>,
@@ -2665,38 +2773,11 @@ fn add_command(
     // confusing). With regards to IO, only reading happens here.
     let converted: Vec<_> = files_to_add
         .into_iter()
-        .map(|source_path| -> Result<_> {
-            let xmldocument = read_xml_file(source_path)
-                .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
-
-            // XX TODO: check if the document already has an xmlhub header?
-
-            let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
-
-            // Add header template
-            for att in METADATA_SPECIFICATION {
-                let comment = format!(
-                    "{}: {}",
-                    att.key.as_ref(),
-                    if att.need == AttributeNeed::Optional {
-                        "NA"
-                    } else {
-                        ""
-                    }
-                );
-                modified_document.insert_comment_at_the_top(&comment, "  ");
-            }
-
-            // Optionally, delete (blind) data
-            if !no_blind {
-                let comment = blind_comment
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-                modified_document.clear_elements_named("data", Some((comment, "    ")));
-            }
-
-            Ok((source_path, modified_document.to_string()?))
+        .map(|source_path| {
+            Ok((
+                source_path,
+                prepare_file(source_path, *no_blind, blind_comment)?,
+            ))
         })
         .collect::<Result<_>>()?;
 
@@ -2734,6 +2815,7 @@ fn add_command(
     // successfully, write them out. With regards to IO, only writing
     // happens here.
     for (target_path, output_string) in outputs {
+        // XXX keep existing files in trash, even with --force?
         std::fs::write(&target_path, output_string)
             .with_context(|| anyhow!("writing contents to file {target_path:?}"))?
     }
@@ -2895,6 +2977,26 @@ fn main() -> Result<()> {
                         base_path,
                     })),
                 },
+                Command::Prepare(PrepareOpts {
+                    files_to_prepare,
+                    no_blind,
+                    blind_comment,
+                }) => Opts {
+                    v,
+                    help_contributing,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::Prepare(PrepareOpts {
+                        files_to_prepare,
+                        no_blind,
+                        blind_comment,
+                    })),
+                },
                 Command::Add(AddOpts {
                     target_directory,
                     files_to_add,
@@ -2937,6 +3039,9 @@ fn main() -> Result<()> {
         Command::Build(command_opts) => build_command(program_version, &global_opts, command_opts),
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &global_opts, command_opts)
+        }
+        Command::Prepare(command_opts) => {
+            prepare_command(program_version, &global_opts, command_opts)
         }
         Command::Add(command_opts) => add_command(program_version, &global_opts, command_opts),
     }
