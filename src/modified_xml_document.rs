@@ -144,11 +144,14 @@ impl<'d> ModifiedXMLDocument<'d> {
     /// Find elements with the given tag name, regardless of their
     /// position in the document, delete their child nodes if any, and
     /// prefix them with the given comment string and indent if
-    /// given. NOTE: leaves attributes in place!
+    /// given. If `always_add_comment` is true, the comment is added
+    /// even if there were no child nodes.  NOTE: leaves attributes in
+    /// place!
     pub fn clear_elements_named(
         &mut self,
         element_name: &str,
         comment_and_indent: Option<(&str, &str)>,
+        always_add_comment: bool,
     ) {
         for element in self.elements_named(element_name) {
             let is_modified;
@@ -167,7 +170,7 @@ impl<'d> ModifiedXMLDocument<'d> {
                 }
             };
 
-            if is_modified {
+            if always_add_comment || is_modified {
                 if let Some((comment, indent)) = &comment_and_indent {
                     let escaped_comment = escape_comment(comment, indent);
 

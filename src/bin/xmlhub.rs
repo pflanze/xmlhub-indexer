@@ -2690,7 +2690,7 @@ fn prepare_file(
             .as_ref()
             .map(|s| s.as_str())
             .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-        modified_document.clear_elements_named("data", Some((comment, "    ")));
+        modified_document.clear_elements_named("data", Some((comment, "    ")), false);
     }
 
     Ok(modified_document.to_string_and_modified()?)
