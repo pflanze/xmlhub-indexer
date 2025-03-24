@@ -6,6 +6,7 @@ use std::{
     fs::{create_dir, File},
     io::{stderr, BufWriter, Write},
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -23,6 +24,7 @@ use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
+use roxmltree::Document;
 use walkdir::WalkDir;
 // Use from src/*.rs
 use xmlhub_indexer::{
@@ -156,6 +158,67 @@ fn get_terminal_width() -> usize {
         usize::from(width).checked_sub(4).unwrap_or(default)
     } else {
         default
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum BeastMajorVersion {
+    One,
+    Two,
+}
+
+impl TryFrom<u16> for BeastMajorVersion {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(BeastMajorVersion::One),
+            2 => Ok(BeastMajorVersion::Two),
+            _ => bail!("not a BEAST major version number: {value}"),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+struct BeastVersion {
+    major: BeastMajorVersion,
+    string: String,
+}
+
+impl FromStr for BeastVersion {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let string = s.trim().to_owned();
+        let parts: Vec<&str> = string.split('.').collect();
+        if parts.len() < 2 {
+            bail!("not a BEAST version number, misses a '.': {string:?}")
+        } else {
+            let major_num = u16::from_str(parts[0]).with_context(|| {
+                anyhow!(
+                    "not a BEAST version number, the major number part is \
+                     not an unsigned integer: {string:?}"
+                )
+            })?;
+            Ok(Self {
+                major: BeastMajorVersion::try_from(major_num)
+                    .with_context(|| anyhow!("parsing version number string {string:?}"))?,
+                string,
+            })
+        }
+    }
+}
+
+fn get_beast_version(document: &Document) -> Result<BeastVersion> {
+    let root_element = document.root_element();
+    if root_element.tag_name().name() != "beast" {
+        // XX check the namespace?
+        bail!("not a BEAST file, the root element is not a <beast> element");
+    }
+    if let Some(version) = root_element.attribute("version") {
+        BeastVersion::from_str(version)
+    } else {
+        bail!("<beast> element is missing the `version` attribute")
     }
 }
 
@@ -2657,7 +2720,8 @@ fn clone_to_command(
 }
 
 /// Returns the converted file contents, and whether that content is
-/// different from the original.
+/// different from the original. Errors already mention the
+/// `source_path`.
 fn prepare_file(
     source_path: &Path,
     no_blind: bool,
@@ -2665,6 +2729,16 @@ fn prepare_file(
 ) -> Result<(String, bool)> {
     let xmldocument = read_xml_file(source_path)
         .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
+
+    let beast_version = get_beast_version(xmldocument.document())
+        .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
+
+    if beast_version.major != BeastMajorVersion::Two {
+        bail!(
+            "file is not a BEAST 2 file, it specifies version {:?}: {source_path:?}",
+            beast_version.string
+        )
+    }
 
     // XX TODO: check if the document already has an xmlhub header?
 
