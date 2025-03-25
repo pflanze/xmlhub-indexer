@@ -2848,7 +2848,7 @@ fn overwrite_file_moving_to_trash_if_exists(
         trash::delete(&target_path)
             .with_context(|| anyhow!("moving existing target file {target_path:?} to trash"))?;
         if !quiet {
-            println!("moved existing target {target_path:?} to trash");
+            println!("Moved existing target {target_path:?} to trash.");
         }
     }
     std::fs::write(&target_path, content)
