@@ -689,6 +689,9 @@ impl AttributeIndexing {
 #[derive(Debug)]
 struct AttributeSpecification {
     key: AttributeName,
+    /// Description for the help text /
+    /// `ATTRIBUTE_SPECIFICATION_FILENAME` file
+    desc: &'static str,
     need: AttributeNeed,
     kind: AttributeKind,
     /// Whether to automatically find http and https URLs in the
@@ -702,6 +705,7 @@ struct AttributeSpecification {
 impl AttributeSpecification {
     const TITLES: &[&str] = &[
         "Name",
+        "Description",
         "Content needed?",
         "Content kind",
         "URLs automatically linked?",
@@ -713,6 +717,7 @@ impl AttributeSpecification {
     fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
         let AttributeSpecification {
             key,
+            desc,
             need,
             kind,
             autolink,
@@ -722,6 +727,7 @@ impl AttributeSpecification {
             [],
             [
                 html.td([], html.i([], html.text(key.as_ref())?)?)?,
+                html.td([], html.text(desc)?)?,
                 html.td(
                     [],
                     html.text(match need {
@@ -751,12 +757,14 @@ impl Display for AttributeSpecification {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let AttributeSpecification {
             key,
+            desc,
             need,
             kind,
             autolink,
             indexing,
         } = self;
         f.write_fmt(format_args!("  {}:\n", key.as_ref()))?;
+        f.write_fmt(format_args!("      {desc}\n"))?;
         f.write_fmt(format_args!("    need: {need:?}\n"))?;
         f.write_fmt(format_args!("    kind: {kind:?}\n"))?;
         f.write_fmt(format_args!(
@@ -791,6 +799,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
             key: AttributeName("Keywords"),
+            desc: "Words for the keyword index, for useful finding.",
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 input_separator: ",",
@@ -803,6 +812,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Version"),
+            desc: "The BEAST version used, like \"2.7.1\".",
             need: AttributeNeed::Required,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
@@ -815,6 +825,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Packages"),
+            desc: "The BEAST packages used (package name and version after a space).",
             need: AttributeNeed::Required,
             kind: AttributeKind::StringList {
                 input_separator: ",",
@@ -827,6 +838,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Description"),
+            desc: "A description of the work / contex, can be multiple lines.",
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
@@ -836,6 +848,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Comments"),
+            desc: "Additional comments.", // XX what is the thinking behind it, really?
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
@@ -845,6 +858,8 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Citation"),
+            // XX that is the meaning, right? used for?
+            desc: "Papers this file was used for, or relates to.",
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
@@ -854,6 +869,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
+            desc: "XXX",
             need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
@@ -866,6 +882,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Contact"),
+            desc: "Whom to contact (and how) for more information on this file.",
             need: AttributeNeed::Required,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
