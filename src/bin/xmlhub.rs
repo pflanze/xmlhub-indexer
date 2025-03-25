@@ -3,8 +3,9 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsString,
+    fmt::Display,
     fs::{create_dir, File},
-    io::{stderr, BufWriter, Write},
+    io::{stderr, stdout, BufWriter, Write},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -297,6 +298,9 @@ enum Command {
     /// doesn't open the browser, see the notes for the `--open`
     /// option of the `build` subcommand.
     HelpContributing,
+    /// Show all metadata attributes and describe their possible
+    /// values.
+    HelpAttributes,
     /// Rebuild the XML Hub index.
     Build(BuildOpts),
     /// Clone the XML Hub repository and apply merge config change.
@@ -726,10 +730,41 @@ impl AttributeSpecification {
                     })?,
                 )?,
                 html.td([], kind.to_html(html)?)?,
-                html.td([], html.text(if *autolink { "yes" } else { "no" })?)?,
+                html.td([], html.text(bool_to_yes_no(*autolink))?)?,
                 html.td([], indexing.to_html(kind.is_list(), html)?)?,
             ],
         )
+    }
+}
+
+fn bool_to_yes_no(val: bool) -> &'static str {
+    if val {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+/// Show the specification as plain text, for writing to the terminal
+/// via the `help-attributes` subcommand
+impl Display for AttributeSpecification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let AttributeSpecification {
+            key,
+            need,
+            kind,
+            autolink,
+            indexing,
+        } = self;
+        f.write_fmt(format_args!("  {}:\n", key.as_ref()))?;
+        f.write_fmt(format_args!("    need: {need:?}\n"))?;
+        f.write_fmt(format_args!("    kind: {kind:?}\n"))?;
+        f.write_fmt(format_args!(
+            "    autolink: {}\n",
+            bool_to_yes_no(*autolink)
+        ))?;
+        f.write_fmt(format_args!("    indexing: {indexing:?}\n"))?;
+        Ok(())
     }
 }
 
@@ -2953,6 +2988,25 @@ fn help_contributing_command() -> Result<()> {
     Ok(())
 }
 
+fn help_attributes_command() -> Result<()> {
+    let mut out = stdout().lock();
+    writeln!(
+        &mut out,
+        "List of the valid attributes and details about them:\n\n\
+         (Legend:\n \
+         need: whether a value is required for the attribute.\n \
+         kind: whether a single value is expected or a list, with how the text is parsed.\n \
+         autolink: yes means, automatically link what looks like URLs.\n \
+         indexing: whether the value(s) is/are indexed, and how.\n\
+         )\n"
+    )?;
+
+    for att in METADATA_SPECIFICATION {
+        writeln!(&mut out, "{}", att)?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
@@ -3131,7 +3185,7 @@ fn main() -> Result<()> {
                         force,
                     })),
                 },
-                Command::HelpContributing => Opts {
+                Command::HelpContributing | Command::HelpAttributes => Opts {
                     v,
                     verbose,
                     quiet,
@@ -3140,7 +3194,7 @@ fn main() -> Result<()> {
                     max_log_files,
                     dry_run,
                     no_version_check,
-                    command: Some(Command::HelpContributing),
+                    command: Some(command),
                 },
             },
             None => {
@@ -3164,5 +3218,6 @@ fn main() -> Result<()> {
         }
         Command::Add(command_opts) => add_command(program_version, &global_opts, command_opts),
         Command::HelpContributing => help_contributing_command(),
+        Command::HelpAttributes => help_attributes_command(),
     }
 }
