@@ -146,13 +146,14 @@ impl<'d> ModifiedXMLDocument<'d> {
     /// prefix them with the given comment string and indent if
     /// given. If `always_add_comment` is true, the comment is added
     /// even if there were no child nodes.  NOTE: leaves attributes in
-    /// place!
+    /// place! Returns how many elements were cleared.
     pub fn clear_elements_named(
         &mut self,
         element_name: &str,
         comment_and_indent: Option<(&str, &str)>,
         always_add_comment: bool,
-    ) {
+    ) -> usize {
+        let mut n_cleared = 0;
         for element in self.elements_named(element_name) {
             let is_modified;
             {
@@ -164,11 +165,16 @@ impl<'d> ModifiedXMLDocument<'d> {
                         delete_range = Some(node.range());
                     }
                 }
-                is_modified = delete_range.is_some();
                 if let Some(range) = delete_range {
                     self.document.push(Modification::Delete(range));
+                    is_modified = true;
+                } else {
+                    is_modified = false;
                 }
             };
+            if is_modified {
+                n_cleared += 1;
+            }
 
             if always_add_comment || is_modified {
                 if let Some((comment, indent)) = &comment_and_indent {
@@ -190,6 +196,7 @@ impl<'d> ModifiedXMLDocument<'d> {
                 }
             }
         }
+        n_cleared
     }
 
     pub fn to_string_and_modified(&mut self) -> Result<(String, bool)> {

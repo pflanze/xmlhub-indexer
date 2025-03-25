@@ -2772,14 +2772,19 @@ fn clone_to_command(
     Ok(())
 }
 
-/// Returns the converted file contents, and whether that content is
-/// different from the original. Errors already mention the
-/// `source_path`.
+struct PreparedFile {
+    content: String,
+    content_has_changed: bool,
+    data_was_removed: bool,
+}
+
+/// Returns the converted file contents, and what changed. Errors
+/// already mention the `source_path`.
 fn prepare_file(
     source_path: &Path,
     no_blind: bool,
     blind_comment: &Option<String>,
-) -> Result<(String, bool)> {
+) -> Result<PreparedFile> {
     let xmldocument = read_xml_file(source_path)
         .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
 
@@ -2805,7 +2810,9 @@ fn prepare_file(
     }
 
     // Optionally, delete (blind) data
-    if !no_blind {
+    let n_blinded = if no_blind {
+        0
+    } else {
         if beast_version.major != BeastMajorVersion::Two {
             bail!(
                 "currently, can only blind BEAST 2 files, but this file specifies version {:?}: \
@@ -2820,10 +2827,16 @@ fn prepare_file(
             .as_ref()
             .map(|s| s.as_str())
             .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-        modified_document.clear_elements_named("data", Some((comment, "    ")), false);
-    }
+        modified_document.clear_elements_named("data", Some((comment, "    ")), false)
+    };
 
-    Ok(modified_document.to_string_and_modified()?)
+    let (content, content_has_changed) = modified_document.to_string_and_modified()?;
+
+    Ok(PreparedFile {
+        content,
+        content_has_changed,
+        data_was_removed: n_blinded != 0,
+    })
 }
 
 fn overwrite_file_moving_to_trash_if_exists(
@@ -2859,7 +2872,7 @@ fn prepare_command(
     // writing only some of them (which would then exist when
     // re-running the same command, also it will be a bit
     // confusing). With regards to IO, only reading happens here.
-    let converted: Vec<(&PathBuf, (String, bool))> = files_to_prepare
+    let converted: Vec<(&PathBuf, PreparedFile)> = files_to_prepare
         .into_iter()
         .map(|source_path| {
             Ok((
@@ -2871,13 +2884,19 @@ fn prepare_command(
 
     // Now that all files were read and converted successfully, write
     // them out. With regards to IO, only writing happens here.
-    for (target_path, (output_string, modified)) in converted {
-        if modified {
+    for (target_path, prepared_file) in converted {
+        if prepared_file.content_has_changed {
             overwrite_file_moving_to_trash_if_exists(
                 &target_path,
-                &output_string,
+                &prepared_file.content,
                 global_opts.quiet,
             )?;
+            if prepared_file.data_was_removed && !global_opts.quiet {
+                println!(
+                    "NOTE: data in the file {target_path:?} has been removed \
+                     (use `--no-blind` to keep it)"
+                );
+            }
         } else {
             if !global_opts.quiet {
                 println!("note: the file {target_path:?} is unchanged (already prepared)");
@@ -2913,7 +2932,7 @@ fn add_command(
         } else {
             bail!(
                 "given TARGET_DIRECTORY path {target_directory:?} does not exist. \
-                   Add the --mkdir option if you want to create it."
+                 Add the --mkdir option if you want to create it."
             )
         }
     }
@@ -2939,7 +2958,7 @@ fn add_command(
         .collect::<Result<_>>()?;
 
     // Convert the paths to the output paths; no IO happens here.
-    let outputs: Vec<(PathBuf, (String, bool))> = converted
+    let outputs: Vec<(PathBuf, PreparedFile)> = converted
         .into_iter()
         .map(|(source_path, converted_contents)| -> Result<_> {
             let file_name = source_path
@@ -2971,14 +2990,18 @@ fn add_command(
     // Now that all files were read, converted and target-checked
     // successfully, write them out. With regards to IO, only writing
     // happens here.
-    for (target_path, (output_string, _modified)) in outputs {
+    for (target_path, prepared_file) in outputs {
         // Note: ignore _modified as that is with regards to the
         // source path, which is a different path. We need to copy the
         // file even if no modification is carried out at the same
         // time!
 
         // Keep existing files in trash, even with --force?
-        overwrite_file_moving_to_trash_if_exists(&target_path, &output_string, global_opts.quiet)?;
+        overwrite_file_moving_to_trash_if_exists(
+            &target_path,
+            &prepared_file.content,
+            global_opts.quiet,
+        )?;
     }
 
     if !global_opts.quiet {
