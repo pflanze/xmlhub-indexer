@@ -433,6 +433,11 @@ struct BuildOpts {
     #[clap(long)]
     no_branch_check: bool,
 
+    /// Omit the check for the `BASE_PATH` directory to contain items
+    /// that make it look like a legit xmlhub repository clone.
+    #[clap(long)]
+    no_repo_check: bool,
+
     /// Ignore untracked files (local files not added to the xmlhub
     /// repository). By default, files are read regardless of whether
     /// they are in Git or not.
@@ -490,6 +495,12 @@ struct AddToOpts {
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
     target_directory: Option<PathBuf>,
+
+    /// Omit the check for the `TARGET_PATH` directory to be in a Git
+    /// clone that contains items that make it look like a legit
+    /// xmlhub repository clone.
+    #[clap(long)]
+    no_repo_check: bool,
 
     /// The path(s) to the XML file(s), outside of the XML Hub
     /// repository, that you want to add to XML Hub. They are copied,
@@ -2618,7 +2629,7 @@ fn build_command(
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.as_ref())
-        .check1(false)?;
+        .check1(build_opts.no_repo_check)?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
@@ -2762,7 +2773,7 @@ fn clone_to_command(
         }
 
         if !global_opts.dry_run {
-            checkout.check1(false)?;
+            checkout.check1(true)?;
         }
     }
 
@@ -2925,19 +2936,12 @@ fn add_to_command(
         no_blind,
         blind_comment,
         force,
+        no_repo_check,
     } = command_opts;
 
     let target_directory = target_directory
         .as_ref()
         .ok_or_else(|| anyhow!("missing TARGET_DIRECTORY argument. Run --help for help."))?;
-
-    // Check that target_directory or any of the parent directories
-    // are an XML Hub clone
-    {
-        XMLHUB_CHECKOUT
-            .checked_from_subpath(&target_directory, false)
-            .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
-    }
 
     if !target_directory.is_dir() {
         if *mkdir {
@@ -2950,6 +2954,12 @@ fn add_to_command(
             )
         }
     }
+
+    // Check that target_directory or any of the parent directories
+    // are an XML Hub clone
+    XMLHUB_CHECKOUT
+        .checked_from_subpath(&target_directory, *no_repo_check)
+        .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
 
     let file_or_files = english_plural(files_to_add.len(), "files");
 
@@ -3110,6 +3120,7 @@ fn main() -> Result<()> {
                     daemon_sleep_time,
                     base_path,
                     ignore_untracked,
+                    no_repo_check,
                 }) => {
                     // Create uninitialized variables without the underscores,
                     // then initialize them differently depending on some of the
@@ -3175,6 +3186,7 @@ fn main() -> Result<()> {
                             no_branch_check,
                             ignore_untracked,
                             base_path,
+                            no_repo_check,
                         })),
                     }
                 }
@@ -3221,6 +3233,7 @@ fn main() -> Result<()> {
                     no_blind,
                     blind_comment,
                     force,
+                    no_repo_check,
                 }) => Opts {
                     v,
                     verbose,
@@ -3237,6 +3250,7 @@ fn main() -> Result<()> {
                         no_blind,
                         blind_comment,
                         force,
+                        no_repo_check,
                     })),
                 },
                 Command::HelpContributing | Command::HelpAttributes => Opts {
