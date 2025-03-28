@@ -39,6 +39,10 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         P: Clone,
         P2: AsRef<Path> + 'p, // ?
     {
+        // Can't use the `.. self.clone()` struct update syntax
+        // because self and the result value have different type
+        // parameters. Destruct and reconstruct explicitly/fully
+        // instead:
         let CheckoutContext {
             working_dir_path: _,
             branch_name,
