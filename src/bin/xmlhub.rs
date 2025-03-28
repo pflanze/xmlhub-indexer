@@ -2618,7 +2618,7 @@ fn build_command(
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.as_ref())
-        .check1()?;
+        .check1(false)?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
@@ -2762,7 +2762,7 @@ fn clone_to_command(
         }
 
         if !global_opts.dry_run {
-            checkout.check1()?;
+            checkout.check1(false)?;
         }
     }
 

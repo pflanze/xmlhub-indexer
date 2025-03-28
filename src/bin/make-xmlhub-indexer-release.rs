@@ -358,7 +358,7 @@ fn main() -> Result<()> {
     }
 
     // Check that we are on the correct branch etc.
-    let source_checkout = SOURCE_CHECKOUT.check2()?;
+    let source_checkout = SOURCE_CHECKOUT.check2(false)?;
     // Check that everything is committed
     unless_dry_run(source_checkout.check_status())?;
 
@@ -461,7 +461,7 @@ fn main() -> Result<()> {
                 "not publishing binary because --no-publish-binary option was given".into(),
             )
         } else {
-            let binaries_checkout = BINARIES_CHECKOUT.check2()?;
+            let binaries_checkout = BINARIES_CHECKOUT.check2(false)?;
             binaries_checkout.check_status()?;
 
             let push_to_remote = if push {
