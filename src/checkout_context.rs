@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Result};
+use nix::NixPath;
 
 use crate::{
     git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
@@ -33,6 +34,7 @@ pub struct CheckoutContext<'s, P: AsRef<Path>> {
 }
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
+    /// Does not check `path`. Call `check1` later if you like.
     pub fn replace_working_dir_path<'p, P2>(&'s self, path: P2) -> CheckoutContext<'p, P2>
     where
         's: 'p,
@@ -56,6 +58,60 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             supposed_upstream_git_url,
             supposed_upstream_web_url,
             expected_sub_paths,
+        }
+    }
+
+    /// Accepts any subpath inside this repository and finds the
+    /// correct `working_dir_path` by checking the subpath and its
+    /// parents until it finds this repository; if it finds it and it
+    /// checks out OK, returns it, otherwise an error. Note:
+    /// canonicalizes `path` before doing its work, and the result
+    /// contains it or part of it rather than the original path or
+    /// part thereof. If `allow_subrepositories` is true, will
+    /// continue looking upwards when it finds a dir with `.git` that
+    /// doesn't fit us; otherwise the check1 error is reported at that
+    /// point.
+    pub fn checked_from_subpath<'p, P2>(
+        &'s self,
+        path: P2,
+        allow_subrepositories: bool,
+    ) -> Result<CheckedCheckoutContext1<'s, PathBuf>>
+    where
+        's: 'p,
+        P: Clone,
+        P2: AsRef<Path> + 'p, // ?
+    {
+        let absolute = path.as_ref().canonicalize()?;
+        let mut current_path: &Path = &absolute;
+        let mut first_error = None;
+        while !current_path.is_empty() {
+            // XX is_dir()? How do the shared-database things work?
+            if current_path.append(".git").exists() {
+                let repo = self.replace_working_dir_path(current_path.to_owned());
+                match repo.check1() {
+                    Ok(r) => return Ok(r),
+                    Err(e) => {
+                        if !allow_subrepositories {
+                            return Err(e);
+                        } else {
+                            if first_error.is_none() {
+                                first_error = Some(e)
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(parent) = current_path.parent() {
+                current_path = parent;
+            } else {
+                break;
+            }
+        }
+
+        if let Some(first_error) = first_error {
+            Err(first_error)
+        } else {
+            bail!("directory is not inside a Git working directory");
         }
     }
 
