@@ -68,7 +68,12 @@ To build the index, you need to use the `build` command and give it
 the path to your local git clone of the
 [xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub) repository:
 
-    xmlhub build path/to/your/checkout/of/xmlhub
+    xmlhub build --base-path path/to/your/checkout/of/xmlhub
+
+When you have `cd`'d into that directory already, you can omit those
+arguments and just run
+
+    xmlhub build
 
 This will update the `README.md` and `README.html` files in the
 xmlhub directory and commit any changes to those. You can then `git
@@ -105,7 +110,7 @@ command line (the order of options doesn't actually matter, the
 program executes them in the sensible order anyway; you can also use
 the short options shown in the `--help` text instead):
 
-    xmlhub build path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
+    xmlhub build --base-path path/to/your/checkout/of/xmlhub --pull --write-errors --open-if-changed --push
 
 Running this will pull, convert, write the output even if there are
 errors, and if there were changes, commit and push them back to the
@@ -117,7 +122,9 @@ If you run it on a repository you never use interactively (e.g. on
 a server), this is more fail proof for automatic action (but **deletes
 local changes to the repo!**):
 
-    xmlhub build path/to/your/checkout/of/xmlhub --batch
+    xmlhub build --base-path path/to/your/checkout/of/xmlhub --batch
+
+(Remember, you can omit the `--base-path` argument if it is `.`.)
 
 ### Running on a server
 

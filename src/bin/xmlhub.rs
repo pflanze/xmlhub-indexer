@@ -1,6 +1,6 @@
 // Use from the standard library
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsString,
     fmt::Display,
@@ -440,7 +440,8 @@ struct BuildOpts {
     ignore_untracked: bool,
 
     /// The path to the base directory of the Git checkout of the XML
-    /// Hub.
+    /// Hub. The default is `.`.
+    #[clap(long)]
     base_path: Option<PathBuf>,
 }
 
@@ -486,7 +487,7 @@ struct PrepareOpts {
 
 #[derive(clap::Parser, Debug)]
 struct AddOpts {
-    /// The path to an existing directory inside the Git checkout of
+    /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
     target_directory: Option<PathBuf>,
 
@@ -1971,8 +1972,8 @@ fn build_index(
     build_opts: &BuildOpts,
     base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
-    xmlhub_checkout: &CheckedCheckoutContext1<&PathBuf>,
-    maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&PathBuf>>,
+    xmlhub_checkout: &CheckedCheckoutContext1<&Path>,
+    maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&Path>>,
 ) -> Result<i32> {
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
@@ -2600,10 +2601,15 @@ fn build_command(
     global_opts: &Opts,
     build_opts: &BuildOpts,
 ) -> Result<()> {
-    let base_path = build_opts
-        .base_path
-        .as_ref()
-        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
+    let base_path = if let Some(base_path) = &build_opts.base_path {
+        base_path.into()
+    } else {
+        // The current directory. Use "", not ".", to make the
+        // path portable to Windows (reliably not needed?) and
+        // delegate the decision to the `FixupPath` trait, where I
+        // will care for it.
+        PathBuf::from("").fixup()
+    };
 
     let git_log_version_checker = GitLogVersionChecker {
         program_name: PROGRAM_NAME.into(),
@@ -2611,7 +2617,7 @@ fn build_command(
     };
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
-        .replace_working_dir_path(base_path)
+        .replace_working_dir_path(base_path.as_ref())
         .check1()?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
@@ -2631,14 +2637,14 @@ fn build_command(
         build_index(
             &global_opts,
             &build_opts,
-            base_path,
+            base_path.borrow(),
             &git_log_version_checker,
             &xmlhub_checkout,
             &maybe_checked_xmlhub_checkout,
         )
     };
 
-    let daemon_base_dir = base_path.append(&*DAEMON_FOLDER_NAME);
+    let daemon_base_dir = (&base_path).append(&*DAEMON_FOLDER_NAME);
     let _ = create_dir(&daemon_base_dir);
 
     let main_lock_path = (&daemon_base_dir).append("main.lock");
