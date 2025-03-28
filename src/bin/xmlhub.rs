@@ -316,7 +316,7 @@ enum Command {
     /// Add some XML file(s) to a XML Hub repository clone and carry
     /// out the `prepare` action on them at the same time. This leaves
     /// the original file unchanged.
-    Add(AddOpts),
+    AddTo(AddToOpts),
 }
 
 #[derive(clap::Parser, Debug)]
@@ -464,7 +464,7 @@ struct CloneOpts {
 struct PrepareOpts {
     /// The path(s) to the XML file(s) which should be
     /// modified. Careful: they are modified in place (although the
-    /// original is kept in the system trash bin)! Use the `add`
+    /// original is kept in the system trash bin)! Use the `add-to`
     /// subcommand instead if you really want to copy them. The
     /// metainformation template is added and sequence data is
     /// stripped (unless you provide the `--no-blind` option). .
@@ -486,7 +486,7 @@ struct PrepareOpts {
 }
 
 #[derive(clap::Parser, Debug)]
-struct AddOpts {
+struct AddToOpts {
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
     target_directory: Option<PathBuf>,
@@ -2912,13 +2912,13 @@ fn prepare_command(
     Ok(())
 }
 
-/// Execute an `add` command.
-fn add_command(
+/// Execute an `add-to` command.
+fn add_to_command(
     _program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    command_opts: &AddOpts,
+    command_opts: &AddToOpts,
 ) -> Result<()> {
-    let AddOpts {
+    let AddToOpts {
         target_directory,
         files_to_add,
         mkdir,
@@ -3206,7 +3206,7 @@ fn main() -> Result<()> {
                         blind_comment,
                     })),
                 },
-                Command::Add(AddOpts {
+                Command::AddTo(AddToOpts {
                     target_directory,
                     files_to_add,
                     mkdir,
@@ -3222,7 +3222,7 @@ fn main() -> Result<()> {
                     max_log_files,
                     dry_run,
                     no_version_check,
-                    command: Some(Command::Add(AddOpts {
+                    command: Some(Command::AddTo(AddToOpts {
                         target_directory,
                         files_to_add,
                         mkdir,
@@ -3262,7 +3262,7 @@ fn main() -> Result<()> {
         Command::Prepare(command_opts) => {
             prepare_command(program_version, &global_opts, command_opts)
         }
-        Command::Add(command_opts) => add_command(program_version, &global_opts, command_opts),
+        Command::AddTo(command_opts) => add_to_command(program_version, &global_opts, command_opts),
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes => help_attributes_command(),
     }
