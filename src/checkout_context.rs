@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::{
     git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
-    path_util::FixupPath,
+    path_util::{AppendToPath, FixupPath},
 };
 
 #[derive(Debug, Clone)]
@@ -29,6 +29,7 @@ pub struct CheckoutContext<'s, P: AsRef<Path>> {
     /// Where the upstream repository should be, for visiting by web
     /// browser. Ditto.
     pub supposed_upstream_web_url: &'s str,
+    pub expected_sub_paths: &'s [&'s str],
 }
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
@@ -43,12 +44,14 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             branch_name,
             supposed_upstream_git_url,
             supposed_upstream_web_url,
+            expected_sub_paths,
         } = self.clone();
         CheckoutContext {
             working_dir_path: path,
             branch_name,
             supposed_upstream_git_url,
             supposed_upstream_web_url,
+            expected_sub_paths,
         }
     }
 
@@ -88,6 +91,18 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
                     .map(ToOwned::to_owned)
                     .unwrap_or_else(|| OsString::from("???")),
             )
+        }
+        for sub_path_str in self.expected_sub_paths {
+            let sub_path: &Path = sub_path_str.as_ref();
+            let working_dir_path: &Path = self.working_dir_path.as_ref();
+            let path = working_dir_path.append(sub_path);
+            if !path.exists() {
+                bail!(
+                    "the directory {working_dir_path:?} does not look like a clone of \
+                     {:?}, it is missing the entry {path:?}",
+                    self.supposed_upstream_web_url
+                )
+            }
         }
         Ok(CheckedCheckoutContext1 {
             parent: self,

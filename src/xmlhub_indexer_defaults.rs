@@ -12,6 +12,7 @@ pub const XMLHUB_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     branch_name: "master",
     supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub.git",
     supposed_upstream_web_url: "https://cevo-git.ethz.ch/cevo-resources/xmlhub",
+    expected_sub_paths: &[".git", "attributes.md"],
 };
 
 /// Information on the Git checkout of the xmlhub-indexer repo; used
@@ -23,6 +24,7 @@ pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     branch_name: "master",
     supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer.git",
     supposed_upstream_web_url: "https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer",
+    expected_sub_paths: &[".git", "Cargo.toml", "src/bin/xmlhub.rs"],
 };
 
 /// Information on the Git checkout of the xmlhub-indexer-binaries repo; currently used
@@ -32,4 +34,5 @@ pub const BINARIES_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     branch_name: "master",
     supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git",
     supposed_upstream_web_url: "https://cevo-git.ethz.ch/cevo-resources/xmlhub-indexer-binaries",
+    expected_sub_paths: &[".git", "macOS", "keys"],
 };
