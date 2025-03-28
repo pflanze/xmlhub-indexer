@@ -2931,6 +2931,14 @@ fn add_to_command(
         .as_ref()
         .ok_or_else(|| anyhow!("missing TARGET_DIRECTORY argument. Run --help for help."))?;
 
+    // Check that target_directory or any of the parent directories
+    // are an XML Hub clone
+    {
+        XMLHUB_CHECKOUT
+            .checked_from_subpath(&target_directory, false)
+            .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
+    }
+
     if !target_directory.is_dir() {
         if *mkdir {
             create_dir(target_directory)
