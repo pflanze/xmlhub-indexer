@@ -2949,11 +2949,7 @@ fn overwrite_file_moving_to_trash_if_exists(
 }
 
 /// Execute a `prepare` command.
-fn prepare_command(
-    _program_version: GitVersion<SemVersion>,
-    global_opts: &Opts,
-    command_opts: PrepareOpts,
-) -> Result<()> {
+fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
         files_to_prepare,
         no_blind,
@@ -3366,7 +3362,9 @@ fn main() -> Result<()> {
             clone_to_command(program_version, &global_opts, command_opts.clone())
         }
         Command::Prepare(command_opts) => {
-            prepare_command(program_version, &global_opts, command_opts.clone())
+            // `prepare` can't check `program_version` as it is not
+            // given the path to the repository
+            prepare_command(&global_opts, command_opts.clone())
         }
         Command::AddTo(command_opts) => {
             add_to_command(program_version, &global_opts, command_opts.clone())
