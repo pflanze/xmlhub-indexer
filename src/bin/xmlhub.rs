@@ -2607,6 +2607,14 @@ fn build_index(
     Ok(exit_code)
 }
 
+fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
+    if no_repo_check {
+        CheckExpectedSubpathsExist::No
+    } else {
+        CheckExpectedSubpathsExist::Yes
+    }
+}
+
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon).
 fn build_command(
@@ -2614,6 +2622,9 @@ fn build_command(
     global_opts: &Opts,
     build_opts: &BuildOpts,
 ) -> Result<()> {
+    // XX destructure BuildOpts
+    let no_repo_check = typed_from_no_repo_check(build_opts.no_branch_check);
+
     let base_path = if let Some(base_path) = &build_opts.base_path {
         base_path.into()
     } else {
@@ -2631,11 +2642,7 @@ fn build_command(
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.as_ref())
-        .check1(if build_opts.no_repo_check {
-            CheckExpectedSubpathsExist::No
-        } else {
-            CheckExpectedSubpathsExist::Yes
-        })?;
+        .check1(no_repo_check)?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
@@ -2779,6 +2786,8 @@ fn clone_to_command(
         }
 
         if !global_opts.dry_run {
+            // Always check here, since this is only ever used as a
+            // manual action, OK?
             checkout.check1(CheckExpectedSubpathsExist::Yes)?;
         }
     }
@@ -2947,11 +2956,7 @@ fn add_to_command(
 
     // (Intentionally shadow the original variable to make sure the
     // boolen is never used directly.)
-    let no_repo_check = if *no_repo_check {
-        CheckExpectedSubpathsExist::No
-    } else {
-        CheckExpectedSubpathsExist::Yes
-    };
+    let no_repo_check = typed_from_no_repo_check(*no_repo_check);
 
     let target_directory = target_directory
         .as_ref()
