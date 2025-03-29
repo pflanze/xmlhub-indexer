@@ -2891,6 +2891,7 @@ fn prepare_file(
         let the_top = modified_document
             .the_top()
             .ok_or_else(|| anyhow!("XML file {source_path:?} gave no top position?"))?;
+        modified_document.insert_text_at(the_top.clone(), "\n");
         for att in METADATA_SPECIFICATION {
             let comment = format!(
                 "{}: {}",
@@ -2903,6 +2904,7 @@ fn prepare_file(
             );
             modified_document.insert_comment_at(the_top.clone(), &comment, "  ");
         }
+        modified_document.insert_text_at(the_top.clone(), "\n");
     }
 
     // Optionally, delete (blind) data
