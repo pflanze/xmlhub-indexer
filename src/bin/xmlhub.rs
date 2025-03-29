@@ -2861,9 +2861,11 @@ fn clone_to_command(
         }
 
         if !global_opts.dry_run {
-            // Always check here, since this is only ever used as a
-            // manual action, OK?
-            checkout.check1(CheckExpectedSubpathsExist::Yes)?;
+            // Do not check subpaths here, as the `clone-to`
+            // subcommand knows the correct repository to clone from,
+            // if that doesn't contain the expected files, so be it,
+            // don't give an error.
+            checkout.check1(CheckExpectedSubpathsExist::No)?;
         }
     }
 
