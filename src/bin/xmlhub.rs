@@ -29,7 +29,7 @@ use roxmltree::Document;
 use walkdir::WalkDir;
 // Use from src/*.rs
 use xmlhub_indexer::{
-    backoff::LoopWithBackoff,
+    backoff::{LoopVerbosity, LoopWithBackoff},
     browser::spawn_browser,
     checkout_context::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
@@ -72,6 +72,12 @@ const MIN_SLEEP_SECONDS_DEFAULT: f64 = 10.;
 
 /// Do not sleep more than that many seconds between runs.
 const MAX_SLEEP_SECONDS: f64 = 1000.;
+
+/// In daemon start mode with --quiet, log a single line every given
+/// number of seconds (to give a signal about being alive). Note that
+/// it will log less frequently if there were errors for a long time
+/// and it is sleeping a long time due to backing off because of that.
+const DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS: u64 = 120;
 
 /// Max size of a single log file in bytes before it is renamed.
 const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
@@ -2775,7 +2781,13 @@ fn build_command(
                     LoopWithBackoff {
                         min_sleep_seconds,
                         max_sleep_seconds: MAX_SLEEP_SECONDS,
-                        verbose: !global_opts.quiet,
+                        verbosity: if global_opts.quiet {
+                            LoopVerbosity::LogActivityInterval {
+                                every_n_seconds: DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS,
+                            }
+                        } else {
+                            LoopVerbosity::LogEveryIteration
+                        },
                         ..Default::default()
                     },
                     // The action run in the child process: build the
