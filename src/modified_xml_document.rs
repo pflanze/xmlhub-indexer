@@ -5,7 +5,10 @@
 //! with a set of deletions and inserts on the stringified
 //! representation. Currently limited to inserting XML comments.
 
-use std::ops::Range;
+use std::{
+    ops::Range,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use anyhow::Result;
 use roxmltree::Node;
@@ -77,10 +80,31 @@ fn t_escape_comment() {
     assert_eq!(t("---"), "<!-- - - - -->");
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DocumentId(u64);
+
+fn new_document_id() -> DocumentId {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    DocumentId(COUNTER.fetch_add(1, Ordering::Relaxed))
+}
+
 pub struct ModifiedXMLDocument<'d> {
+    id: DocumentId,
     xml_document: &'d XMLDocument,
     document: ModifiedDocument<'d>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentPosition {
+    id: DocumentId,
+    pub position: usize,
+}
+
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub struct DocumentRange {
+//     id: DocumentId,
+//     pub range: Range<usize>
+// }
 
 pub struct ClearElementsOpts<'t> {
     /// Prefix found nodes with the given comment string and indent if
@@ -98,15 +122,22 @@ pub struct ClearElementsOpts<'t> {
 impl<'d> ModifiedXMLDocument<'d> {
     pub fn new(xml_document: &'d XMLDocument) -> Self {
         Self {
+            id: new_document_id(),
             xml_document,
             document: ModifiedDocument::new(xml_document.as_str()),
         }
     }
 
-    /// Insert the given text as an XML comment above any existing
-    /// comments or the root element (i.e. right after the XML
-    /// declaration, usually). NOTE: see docs on `escape_comment`.
-    pub fn insert_comment_at_the_top(&mut self, comment: &str, indent: &str) {
+    /// Panics if the given `position` is not for this document.
+    pub fn assert_position(&self, position: DocumentPosition) -> usize {
+        assert_eq!(self.id, position.id);
+        position.position
+    }
+
+    /// The position above any existing comments or the root element
+    /// (i.e. right after the XML declaration, usually). Returns None
+    /// if the document has no cmment, element or text nodes.
+    pub fn the_top(&self) -> Option<DocumentPosition> {
         let mut first_start = None;
         let root = self.xml_document.document().root();
         for item in root.children() {
@@ -115,10 +146,20 @@ impl<'d> ModifiedXMLDocument<'d> {
                 break;
             }
         }
+        first_start.map(|position| DocumentPosition {
+            id: self.id,
+            position,
+        })
+    }
+
+    /// Insert the given text as an XML comment at the given
+    /// position. Panics if the given `DocumentPosition` is not for
+    /// this document. NOTE: see docs on `escape_comment`.
+    pub fn insert_comment_at(&mut self, position: DocumentPosition, comment: &str, indent: &str) {
         let mut escaped_comment = escape_comment(comment, indent);
         escaped_comment.push_str("\n");
         self.document.push(Modification::Insert(
-            first_start.unwrap_or(0),
+            self.assert_position(position),
             escaped_comment.into(),
         ));
     }

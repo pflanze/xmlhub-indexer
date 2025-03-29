@@ -2883,22 +2883,26 @@ fn prepare_file(
     let beast_version = get_beast_version(xmldocument.document())
         .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
 
-    // XX TODO: check if the document already has an xmlhub header?
-
     let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
 
-    // Add header template
-    for att in METADATA_SPECIFICATION {
-        let comment = format!(
-            "{}: {}",
-            att.key.as_ref(),
-            if att.need == AttributeNeed::Optional {
-                "NA"
-            } else {
-                ""
-            }
-        );
-        modified_document.insert_comment_at_the_top(&comment, "  ");
+    // XX TODO: check if the document already has an xmlhub header
+    if true {
+        // Add header template
+        let the_top = modified_document
+            .the_top()
+            .ok_or_else(|| anyhow!("XML file {source_path:?} gave no top position?"))?;
+        for att in METADATA_SPECIFICATION {
+            let comment = format!(
+                "{}: {}",
+                att.key.as_ref(),
+                if att.need == AttributeNeed::Optional {
+                    "NA"
+                } else {
+                    ""
+                }
+            );
+            modified_document.insert_comment_at(the_top.clone(), &comment, "  ");
+        }
     }
 
     // Optionally, delete (blind) data
