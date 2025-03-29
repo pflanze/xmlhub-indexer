@@ -484,6 +484,12 @@ struct PrepareOpts {
     #[clap(long)]
     no_blind: bool,
 
+    /// Allow XML files from BEAST versions other than BEAST2. Note
+    /// that you'll also have to provide `--no-blind` as blinding is
+    /// only implemented for BEAST2.
+    #[clap(long)]
+    ignore_version: bool,
+
     /// The comment to put above `<data>` elements when blinding the
     /// data (i.e. `--no-blind` is not given). By default, a comment
     /// with regards to terms of use and privacy is given.
@@ -521,6 +527,12 @@ struct AddToOpts {
     /// data and it's not overly large, feel free to use this option!
     #[clap(long)]
     no_blind: bool,
+
+    /// Allow XML files from BEAST versions other than BEAST2. Note
+    /// that you'll also have to provide `--no-blind` as blinding is
+    /// only implemented for BEAST2.
+    #[clap(long)]
+    ignore_version: bool,
 
     /// The comment to put above `<data>` elements when blinding the
     /// data (i.e. `--no-blind` is not given). By default, a comment
@@ -2870,18 +2882,37 @@ struct PreparedFile {
     data_was_removed: bool,
 }
 
+/// Subset of `PrepareOpts`
+struct PrepareFileOpts<'t> {
+    source_path: &'t Path,
+    no_blind: bool,
+    blind_comment: &'t Option<String>,
+    ignore_version: bool,
+}
+
 /// Returns the converted file contents, and what changed. Errors
 /// already mention the `source_path`.
-fn prepare_file(
-    source_path: &Path,
-    no_blind: bool,
-    blind_comment: &Option<String>,
-) -> Result<PreparedFile> {
+fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
+    let PrepareFileOpts {
+        source_path,
+        no_blind,
+        blind_comment,
+        ignore_version,
+    } = opts;
+
     let xmldocument = read_xml_file(source_path)
         .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
 
     let beast_version = get_beast_version(xmldocument.document())
         .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
+
+    if !ignore_version && beast_version.major != BeastMajorVersion::Two {
+        bail!(
+            "only BEAST2 XML files are supported, unless you provide the --ignore-version \
+             option; file {source_path:?} indicates version {}",
+            beast_version.string
+        )
+    }
 
     let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
 
@@ -2967,6 +2998,7 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
         files_to_prepare,
         no_blind,
         blind_comment,
+        ignore_version,
     } = command_opts;
 
     // First, convert them all without writing them out, to avoid
@@ -2978,7 +3010,12 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
         .map(|source_path| {
             Ok((
                 source_path,
-                prepare_file(source_path, no_blind, &blind_comment)?,
+                prepare_file(PrepareFileOpts {
+                    source_path,
+                    no_blind,
+                    blind_comment: &blind_comment,
+                    ignore_version,
+                })?,
             ))
         })
         .collect::<Result<_>>()?;
@@ -3021,6 +3058,7 @@ fn add_to_command(
         blind_comment,
         force,
         no_repo_check,
+        ignore_version,
     } = command_opts;
 
     // (Intentionally shadow the original variable to make sure the
@@ -3064,7 +3102,12 @@ fn add_to_command(
         .map(|source_path| {
             Ok((
                 source_path,
-                prepare_file(source_path, no_blind, &blind_comment)?,
+                prepare_file(PrepareFileOpts {
+                    source_path,
+                    no_blind,
+                    blind_comment: &blind_comment,
+                    ignore_version,
+                })?,
             ))
         })
         .collect::<Result<_>>()?;
@@ -3302,6 +3345,7 @@ fn main() -> Result<()> {
                     files_to_prepare,
                     no_blind,
                     blind_comment,
+                    ignore_version,
                 }) => Opts {
                     v,
                     verbose,
@@ -3315,6 +3359,7 @@ fn main() -> Result<()> {
                         files_to_prepare,
                         no_blind,
                         blind_comment,
+                        ignore_version,
                     })),
                 },
                 Command::AddTo(AddToOpts {
@@ -3325,6 +3370,7 @@ fn main() -> Result<()> {
                     blind_comment,
                     force,
                     no_repo_check,
+                    ignore_version,
                 }) => Opts {
                     v,
                     verbose,
@@ -3342,6 +3388,7 @@ fn main() -> Result<()> {
                         blind_comment,
                         force,
                         no_repo_check,
+                        ignore_version,
                     })),
                 },
                 Command::HelpContributing | Command::HelpAttributes => Opts {
