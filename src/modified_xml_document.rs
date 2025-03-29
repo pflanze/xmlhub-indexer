@@ -82,6 +82,19 @@ pub struct ModifiedXMLDocument<'d> {
     document: ModifiedDocument<'d>,
 }
 
+pub struct ClearElementsOpts<'t> {
+    /// Prefix found nodes with the given comment string and indent if
+    /// given.
+    pub comment_and_indent: Option<(&'t str, &'t str)>,
+    /// If is true, the comment is added even if there were no child
+    /// nodes.
+    pub always_add_comment: bool,
+    /// If child node are all whitespace, do not remove
+    /// anything. Still remove whitespace together with other nodes if
+    /// there are any.
+    pub treat_whitespace_as_empty: bool,
+}
+
 impl<'d> ModifiedXMLDocument<'d> {
     pub fn new(xml_document: &'d XMLDocument) -> Self {
         Self {
@@ -142,17 +155,10 @@ impl<'d> ModifiedXMLDocument<'d> {
     }
 
     /// Find elements with the given tag name, regardless of their
-    /// position in the document, delete their child nodes if any, and
-    /// prefix them with the given comment string and indent if
-    /// given. If `always_add_comment` is true, the comment is added
-    /// even if there were no child nodes.  NOTE: leaves attributes in
-    /// place! Returns how many elements were cleared.
-    pub fn clear_elements_named(
-        &mut self,
-        element_name: &str,
-        comment_and_indent: Option<(&str, &str)>,
-        always_add_comment: bool,
-    ) -> usize {
+    /// position in the document. See `ClearElementsOpts` for
+    /// details. NOTE: leaves attributes in place! Returns how many
+    /// elements were cleared.
+    pub fn clear_elements_named(&mut self, element_name: &str, opts: &ClearElementsOpts) -> usize {
         let mut n_cleared = 0;
         for element in self.elements_named(element_name) {
             let is_modified;
@@ -166,8 +172,16 @@ impl<'d> ModifiedXMLDocument<'d> {
                     }
                 }
                 if let Some(range) = delete_range {
-                    self.document.push(Modification::Delete(range));
-                    is_modified = true;
+                    if opts.treat_whitespace_as_empty
+                        && self.document.original_str()[range.clone()]
+                            .chars()
+                            .all(|c| c.is_ascii_whitespace())
+                    {
+                        is_modified = false;
+                    } else {
+                        self.document.push(Modification::Delete(range));
+                        is_modified = true;
+                    }
                 } else {
                     is_modified = false;
                 }
@@ -176,8 +190,8 @@ impl<'d> ModifiedXMLDocument<'d> {
                 n_cleared += 1;
             }
 
-            if always_add_comment || is_modified {
-                if let Some((comment, indent)) = &comment_and_indent {
+            if opts.always_add_comment || is_modified {
+                if let Some((comment, indent)) = &opts.comment_and_indent {
                     let escaped_comment = escape_comment(comment, indent);
 
                     // How to know how much to indent on the next line?

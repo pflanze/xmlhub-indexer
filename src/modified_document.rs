@@ -81,6 +81,10 @@ impl<'d> ModifiedDocument<'d> {
         }
     }
 
+    pub fn original_str(&self) -> &'d str {
+        self.string
+    }
+
     /// Whether edits have been carried out; no check is done whether
     /// edits were done that yield the original document. For the
     /// latter, use `to_string_and_modified` instead.

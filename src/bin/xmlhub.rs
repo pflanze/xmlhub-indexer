@@ -41,7 +41,7 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
-    modified_xml_document::ModifiedXMLDocument,
+    modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
     string_tree::StringTree,
@@ -2919,7 +2919,14 @@ fn prepare_file(
             .as_ref()
             .map(|s| s.as_str())
             .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-        modified_document.clear_elements_named("data", Some((comment, "    ")), false)
+        modified_document.clear_elements_named(
+            "data",
+            &ClearElementsOpts {
+                comment_and_indent: Some((comment, "    ")),
+                always_add_comment: false,
+                treat_whitespace_as_empty: true,
+            },
+        )
     };
 
     let (content, content_has_changed) = modified_document.to_string_and_modified()?;
