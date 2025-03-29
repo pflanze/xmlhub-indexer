@@ -2672,7 +2672,7 @@ fn build_command(
         base_path,
     } = build_opts;
 
-    let no_repo_check = typed_from_no_repo_check(no_branch_check);
+    let no_repo_check = typed_from_no_repo_check(no_repo_check);
 
     let base_path = if let Some(base_path) = base_path {
         base_path.into()
