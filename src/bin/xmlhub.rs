@@ -304,7 +304,7 @@ enum Command {
     /// Rebuild the XML Hub index.
     Build(BuildOpts),
     /// Clone the XML Hub repository and apply merge config change.
-    CloneTo(CloneOpts),
+    CloneTo(CloneToOpts),
     /// Prepare some XML file(s) by adding a metadata template to
     /// it/them so that the metadata can more easily be entered via a
     /// text editor, and by default, deleting sequence data.  Careful!: this
@@ -451,7 +451,7 @@ struct BuildOpts {
 }
 
 #[derive(clap::Parser, Debug)]
-struct CloneOpts {
+struct CloneToOpts {
     /// Do not show the Git commands that are run (by default, they
     /// are shown even if the global `--verbose` option was not given)
     #[clap(long)]
@@ -2713,9 +2713,9 @@ fn build_command(
 fn clone_to_command(
     _program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    command_opts: &CloneOpts,
+    command_opts: &CloneToOpts,
 ) -> Result<()> {
-    let CloneOpts {
+    let CloneToOpts {
         no_verbose,
         base_path,
     } = command_opts;
@@ -3193,7 +3193,7 @@ fn main() -> Result<()> {
                         })),
                     }
                 }
-                Command::CloneTo(CloneOpts {
+                Command::CloneTo(CloneToOpts {
                     no_verbose,
                     base_path,
                 }) => Opts {
@@ -3205,7 +3205,7 @@ fn main() -> Result<()> {
                     max_log_files,
                     dry_run,
                     no_version_check,
-                    command: Some(Command::CloneTo(CloneOpts {
+                    command: Some(Command::CloneTo(CloneToOpts {
                         no_verbose,
                         base_path,
                     })),
