@@ -321,7 +321,7 @@ enum Command {
     AddTo(AddToOpts),
 }
 
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 struct BuildOpts {
     /// Add a footer with a timestamp ("Last updated") to the index
     /// files. Note: this causes every run to create modified files
@@ -1978,16 +1978,47 @@ fn eprintln_running(s: String) {
     _ = writeln!(&mut stderr(), "+ running: {s}");
 }
 
+/// The subset of the options of `BuildOpts` used by `build_index`
+struct BuildIndexOpts {
+    pull: bool,
+    batch: bool,
+    ignore_untracked: bool,
+    timestamp: bool,
+    write_errors: bool,
+    silent_on_written_errors: bool,
+    ok_on_written_errors: bool,
+    open_if_changed: bool,
+    no_commit: bool,
+    no_commit_errors: bool,
+    no_branch_check: bool,
+    open: bool,
+}
+
 /// Run one conversion from the XML files to the index files. Returns
 /// the exit code to exit the program with.
 fn build_index(
     global_opts: &Opts,
-    build_opts: &BuildOpts,
+    build_index_opts: BuildIndexOpts,
     base_path: &Path,
     git_log_version_checker: &GitLogVersionChecker,
     xmlhub_checkout: &CheckedCheckoutContext1<&Path>,
     maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&Path>>,
 ) -> Result<i32> {
+    let BuildIndexOpts {
+        pull,
+        batch,
+        ignore_untracked,
+        timestamp,
+        write_errors,
+        silent_on_written_errors,
+        ok_on_written_errors,
+        open_if_changed,
+        no_commit,
+        no_commit_errors,
+        no_branch_check,
+        open,
+    } = build_index_opts;
+
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
     // opts.verbose.
@@ -2007,7 +2038,7 @@ fn build_index(
 
     // Update repository if requested
     if let Some(checked_xmlhub_checkout) = maybe_checked_xmlhub_checkout {
-        if build_opts.pull {
+        if pull {
             check_dry_run! {
                 message: "git pull",
                 if !git(base_path, &["pull"], global_opts.quiet)? {
@@ -2016,7 +2047,7 @@ fn build_index(
             }
         }
 
-        if build_opts.batch {
+        if batch {
             let default_remote = &checked_xmlhub_checkout.default_remote;
 
             check_dry_run! {
@@ -2073,7 +2104,7 @@ fn build_index(
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
         // end in .xml
-        let mut paths = if build_opts.ignore_untracked {
+        let mut paths = if ignore_untracked {
             // Ask Git for the list of files
             git_ls_files(base_path)?
         } else {
@@ -2305,7 +2336,7 @@ fn build_index(
                         html.h2([], html.text("Contents")?)?,
                         html.preserialized(toc_html.clone())?,
                         html.div([], toplevel_section.to_html(NumberPath::empty(), html)?)?,
-                        if build_opts.timestamp {
+                        if timestamp {
                             html.div(
                                 [],
                                 [
@@ -2345,7 +2376,7 @@ fn build_index(
                     .to_html_fragment_string(&html)?
                     .into(),
             ],
-            if build_opts.timestamp {
+            if timestamp {
                 vec![
                     "-------------------------------------------------------".into(),
                     format!("Last updated: {now}\n").into(),
@@ -2400,14 +2431,14 @@ fn build_index(
         write_errors_to_stderr = false;
         write_files = true;
     } else {
-        if build_opts.write_errors {
+        if write_errors {
             write_files = true;
-            if build_opts.silent_on_written_errors {
+            if silent_on_written_errors {
                 exit_code = 0;
                 write_errors_to_stderr = false;
             } else {
                 write_errors_to_stderr = true;
-                if build_opts.ok_on_written_errors {
+                if ok_on_written_errors {
                     exit_code = 0;
                 } else {
                     exit_code = 1;
@@ -2447,7 +2478,7 @@ fn build_index(
                 out.flush()?;
 
                 let mut html_file_has_changed = false;
-                if build_opts.open_if_changed {
+                if open_if_changed {
                     // Need to remember whether the file has changed
                     check_dry_run! {
                         message: "git diff",
@@ -2486,12 +2517,11 @@ fn build_index(
         // Commit files if not prevented by --no-commit, and any
         // were written, and --no-commit-errors was not given or
         // there were no errors. I.e. reasons not to commit:
-        let no_commit_files = build_opts.no_commit
-            || written_files.is_empty()
-            || (have_errors && build_opts.no_commit_errors);
+        let no_commit_files =
+            no_commit || written_files.is_empty() || (have_errors && no_commit_errors);
         let do_commit_files = !no_commit_files;
         if do_commit_files {
-            if !build_opts.no_branch_check {
+            if !no_branch_check {
                 // Are we on the expected branch? NOTE: unlike most
                 // checks on the repository, this one occurs late, but
                 // we can't move it earlier if we want it to be
@@ -2585,7 +2615,7 @@ fn build_index(
     }
 
     // Open a web browser if appropriate
-    if build_opts.open || (build_opts.open_if_changed && html_file_has_changed) {
+    if open || (open_if_changed && html_file_has_changed) {
         if write_files {
             // Hopefully all browsers take relative paths? Firefox
             // on Linux and macOS are OK, Safari (via open -a) as
@@ -2620,12 +2650,31 @@ fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
 fn build_command(
     program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    build_opts: &BuildOpts,
+    build_opts: BuildOpts,
 ) -> Result<()> {
-    // XX destructure BuildOpts
-    let no_repo_check = typed_from_no_repo_check(build_opts.no_branch_check);
+    let BuildOpts {
+        timestamp,
+        write_errors,
+        no_commit_errors,
+        ok_on_written_errors,
+        silent_on_written_errors,
+        open,
+        open_if_changed,
+        pull,
+        no_commit,
+        push,
+        batch,
+        daemon,
+        daemon_sleep_time,
+        no_branch_check,
+        no_repo_check,
+        ignore_untracked,
+        base_path,
+    } = build_opts;
 
-    let base_path = if let Some(base_path) = &build_opts.base_path {
+    let no_repo_check = typed_from_no_repo_check(no_branch_check);
+
+    let base_path = if let Some(base_path) = base_path {
         base_path.into()
     } else {
         // The current directory. Use "", not ".", to make the
@@ -2647,20 +2696,31 @@ fn build_command(
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
     // then erroring out on pushing
-    let maybe_checked_xmlhub_checkout = if build_opts.push {
+    let maybe_checked_xmlhub_checkout = if push {
         Some(xmlhub_checkout.clone().check2()?)
     } else {
         None
     };
 
-    let min_sleep_seconds = build_opts
-        .daemon_sleep_time
-        .unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
+    let min_sleep_seconds = daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
     let build_index_once = || {
         build_index(
             &global_opts,
-            &build_opts,
+            BuildIndexOpts {
+                pull,
+                batch,
+                ignore_untracked,
+                timestamp,
+                write_errors,
+                silent_on_written_errors,
+                ok_on_written_errors,
+                open_if_changed,
+                no_commit,
+                no_commit_errors,
+                no_branch_check,
+                open,
+            },
             base_path.borrow(),
             &git_log_version_checker,
             &xmlhub_checkout,
@@ -2681,7 +2741,7 @@ fn build_command(
         })
     };
 
-    if let Some(daemon_mode) = build_opts.daemon {
+    if let Some(daemon_mode) = daemon {
         let daemon = Daemon {
             base_dir: daemon_base_dir,
             use_local_time: global_opts.localtime,
@@ -3299,7 +3359,9 @@ fn main() -> Result<()> {
         .as_ref()
         .expect("`None` is dispatched above already")
     {
-        Command::Build(command_opts) => build_command(program_version, &global_opts, command_opts),
+        Command::Build(command_opts) => {
+            build_command(program_version, &global_opts, command_opts.clone())
+        }
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &global_opts, command_opts)
         }
