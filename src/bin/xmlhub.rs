@@ -31,7 +31,9 @@ use walkdir::WalkDir;
 use xmlhub_indexer::{
     backoff::LoopWithBackoff,
     browser::spawn_browser,
-    checkout_context::{CheckedCheckoutContext1, CheckedCheckoutContext2},
+    checkout_context::{
+        CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
+    },
     const_util::file_name,
     daemon::{Daemon, DaemonMode},
     file_lock::{file_lock_nonblocking, FileLockError},
@@ -2629,7 +2631,11 @@ fn build_command(
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.as_ref())
-        .check1(build_opts.no_repo_check)?;
+        .check1(if build_opts.no_repo_check {
+            CheckExpectedSubpathsExist::No
+        } else {
+            CheckExpectedSubpathsExist::Yes
+        })?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
@@ -2773,7 +2779,7 @@ fn clone_to_command(
         }
 
         if !global_opts.dry_run {
-            checkout.check1(true)?;
+            checkout.check1(CheckExpectedSubpathsExist::Yes)?;
         }
     }
 
@@ -2958,7 +2964,11 @@ fn add_to_command(
     // Check that target_directory or any of the parent directories
     // are an XML Hub clone
     XMLHUB_CHECKOUT
-        .checked_from_subpath(&target_directory, *no_repo_check)
+        .checked_from_subpath(
+            &target_directory,
+            CheckExpectedSubpathsExist::Yes,
+            *no_repo_check,
+        )
         .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
 
     let file_or_files = english_plural(files_to_add.len(), "files");

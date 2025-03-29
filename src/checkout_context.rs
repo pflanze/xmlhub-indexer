@@ -30,7 +30,17 @@ pub struct CheckoutContext<'s, P: AsRef<Path>> {
     /// Where the upstream repository should be, for visiting by web
     /// browser. Ditto.
     pub supposed_upstream_web_url: &'s str,
+    /// Check these sub-paths in a repository when
+    /// `CheckExpectedSubpathsExist::Yes` is given to `check1`
     pub expected_sub_paths: &'s [&'s str],
+}
+
+/// Whether to check that the expected sub-paths (as per
+/// `CheckoutContext::expected_sub_paths`) exist in a repository
+#[derive(Debug, Clone, Copy)]
+pub enum CheckExpectedSubpathsExist {
+    Yes,
+    No,
 }
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
@@ -74,6 +84,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
     pub fn checked_from_subpath<'p, P2>(
         &'s self,
         path: P2,
+        subpath_check: CheckExpectedSubpathsExist,
         allow_subrepositories: bool,
     ) -> Result<CheckedCheckoutContext1<'s, PathBuf>>
     where
@@ -88,7 +99,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             // XX is_dir()? How do the shared-database things work?
             if current_path.append(".git").exists() {
                 let repo = self.replace_working_dir_path(current_path.to_owned());
-                match repo.check1(false) {
+                match repo.check1(subpath_check) {
                     Ok(r) => return Ok(r),
                     Err(e) => {
                         if !allow_subrepositories {
@@ -134,7 +145,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
     /// `CheckedCheckoutContext1::check2`.
     pub fn check1(
         self,
-        omit_expected_subpath_check: bool,
+        subpath_check: CheckExpectedSubpathsExist,
     ) -> Result<CheckedCheckoutContext1<'s, P>> {
         let working_dir_path: &Path = self.working_dir_path.as_ref();
         if !self.checkout_dir_exists() {
@@ -163,19 +174,22 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
                  a `.git` subdirectory)"
             )
         }
-        if !omit_expected_subpath_check {
-            for sub_path_str in self.expected_sub_paths {
-                let sub_path: &Path = sub_path_str.as_ref();
-                let working_dir_path: &Path = self.working_dir_path.as_ref();
-                let path = working_dir_path.append(sub_path);
-                if !path.exists() {
-                    bail!(
-                        "the directory {working_dir_path:?} does not look like a clone of \
+        match subpath_check {
+            CheckExpectedSubpathsExist::Yes => {
+                for sub_path_str in self.expected_sub_paths {
+                    let sub_path: &Path = sub_path_str.as_ref();
+                    let working_dir_path: &Path = self.working_dir_path.as_ref();
+                    let path = working_dir_path.append(sub_path);
+                    if !path.exists() {
+                        bail!(
+                            "the directory {working_dir_path:?} does not look like a clone of \
                      {:?}, it is missing the entry {path:?}",
-                        self.supposed_upstream_web_url
-                    )
+                            self.supposed_upstream_web_url
+                        )
+                    }
                 }
             }
+            CheckExpectedSubpathsExist::No => (),
         }
         Ok(CheckedCheckoutContext1 {
             parent: self,
@@ -187,9 +201,9 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
     /// `self.check1()?.check2()`.
     pub fn check2(
         self,
-        omit_expected_subpath_check: bool,
+        subpath_check: CheckExpectedSubpathsExist,
     ) -> Result<CheckedCheckoutContext2<'s, P>> {
-        self.check1(omit_expected_subpath_check)?.check2()
+        self.check1(subpath_check)?.check2()
     }
 
     fn checkout_dir_exists(&self) -> bool {
