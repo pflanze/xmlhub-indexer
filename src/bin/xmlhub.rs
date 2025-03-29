@@ -2945,6 +2945,14 @@ fn add_to_command(
         no_repo_check,
     } = command_opts;
 
+    // (Intentionally shadow the original variable to make sure the
+    // boolen is never used directly.)
+    let no_repo_check = if *no_repo_check {
+        CheckExpectedSubpathsExist::No
+    } else {
+        CheckExpectedSubpathsExist::Yes
+    };
+
     let target_directory = target_directory
         .as_ref()
         .ok_or_else(|| anyhow!("missing TARGET_DIRECTORY argument. Run --help for help."))?;
@@ -2964,11 +2972,7 @@ fn add_to_command(
     // Check that target_directory or any of the parent directories
     // are an XML Hub clone
     XMLHUB_CHECKOUT
-        .checked_from_subpath(
-            &target_directory,
-            CheckExpectedSubpathsExist::Yes,
-            *no_repo_check,
-        )
+        .checked_from_subpath(&target_directory, no_repo_check, false)
         .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
 
     let file_or_files = english_plural(files_to_add.len(), "files");
