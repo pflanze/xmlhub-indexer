@@ -399,13 +399,13 @@ struct BuildOpts {
     push: bool,
 
     /// Update the xmlhub repository unattended (e.g. via a cronjob or
-    /// similar). Implies --write-errors, --silent-on-written-errors
-    /// and --push, and disables --no-commit and --timestamp. Instead
-    /// of --pull, uses `git remote update` and `git reset --hard` to
-    /// set the local branch to the remote, which avoids the risk for
-    /// merge conflicts but throws away local changes!  WARNING: this
-    /// will lead to local changes being lost!  Do not use this option
-    /// for interactive usage!
+    /// similar). Implies --write-errors, --silent-on-written-errors,
+    /// --no-repo-check and --push, and disables --no-commit and
+    /// --timestamp. Instead of --pull, uses `git remote update` and
+    /// `git reset --hard` to set the local branch to the remote,
+    /// which avoids the risk for merge conflicts but throws away
+    /// local changes!  WARNING: this will lead to local changes being
+    /// lost!  Do not use this option for interactive usage!
     #[clap(long)]
     batch: bool,
 
@@ -3120,7 +3120,7 @@ fn main() -> Result<()> {
                     daemon_sleep_time,
                     base_path,
                     ignore_untracked,
-                    no_repo_check,
+                    no_repo_check: no_repo_check_,
                 }) => {
                     // Create uninitialized variables without the underscores,
                     // then initialize them differently depending on some of the
@@ -3134,6 +3134,7 @@ fn main() -> Result<()> {
                         silent_on_written_errors,
                         timestamp,
                         batch,
+                        no_repo_check,
                     );
                     if daemon.is_some() {
                         batch = true;
@@ -3148,6 +3149,7 @@ fn main() -> Result<()> {
                         no_commit_errors = false;
                         silent_on_written_errors = true;
                         timestamp = false;
+                        no_repo_check = true;
                         // Should we force `ignore_untracked` false?
                     } else {
                         pull = pull_;
@@ -3157,6 +3159,7 @@ fn main() -> Result<()> {
                         no_commit_errors = no_commit_errors_;
                         silent_on_written_errors = silent_on_written_errors_;
                         timestamp = timestamp_;
+                        no_repo_check = no_repo_check_;
                     }
 
                     // Pack the variables into a new struct
