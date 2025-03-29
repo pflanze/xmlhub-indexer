@@ -176,6 +176,21 @@ pub struct GitStatusItem {
     pub target_path: Option<String>,
 }
 
+impl GitStatusItem {
+    /// If `paranoid` is true, only returns true if both x and y are
+    /// '?', otherwise if either is.
+    pub fn is_untracked(&self, paranoid: bool) -> bool {
+        // According to documentation and observation both are '?' at
+        // the same time, and never only one of them '?'. Which way to
+        // check?
+        if paranoid {
+            self.x == '?' && self.y == '?'
+        } else {
+            self.x == '?' || self.y == '?'
+        }
+    }
+}
+
 impl Display for GitStatusItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}{}  {}", self.x, self.y, self.path))?;

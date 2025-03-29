@@ -2562,7 +2562,14 @@ fn build_index(
             };
             let changed_items: Vec<String> = items
                 .iter()
-                .filter(|item| !ignore_path(item.path.as_str()))
+                .filter(|item| {
+                    // Ignore untracked files in batch mode (they will
+                    // be killed by reset --hard if in the way, and if
+                    // not, then they could not have been created (XX
+                    // unless there is a bug in the app, though,
+                    // actually))
+                    !(ignore_path(item.path.as_str()) || (batch && item.is_untracked(false)))
+                })
                 .map(|item| item.to_string())
                 .collect();
             if !changed_items.is_empty() {
