@@ -80,6 +80,29 @@ fn t_escape_comment() {
     assert_eq!(t("---"), "<!-- - - - -->");
 }
 
+// XX optim: Cow<str>
+fn escape_text(s: &str) -> String {
+    let append = |out: &mut Vec<u8>, bs: &[u8]| {
+        // XX faster pls?
+        for b in bs {
+            out.push(*b);
+        }
+    };
+    let mut out: Vec<u8> = Vec::new();
+    for b in s.bytes() {
+        match b {
+            b'&' => append(&mut out, b"&amp;"),
+            b'<' => append(&mut out, b"&lt;"),
+            b'>' => append(&mut out, b"&gt;"),
+            b'"' => append(&mut out, b"&quot;"),
+            b'\'' => append(&mut out, b"&apos;"),
+            _ => out.push(b),
+        }
+    }
+    // XX use unsafe unchecked?
+    String::from_utf8(out).expect("no bug")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DocumentId(u64);
 
@@ -161,6 +184,18 @@ impl<'d> ModifiedXMLDocument<'d> {
         self.document.push(Modification::Insert(
             self.assert_position(position),
             escaped_comment.into(),
+        ));
+    }
+
+    /// Insert the given text at the given position. It is properly
+    /// escaped. Panics if the given `DocumentPosition` is not for
+    /// this document. NOTE: inserting text other than whitespace is
+    /// only valid in the child node area, outside an element tag
+    /// (e.g. not at the position returned by `the_top`).
+    pub fn insert_text_at(&mut self, position: DocumentPosition, text: &str) {
+        self.document.push(Modification::Insert(
+            self.assert_position(position),
+            escape_text(text).into(),
         ));
     }
 
