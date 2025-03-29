@@ -164,29 +164,32 @@ fn get_terminal_width() -> usize {
     }
 }
 
+/// What would normally be called the "major" version in a semantic
+/// version is called the product version for BEAST, since BEAST 1, 2,
+/// .. are "totally different products".
 #[derive(PartialEq, Eq, Debug)]
-enum BeastMajorVersion {
+enum BeastProductVersion {
     One,
     Two,
     Future(u16),
 }
 
-impl TryFrom<u16> for BeastMajorVersion {
+impl TryFrom<u16> for BeastProductVersion {
     type Error = anyhow::Error;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            0 => bail!("not a BEAST major version number: {value}"),
-            1 => Ok(BeastMajorVersion::One),
-            2 => Ok(BeastMajorVersion::Two),
-            n => Ok(BeastMajorVersion::Future(n)),
+            0 => bail!("not a BEAST product version number: {value}"),
+            1 => Ok(BeastProductVersion::One),
+            2 => Ok(BeastProductVersion::Two),
+            n => Ok(BeastProductVersion::Future(n)),
         }
     }
 }
 
 #[derive(PartialEq, Eq, Debug)]
 struct BeastVersion {
-    major: BeastMajorVersion,
+    product: BeastProductVersion,
     string: String,
 }
 
@@ -199,14 +202,14 @@ impl FromStr for BeastVersion {
         if parts.len() < 2 {
             bail!("not a BEAST version number, misses a '.': {string:?}")
         } else {
-            let major_num = u16::from_str(parts[0]).with_context(|| {
+            let product_num = u16::from_str(parts[0]).with_context(|| {
                 anyhow!(
-                    "not a BEAST version number, the major number part is \
+                    "not a BEAST version number, the product number part is \
                      not an unsigned integer: {string:?}"
                 )
             })?;
             Ok(Self {
-                major: BeastMajorVersion::try_from(major_num)
+                product: BeastProductVersion::try_from(product_num)
                     .with_context(|| anyhow!("parsing version number string {string:?}"))?,
                 string,
             })
@@ -2906,7 +2909,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     let beast_version = get_beast_version(xmldocument.document())
         .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
 
-    if !ignore_version && beast_version.major != BeastMajorVersion::Two {
+    if !ignore_version && beast_version.product != BeastProductVersion::Two {
         bail!(
             "only BEAST2 XML files are supported, unless you provide the --ignore-version \
              option; file {source_path:?} indicates version {}",
@@ -2942,7 +2945,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     let n_blinded = if no_blind {
         0
     } else {
-        if beast_version.major != BeastMajorVersion::Two {
+        if beast_version.product != BeastProductVersion::Two {
             bail!(
                 "currently, can only blind BEAST 2 files, but this file specifies version {:?}: \
                  {source_path:?} (for BEAST 1 or 3.. files, blind manually or via the \
