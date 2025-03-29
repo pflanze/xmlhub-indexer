@@ -452,7 +452,7 @@ struct BuildOpts {
     base_path: Option<PathBuf>,
 }
 
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 struct CloneToOpts {
     /// Do not show the Git commands that are run (by default, they
     /// are shown even if the global `--verbose` option was not given)
@@ -467,7 +467,7 @@ struct CloneToOpts {
     base_path: Option<PathBuf>,
 }
 
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 struct PrepareOpts {
     /// The path(s) to the XML file(s) which should be
     /// modified. Careful: they are modified in place (although the
@@ -492,7 +492,7 @@ struct PrepareOpts {
     // XX FUTURE idea: --set "header: value"
 }
 
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 struct AddToOpts {
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
@@ -2786,7 +2786,7 @@ fn build_command(
 fn clone_to_command(
     _program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    command_opts: &CloneToOpts,
+    command_opts: CloneToOpts,
 ) -> Result<()> {
     let CloneToOpts {
         no_verbose,
@@ -2952,7 +2952,7 @@ fn overwrite_file_moving_to_trash_if_exists(
 fn prepare_command(
     _program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    command_opts: &PrepareOpts,
+    command_opts: PrepareOpts,
 ) -> Result<()> {
     let PrepareOpts {
         files_to_prepare,
@@ -2965,11 +2965,11 @@ fn prepare_command(
     // re-running the same command, also it will be a bit
     // confusing). With regards to IO, only reading happens here.
     let converted: Vec<(&PathBuf, PreparedFile)> = files_to_prepare
-        .into_iter()
+        .iter()
         .map(|source_path| {
             Ok((
                 source_path,
-                prepare_file(source_path, *no_blind, blind_comment)?,
+                prepare_file(source_path, no_blind, &blind_comment)?,
             ))
         })
         .collect::<Result<_>>()?;
@@ -3002,7 +3002,7 @@ fn prepare_command(
 fn add_to_command(
     _program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
-    command_opts: &AddToOpts,
+    command_opts: AddToOpts,
 ) -> Result<()> {
     let AddToOpts {
         target_directory,
@@ -3016,14 +3016,14 @@ fn add_to_command(
 
     // (Intentionally shadow the original variable to make sure the
     // boolen is never used directly.)
-    let no_repo_check = typed_from_no_repo_check(*no_repo_check);
+    let no_repo_check = typed_from_no_repo_check(no_repo_check);
 
     let target_directory = target_directory
         .as_ref()
         .ok_or_else(|| anyhow!("missing TARGET_DIRECTORY argument. Run --help for help."))?;
 
     if !target_directory.is_dir() {
-        if *mkdir {
+        if mkdir {
             create_dir(target_directory)
                 .with_context(|| anyhow!("creating target directory {target_directory:?}"))?
         } else {
@@ -3051,11 +3051,11 @@ fn add_to_command(
     // re-running the same command, also it will be a bit
     // confusing). With regards to IO, only reading happens here.
     let converted: Vec<_> = files_to_add
-        .into_iter()
+        .iter()
         .map(|source_path| {
             Ok((
                 source_path,
-                prepare_file(source_path, *no_blind, blind_comment)?,
+                prepare_file(source_path, no_blind, &blind_comment)?,
             ))
         })
         .collect::<Result<_>>()?;
@@ -3363,12 +3363,14 @@ fn main() -> Result<()> {
             build_command(program_version, &global_opts, command_opts.clone())
         }
         Command::CloneTo(command_opts) => {
-            clone_to_command(program_version, &global_opts, command_opts)
+            clone_to_command(program_version, &global_opts, command_opts.clone())
         }
         Command::Prepare(command_opts) => {
-            prepare_command(program_version, &global_opts, command_opts)
+            prepare_command(program_version, &global_opts, command_opts.clone())
         }
-        Command::AddTo(command_opts) => add_to_command(program_version, &global_opts, command_opts),
+        Command::AddTo(command_opts) => {
+            add_to_command(program_version, &global_opts, command_opts.clone())
+        }
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes => help_attributes_command(),
     }
