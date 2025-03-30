@@ -47,7 +47,8 @@ impl<'s> XmlhubCheckVersion<'s> {
                 Some(format!(
                     "you should update your copy of the {program_name} program. \
                      If you're sure you want to proceed anyway, use the \
-                     --no-version-check option."
+                     global --no-version-check option (it must be given \
+                     before the subcommand name)."
                 )),
             )?;
             if found.is_none() {

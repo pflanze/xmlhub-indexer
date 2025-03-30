@@ -2684,7 +2684,6 @@ fn build_command(
         PathBuf::from("").fixup()
     };
 
-    // XXX why global?
     let git_log_version_checker =
         git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
 
@@ -2801,12 +2800,8 @@ fn clone_to_command(
         .as_ref()
         .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
 
-    let git_log_version_checker = git_log_version_checker(
-        program_version,
-        // XX why global?
-        global_opts.no_version_check,
-        &base_path,
-    );
+    let git_log_version_checker =
+        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
 
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
