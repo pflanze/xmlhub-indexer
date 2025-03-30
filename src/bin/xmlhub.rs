@@ -3060,7 +3060,7 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
 
 /// Execute an `add-to` command.
 fn add_to_command(
-    _program_version: GitVersion<SemVersion>,
+    program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
     command_opts: AddToOpts,
 ) -> Result<()> {
@@ -3097,9 +3097,18 @@ fn add_to_command(
 
     // Check that target_directory or any of the parent directories
     // are an XML Hub clone
-    XMLHUB_CHECKOUT
+    let xmlhub_checkout = XMLHUB_CHECKOUT
         .checked_from_subpath(&target_directory, no_repo_check, false)
         .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
+
+    // Check that this program is up to date, which matters because
+    // otherwise it might add the wrong fields.
+    let git_log_version_checker = git_log_version_checker(
+        program_version,
+        global_opts.no_version_check,
+        &xmlhub_checkout.working_dir_path,
+    );
+    git_log_version_checker.check_git_log()?;
 
     pluralized! { files_to_add.len() => files }
     if !global_opts.quiet {
