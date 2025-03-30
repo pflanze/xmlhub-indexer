@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     cmp::Ordering,
     ffi::OsStr,
     fmt::Debug,
@@ -10,6 +11,7 @@ use thiserror::Error;
 use crate::{
     git::git_log,
     git_version::{GitVersion, SemVerOrd, SemVerOrdResult, SemVersion, UndecidabilityReason},
+    ref_or_owned::RefOrOwned,
 };
 
 // fn wip_format(program_version_is_wip: bool, data_version_is_wip: bool) -> &'static str {
@@ -259,23 +261,26 @@ pub struct GitCheckVersionErrorWithContext {
     pub what_to_do: Option<String>,
 }
 
-pub struct GitLogVersionChecker {
-    pub program_name: String,
-    pub program_version: GitVersion<SemVersion>,
+pub struct GitLogVersionChecker<'t> {
+    pub program_name: Cow<'t, str>,
+    pub program_version: RefOrOwned<'t, GitVersion<SemVersion>>,
 }
 
-impl GitLogVersionChecker {
+impl<'t> GitLogVersionChecker<'t> {
     /// Give program name and version split over 3 lines, in a format
     /// that can be parsed back by `parse_version_from_message` /
     /// `check_git_log`.
     pub fn program_name_and_version(&self) -> String {
-        format!("{}\n\nversion: {}", self.program_name, self.program_version)
+        format!(
+            "{}\n\nversion: {}",
+            self.program_name, *self.program_version
+        )
     }
 
     pub fn parse_version_from_message(&self, message: &str) -> Option<GitVersion<SemVersion>> {
         let mut lines = message.split('\n');
         while let Some(line) = lines.next() {
-            if line.contains(&self.program_name) {
+            if line.contains(self.program_name.as_ref()) {
                 // Loop for the version number in the next 2 lines.
                 for line in lines.clone().take(2) {
                     let body_key = "version:";

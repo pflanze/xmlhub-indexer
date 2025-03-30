@@ -39,7 +39,6 @@ use xmlhub_indexer::{
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
-    git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, FixupPath},
@@ -49,13 +48,10 @@ use xmlhub_indexer::{
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
+    xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
+    xmlhub_types::OutputFile,
 };
-
-struct OutputFile {
-    /// Relative path from the top of the xmlhub repository
-    path_from_repo_top: &'static str,
-}
 
 // -------------------------------------------------------------------------
 // Various settings in addition to those imported from
@@ -2027,7 +2023,7 @@ fn build_index(
     global_opts: &Opts,
     build_index_opts: BuildIndexOpts,
     base_path: &Path,
-    git_log_version_checker: &GitLogVersionChecker,
+    git_log_version_checker: &XmlhubCheckVersion,
     xmlhub_checkout: &CheckedCheckoutContext1<&Path>,
     maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&Path>>,
 ) -> Result<i32> {
@@ -2102,30 +2098,7 @@ fn build_index(
     // (optional) and a relative path from there (if it contains no
     // base directory, the current working directoy is the base).
     let paths: Vec<BaseAndRelPath> = {
-        if !global_opts.no_version_check {
-            // (XXX actually move this check to the global level?
-            // requires Git though. OR move the option to BuildOpts.)
-            // Verify that this is not an outdated version of the program.
-            let found = git_log_version_checker.check_git_log(
-                base_path,
-                &[HTML_FILE.path_from_repo_top, MD_FILE.path_from_repo_top],
-                Some(format!(
-                    "you should update your copy of the {PROGRAM_NAME} program. \
-                     If you're sure you want to proceed anyway, use the \
-                     --no-version-check option."
-                )),
-            )?;
-            if found.is_none() {
-                println!(
-                    "Warning: could not find or parse {PROGRAM_NAME} version statements \
-                     in the git log on the output files; this may mean that \
-                     this is a fresh xmlhub Git repository, or something is messed up. \
-                     This means that if {PROGRAM_NAME} is used from another computer, \
-                     if its version is producing different output from this version \
-                     then each will overwrite the changes from the other endlessly."
-                );
-            }
-        }
+        git_log_version_checker.check_git_log()?;
 
         // Get the paths from running `git ls-files` inside the
         // directory at base_path, then ignore all files that don't
@@ -2658,6 +2631,21 @@ fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
     }
 }
 
+fn git_log_version_checker(
+    program_version: GitVersion<SemVersion>,
+    no_version_check: bool,
+    base_path: &Path,
+) -> XmlhubCheckVersion {
+    XmlhubCheckVersion {
+        program_name: PROGRAM_NAME,
+        program_version: program_version.into(),
+        no_version_check,
+        base_path: base_path.into(),
+        html_file: (&HTML_FILE).into(),
+        md_file: (&MD_FILE).into(),
+    }
+}
+
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon).
 fn build_command(
@@ -2696,10 +2684,9 @@ fn build_command(
         PathBuf::from("").fixup()
     };
 
-    let git_log_version_checker = GitLogVersionChecker {
-        program_name: PROGRAM_NAME.into(),
-        program_version,
-    };
+    // XXX why global?
+    let git_log_version_checker =
+        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.as_ref())
