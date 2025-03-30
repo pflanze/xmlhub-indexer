@@ -1629,9 +1629,13 @@ impl FileErrors {
 /// iterator over `XMLDocumentComment`, which has the string and
 /// location of the comment. The `XMLDocumentComment` has a limited
 /// lifetime (validity span) indicated by the context of the call to
-/// `parse_comments`, hence passed as lifetime parameter 'a;
+/// `parse_comments`, hence passed as lifetime parameter `'a`. If
+/// `dry` is true, does not parse the values; this is used in
+/// `prepare_file` to check whether headers are complete without
+/// checking the validity of the values.
 fn parse_comments<'a>(
     comments: impl Iterator<Item = XMLDocumentComment<'a>>,
+    dry: bool,
 ) -> Result<Metadata, Vec<String>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
@@ -1655,8 +1659,10 @@ fn parse_comments<'a>(
                     if map.contains_key(&spec.key) {
                         bail!("duplicate entry for attribute name {lc_key:?}")
                     } else {
-                        let value = AttributeValue::from_str_and_spec(value, spec)?;
-                        map.insert(spec.key, value);
+                        if !dry {
+                            let value = AttributeValue::from_str_and_spec(value, spec)?;
+                            map.insert(spec.key, value);
+                        }
                     }
                 } else {
                     bail!("unknown attribute name {lc_key:?} given")
@@ -2200,9 +2206,11 @@ fn build_index(
                     errors: vec![format!("{e:#}")],
                 })?;
                 let metadata =
-                    parse_comments(xmldocument.header_comments()).map_err(|errors| FileErrors {
-                        path: path.clone(),
-                        errors,
+                    parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
+                        FileErrors {
+                            path: path.clone(),
+                            errors,
+                        }
                     })?;
                 // We're currently doing nothing else with
                 // `xmldocument` (which holds the tree of all elements
@@ -2912,6 +2920,7 @@ struct PrepareFileOpts<'t> {
     no_blind: bool,
     blind_comment: &'t Option<String>,
     ignore_version: bool,
+    quiet: bool,
 }
 
 /// Returns the converted file contents, and what changed. Errors
@@ -2922,6 +2931,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
         no_blind,
         blind_comment,
         ignore_version,
+        quiet,
     } = opts;
 
     let xmldocument = read_xml_file(source_path)
@@ -2940,8 +2950,15 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
 
     let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
 
-    // XX TODO: check if the document already has an xmlhub header
-    if true {
+    let document_has_headers = match parse_comments(xmldocument.header_comments(), true) {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+    if document_has_headers {
+        if !quiet {
+            println!("Document already has header comments: {source_path:?}");
+        }
+    } else {
         // Add header template
         let the_top = modified_document
             .the_top()
@@ -3039,6 +3056,7 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
                     no_blind,
                     blind_comment: &blind_comment,
                     ignore_version,
+                    quiet: global_opts.quiet,
                 })?,
             ))
         })
@@ -3131,6 +3149,7 @@ fn add_to_command(
                     no_blind,
                     blind_comment: &blind_comment,
                     ignore_version,
+                    quiet: global_opts.quiet,
                 })?,
             ))
         })
