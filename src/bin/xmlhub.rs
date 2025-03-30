@@ -3110,83 +3110,89 @@ fn add_to_command(
     );
     git_log_version_checker.check_git_log()?;
 
-    pluralized! { files_to_add.len() => files }
-    if !global_opts.quiet {
-        println!("Reading the {files}...");
-    }
-
-    // First, convert them all without writing them out, to avoid
-    // writing only some of them (which would then exist when
-    // re-running the same command, also it will be a bit
-    // confusing). With regards to IO, only reading happens here.
-    let converted: Vec<_> = files_to_add
-        .iter()
-        .map(|source_path| {
-            Ok((
-                source_path,
-                prepare_file(PrepareFileOpts {
-                    source_path,
-                    no_blind,
-                    blind_comment: &blind_comment,
-                    ignore_version,
-                    quiet: global_opts.quiet,
-                })?,
-            ))
-        })
-        .collect::<Result<_>>()?;
-
-    // Convert the paths to the output paths; no IO happens here.
-    let outputs: Vec<(PathBuf, PreparedFile)> = converted
-        .into_iter()
-        .map(|(source_path, converted_contents)| -> Result<_> {
-            let file_name = source_path
-                .file_name()
-                .with_context(|| anyhow!("given path {source_path:?} is missing file name"))?;
-            let target_path = target_directory.append(file_name);
-            Ok((target_path, converted_contents))
-        })
-        .collect::<Result<_>>()?;
-
-    // Stop if any of the files exist, by default.
-    if !force {
-        let existing_target_paths: Vec<&PathBuf> = outputs
-            .iter()
-            .filter_map(|(path, _)| if path.exists() { Some(path) } else { None })
-            .collect();
-        if !existing_target_paths.is_empty() {
-            bail!(
-                "these target paths already exist--specify the --force option to overwrite: \
-                 {existing_target_paths:#?}"
-            )
+    if files_to_add.is_empty() {
+        if !global_opts.quiet {
+            println!("No files given, thus nothing to do.");
         }
-    }
+    } else {
+        pluralized! { files_to_add.len() => files }
+        if !global_opts.quiet {
+            println!("Reading the {files}...");
+        }
 
-    if !global_opts.quiet {
-        println!("Writing the {files}...");
-    }
+        // First, convert them all without writing them out, to avoid
+        // writing only some of them (which would then exist when
+        // re-running the same command, also it will be a bit
+        // confusing). With regards to IO, only reading happens here.
+        let converted: Vec<_> = files_to_add
+            .iter()
+            .map(|source_path| {
+                Ok((
+                    source_path,
+                    prepare_file(PrepareFileOpts {
+                        source_path,
+                        no_blind,
+                        blind_comment: &blind_comment,
+                        ignore_version,
+                        quiet: global_opts.quiet,
+                    })?,
+                ))
+            })
+            .collect::<Result<_>>()?;
 
-    // Now that all files were read, converted and target-checked
-    // successfully, write them out. With regards to IO, only writing
-    // happens here.
-    for (target_path, prepared_file) in outputs {
-        // Note: ignore _modified as that is with regards to the
-        // source path, which is a different path. We need to copy the
-        // file even if no modification is carried out at the same
-        // time!
+        // Convert the paths to the output paths; no IO happens here.
+        let outputs: Vec<(PathBuf, PreparedFile)> = converted
+            .into_iter()
+            .map(|(source_path, converted_contents)| -> Result<_> {
+                let file_name = source_path
+                    .file_name()
+                    .with_context(|| anyhow!("given path {source_path:?} is missing file name"))?;
+                let target_path = target_directory.append(file_name);
+                Ok((target_path, converted_contents))
+            })
+            .collect::<Result<_>>()?;
 
-        // Keep existing files in trash, even with --force?
-        overwrite_file_moving_to_trash_if_exists(
-            &target_path,
-            &prepared_file.content,
-            global_opts.quiet,
-        )?;
-    }
+        // Stop if any of the files exist, by default.
+        if !force {
+            let existing_target_paths: Vec<&PathBuf> = outputs
+                .iter()
+                .filter_map(|(path, _)| if path.exists() { Some(path) } else { None })
+                .collect();
+            if !existing_target_paths.is_empty() {
+                bail!(
+                    "these target paths already exist--specify the --force option to overwrite: \
+                 {existing_target_paths:#?}"
+                )
+            }
+        }
 
-    if !global_opts.quiet {
-        println!(
-            "Done. Now edit the new {files} in {target_directory:?} \
+        if !global_opts.quiet {
+            println!("Writing the {files}...");
+        }
+
+        // Now that all files were read, converted and target-checked
+        // successfully, write them out. With regards to IO, only writing
+        // happens here.
+        for (target_path, prepared_file) in outputs {
+            // Note: ignore _modified as that is with regards to the
+            // source path, which is a different path. We need to copy the
+            // file even if no modification is carried out at the same
+            // time!
+
+            // Keep existing files in trash, even with --force?
+            overwrite_file_moving_to_trash_if_exists(
+                &target_path,
+                &prepared_file.content,
+                global_opts.quiet,
+            )?;
+        }
+
+        if !global_opts.quiet {
+            println!(
+                "Done. Now edit the new {files} in {target_directory:?} \
              to complete the metadata."
-        );
+            );
+        }
     }
 
     Ok(())
