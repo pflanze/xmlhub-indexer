@@ -248,12 +248,13 @@ fn t_check_version() {
 }
 
 #[derive(Debug, Error)]
-#[error("{}checking the git log at {base_path:?}: {error}",
+#[error("{}checking the git log at {base_path:?}: {error}{}",
         if let Some(what) = what_to_do {
-            format!("{what}\n")
+            format!("{what}\n(While ")
         } else {
             "".into()
-        }
+        },
+        if what_to_do.is_some() { ")" } else { "" }
 )]
 pub struct GitCheckVersionErrorWithContext {
     pub base_path: PathBuf,
