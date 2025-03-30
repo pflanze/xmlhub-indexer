@@ -7,9 +7,8 @@ use std::{fmt::Display, ops::Range, path::Path};
 
 use anyhow::{Context, Result};
 use ouroboros::self_referencing;
+use pluraless::pluralized;
 use roxmltree::{Document, Node, ParsingOptions};
-
-use crate::util::english_plural;
 
 #[derive(Clone)]
 pub struct XMLDocumentLocation<'a> {
@@ -58,9 +57,10 @@ impl<'a> Display for XMLDocumentLocation<'a> {
         let s = self.xmldocument.as_str();
         let start = str_line_col((0, 0), &s[0..self.byte_range.start]);
         let end = str_line_col(start, &s[self.byte_range.start..self.byte_range.end]);
-        let line_or_lines = english_plural((end.0 - start.0) + 1, "lines");
+
+        pluralized! { (end.0 - start.0) + 1  => lines }
         f.write_fmt(format_args!(
-            "{line_or_lines} {} – {}",
+            "{lines} {} – {}",
             line_col_string(start),
             line_col_string(end)
         ))

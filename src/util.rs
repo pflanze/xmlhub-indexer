@@ -228,22 +228,3 @@ fn t_format_anchor_name() {
         "Format_a_string_so_that_it_can_be_safely_used_as_an_anchor_n"
     );
 }
-
-/// Simple English pluralization by cutting off a trailing `s` if
-/// necessary. Panics if given a word without the `s`!
-pub fn english_plural(num_items: usize, word_in_plural: &str) -> &str {
-    let len = word_in_plural.len();
-    assert_eq!(word_in_plural.as_bytes()[len - 1], b's');
-    match num_items {
-        1 => &word_in_plural[0..len - 1],
-        _ => word_in_plural,
-    }
-}
-
-#[test]
-fn t_english_plural() {
-    let t = english_plural;
-    assert_eq!(t(0, "fields"), "fields");
-    assert_eq!(t(1, "fields"), "field");
-    assert_eq!(t(2, "fields"), "fields");
-}

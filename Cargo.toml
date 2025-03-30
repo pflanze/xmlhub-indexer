@@ -14,6 +14,8 @@ ahtml = { version = "0.7.0" }
 auri = { version = "0.1.1" }
 chj-util = { version = "0.2.1" }
 
+pluraless = { path = "libs/pluraless" }
+
 # Note: generally using older version since I know/verified those and
 # they are compatible with rustc from Debian stable.
 

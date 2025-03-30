@@ -21,6 +21,7 @@ use chrono::Local;
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
 use lazy_static::lazy_static;
+use pluraless::pluralized;
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -47,7 +48,7 @@ use xmlhub_indexer::{
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
-    util::{append, english_plural, list_get_by_key, InsertValue},
+    util::{append, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
@@ -1690,9 +1691,10 @@ fn parse_comments<'a>(
         })
         .collect();
     if !missing.is_empty() {
-        // Show just the names, not the AttributeName wrappers
+        pluralized! { missing.len() => attributes, these, names, are }
         errors.push(format!(
-            "attributes with these names are missing: {}",
+            "{attributes} with {these} {names} {are} missing: {}",
+            // Show just the names, not the AttributeName wrappers
             format_string_list(&missing),
         ));
     }
@@ -3129,10 +3131,9 @@ fn add_to_command(
         .checked_from_subpath(&target_directory, no_repo_check, false)
         .with_context(|| anyhow!("checking target directory {target_directory:?}"))?;
 
-    let file_or_files = english_plural(files_to_add.len(), "files");
-
+    pluralized! { files_to_add.len() => files }
     if !global_opts.quiet {
-        println!("Reading the {file_or_files}...");
+        println!("Reading the {files}...");
     }
 
     // First, convert them all without writing them out, to avoid
@@ -3182,7 +3183,7 @@ fn add_to_command(
     }
 
     if !global_opts.quiet {
-        println!("Writing the {file_or_files}...");
+        println!("Writing the {files}...");
     }
 
     // Now that all files were read, converted and target-checked
@@ -3204,7 +3205,7 @@ fn add_to_command(
 
     if !global_opts.quiet {
         println!(
-            "Done. Now edit the new {file_or_files} in {target_directory:?} \
+            "Done. Now edit the new {files} in {target_directory:?} \
              to complete the metadata."
         );
     }
