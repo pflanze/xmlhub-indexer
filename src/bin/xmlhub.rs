@@ -3079,7 +3079,7 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
             }
         } else {
             if !global_opts.quiet {
-                println!("note: the file {target_path:?} is unchanged (already prepared)");
+                println!("File is unchanged (already prepared): {target_path:?}");
             }
         }
     }
