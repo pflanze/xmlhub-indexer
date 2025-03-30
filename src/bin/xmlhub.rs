@@ -815,7 +815,7 @@ impl Display for AttributeSpecification {
 fn specifications_to_html(html: &HtmlAllocator) -> Result<AId<Node>> {
     let head: Vec<_> = AttributeSpecification::TITLES
         .iter()
-        .map(|s| html.td([att("bgcolor", "#e0e0e0")], html.text(s)?))
+        .map(|s| html.td([att("bgcolor", "#e0e0e0")], html.b([], html.text(s)?)?))
         .collect::<Result<_>>()?;
     let mut body = html.new_vec();
     for spec in METADATA_SPECIFICATION {
