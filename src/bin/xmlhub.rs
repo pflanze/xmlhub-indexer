@@ -1598,7 +1598,11 @@ impl FileErrors {
                 html.text("For ")?,
                 html.a(
                     [att("href", self.path.rel_path())],
-                    html.text(self.path.rel_path())?,
+                    [
+                        html.text(self.path.rel_path())?,
+                        html.nbsp()?,
+                        document_symbol(html)?,
+                    ],
                 )?,
                 html.text(":")?,
             ],
