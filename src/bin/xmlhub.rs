@@ -2788,7 +2788,7 @@ fn build_command(
 
 /// Execute a `clone-to` command.
 fn clone_to_command(
-    _program_version: GitVersion<SemVersion>,
+    program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
     command_opts: CloneToOpts,
 ) -> Result<()> {
@@ -2800,6 +2800,13 @@ fn clone_to_command(
     let base_path = base_path
         .as_ref()
         .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
+
+    let git_log_version_checker = git_log_version_checker(
+        program_version,
+        // XX why global?
+        global_opts.no_version_check,
+        &base_path,
+    );
 
     // Define a macro to only run $body if opts.dry_run is false,
     // otherwise show $message instead, or show $message anyway if
@@ -2866,6 +2873,9 @@ fn clone_to_command(
             false
         )?
     }
+
+    // Check that we are up to dealing with this repository, OK?
+    git_log_version_checker.check_git_log()?;
 
     Ok(())
 }
