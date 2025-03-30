@@ -17,7 +17,6 @@ use ahtml::{
     SerHtmlFrag, ToASlice,
 };
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::Local;
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
 use lazy_static::lazy_static;
@@ -333,13 +332,6 @@ enum Command {
 
 #[derive(clap::Parser, Debug, Clone)]
 struct BuildOpts {
-    /// Add a footer with a timestamp ("Last updated") to the index
-    /// files. Note: this causes every run to create modified files
-    /// that will be commited even when there were no actual changes,
-    /// thus probably not what you want!
-    #[clap(long)]
-    timestamp: bool,
-
     /// Write the index files (and commit them if requested) even if
     /// some files had errors and thus won't be indexed; the errors
     /// are written in a section at the top of the index files,
@@ -412,12 +404,12 @@ struct BuildOpts {
 
     /// Update the xmlhub repository unattended (e.g. via a cronjob or
     /// similar). Implies --write-errors, --silent-on-written-errors,
-    /// --no-repo-check and --push, and disables --no-commit and
-    /// --timestamp. Instead of --pull, uses `git remote update` and
-    /// `git reset --hard` to set the local branch to the remote,
-    /// which avoids the risk for merge conflicts but throws away
-    /// local changes!  WARNING: this will lead to local changes being
-    /// lost!  Do not use this option for interactive usage!
+    /// --no-repo-check and --push, and disables --no-commit. Instead
+    /// of --pull, uses `git remote update` and `git reset --hard` to
+    /// set the local branch to the remote, which avoids the risk for
+    /// merge conflicts but throws away local changes!  WARNING: this
+    /// will lead to local changes being lost!  Do not use this option
+    /// for interactive usage!
     #[clap(long)]
     batch: bool,
 
@@ -2019,7 +2011,6 @@ struct BuildIndexOpts {
     pull: bool,
     batch: bool,
     ignore_untracked: bool,
-    timestamp: bool,
     write_errors: bool,
     silent_on_written_errors: bool,
     ok_on_written_errors: bool,
@@ -2044,7 +2035,6 @@ fn build_index(
         pull,
         batch,
         ignore_untracked,
-        timestamp,
         write_errors,
         silent_on_written_errors,
         ok_on_written_errors,
@@ -2334,7 +2324,6 @@ fn build_index(
     let html = HTML_ALLOCATOR_POOL.get();
 
     // Some variables used in both the .html and .md documents
-    let now = Local::now().to_rfc2822();
     let title = "XML Hub file index";
     let toc_html: SerHtmlFrag =
         html.preserialize(toplevel_section.to_toc_html(NumberPath::empty(), &html)?)?;
@@ -2374,17 +2363,6 @@ fn build_index(
                         html.h2([], html.text("Contents")?)?,
                         html.preserialized(toc_html.clone())?,
                         html.div([], toplevel_section.to_html(NumberPath::empty(), html)?)?,
-                        if timestamp {
-                            html.div(
-                                [],
-                                [
-                                    html.hr([], [])?,
-                                    html.p([], [html.text("Last updated: ")?, html.text(&now)?])?,
-                                ],
-                            )?
-                        } else {
-                            html.empty_node()?
-                        },
                         empty_space_element(40, html)?,
                     ],
                 )?,
@@ -2400,29 +2378,19 @@ fn build_index(
     let make_mddocument = || -> Result<StringTree> {
         let html = HTML_ALLOCATOR_POOL.get();
 
-        Ok(StringTree::Branching(flatten_as_paragraphs(vec![
-            vec![
-                format!("<!-- NOTE: {generated_message}, do not edit manually! -->").into(),
-                format!("# {title}").into(),
-                make_intro(true, &html)?
-                    .to_html_fragment_string(&html)?
-                    .into(),
-                "## Contents".into(),
-                toc_html.as_arc_str().into(),
-                toplevel_section.to_markdown(NumberPath::empty())?,
-                empty_space_element(40, &html)?
-                    .to_html_fragment_string(&html)?
-                    .into(),
-            ],
-            if timestamp {
-                vec![
-                    "-------------------------------------------------------".into(),
-                    format!("Last updated: {now}\n").into(),
-                ]
-            } else {
-                vec![]
-            },
-        ])))
+        Ok(StringTree::Branching(flatten_as_paragraphs(vec![vec![
+            format!("<!-- NOTE: {generated_message}, do not edit manually! -->").into(),
+            format!("# {title}").into(),
+            make_intro(true, &html)?
+                .to_html_fragment_string(&html)?
+                .into(),
+            "## Contents".into(),
+            toc_html.as_arc_str().into(),
+            toplevel_section.to_markdown(NumberPath::empty())?,
+            empty_space_element(40, &html)?
+                .to_html_fragment_string(&html)?
+                .into(),
+        ]])))
     };
 
     // The contents for the ATTRIBUTES_FILE
@@ -2698,7 +2666,6 @@ fn build_command(
     build_opts: BuildOpts,
 ) -> Result<()> {
     let BuildOpts {
-        timestamp,
         write_errors,
         no_commit_errors,
         ok_on_written_errors,
@@ -2756,7 +2723,6 @@ fn build_command(
                 pull,
                 batch,
                 ignore_untracked,
-                timestamp,
                 write_errors,
                 silent_on_written_errors,
                 ok_on_written_errors,
@@ -3286,7 +3252,6 @@ fn main() -> Result<()> {
         match command {
             Some(command) => match command {
                 Command::Build(BuildOpts {
-                    timestamp: timestamp_,
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
                     ok_on_written_errors,
@@ -3314,7 +3279,6 @@ fn main() -> Result<()> {
                         write_errors,
                         no_commit_errors,
                         silent_on_written_errors,
-                        timestamp,
                         batch,
                         no_repo_check,
                     );
@@ -3330,7 +3294,6 @@ fn main() -> Result<()> {
                         write_errors = true;
                         no_commit_errors = false;
                         silent_on_written_errors = true;
-                        timestamp = false;
                         no_repo_check = true;
                         // Should we force `ignore_untracked` false?
                     } else {
@@ -3340,7 +3303,6 @@ fn main() -> Result<()> {
                         write_errors = write_errors_;
                         no_commit_errors = no_commit_errors_;
                         silent_on_written_errors = silent_on_written_errors_;
-                        timestamp = timestamp_;
                         no_repo_check = no_repo_check_;
                     }
 
@@ -3355,7 +3317,6 @@ fn main() -> Result<()> {
                         dry_run,
                         no_version_check,
                         command: Some(Command::Build(BuildOpts {
-                            timestamp,
                             write_errors,
                             no_commit_errors,
                             ok_on_written_errors,
