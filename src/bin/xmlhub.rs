@@ -108,12 +108,12 @@ const OUTPUT_FILES: [&OutputFile; 3] = [&HTML_FILE, &MD_FILE, &ATTRIBUTES_FILE];
 /// information on how to contribute.
 const CONTRIBUTE_FILENAME: &str = "CONTRIBUTE";
 
-/// The symbol to use in the index page for links to the original
-/// XML file.
-const DOCUMENT_SYMBOL_PATH: &str = ".index/document.svg";
-
 /// Return the html code for loading the document symbol image
 fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
+    /// The symbol to use in the index page for links to the original
+    /// XML file.
+    const DOCUMENT_SYMBOL_PATH: &str = ".index/document.svg";
+
     html.img(
         [
             att("src", DOCUMENT_SYMBOL_PATH),
