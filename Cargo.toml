@@ -9,6 +9,16 @@ license = "MIT OR Apache-2.0"
 collapsible_else_if = "allow"
 collapsible_if = "allow"
 
+[profile.dev.package."*"]
+opt-level = "s"
+
+[profile.release.package."*"]
+opt-level = "s"
+
+[profile.release]
+opt-level = "s"
+overflow-checks = true
+
 [dependencies]
 ahtml = { version = "0.7.0" }
 auri = { version = "0.1.1" }
