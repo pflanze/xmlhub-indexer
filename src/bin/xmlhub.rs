@@ -24,9 +24,9 @@ use pluraless::pluralized;
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-
 use roxmltree::Document;
 use walkdir::WalkDir;
+
 // Use from src/*.rs
 use xmlhub_indexer::{
     backoff::{LoopVerbosity, LoopWithBackoff},
@@ -2923,7 +2923,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     };
     if document_has_headers {
         if !quiet {
-            println!("Document already has header comments: {source_path:?}");
+            println!("This document already has header comments: {source_path:?}");
         }
     } else {
         // Add header template
@@ -3154,9 +3154,16 @@ fn add_to_command(
                 .filter_map(|(path, _)| if path.exists() { Some(path) } else { None })
                 .collect();
             if !existing_target_paths.is_empty() {
+                pluralized! { existing_target_paths.len() => these, paths, exist, them }
+
                 bail!(
-                    "these target paths already exist--specify the --force option to overwrite: \
-                 {existing_target_paths:#?}"
+                    "{these} target {paths} already {exist}, specify the --force option \
+                     to overwrite {them}: \n   \
+                     {}",
+                    existing_target_paths
+                        .iter()
+                        .map(|s| format!("{s:?}"))
+                        .join("\n   ")
                 )
             }
         }
@@ -3168,7 +3175,7 @@ fn add_to_command(
         // Now that all files were read, converted and target-checked
         // successfully, write them out. With regards to IO, only writing
         // happens here.
-        for (target_path, prepared_file) in outputs {
+        for (target_path, prepared_file) in &outputs {
             // Note: ignore _modified as that is with regards to the
             // source path, which is a different path. We need to copy the
             // file even if no modification is carried out at the same
@@ -3176,7 +3183,7 @@ fn add_to_command(
 
             // Keep existing files in trash, even with --force?
             overwrite_file_moving_to_trash_if_exists(
-                &target_path,
+                target_path,
                 &prepared_file.content,
                 global_opts.quiet,
             )?;
@@ -3186,9 +3193,14 @@ fn add_to_command(
             println!(
                 "Done.\n\
                  Now edit the new {files} in {target_directory:?} to complete \
-                 the metadata.\n\
+                 the metadata:\n   \
+                 {}\n\
                  Run `xmlhub help-attributes` to learn about what to enter into \
-                 the individual fields."
+                 the individual fields.",
+                outputs
+                    .iter()
+                    .map(|(target_path, _prepared_file)| format!("{target_path:?}"))
+                    .join("\n   ")
             );
         }
     }

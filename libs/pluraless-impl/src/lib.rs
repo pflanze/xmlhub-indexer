@@ -6,6 +6,9 @@ const SPECIAL: &[(&str, &str)] = &[
     ("these", "this"),
     ("are", "is"),
     ("theses", "thesis"),
+    ("exist", "exists"),
+    ("them", "it"),
+    // ("", ""),
     // ("", ""),
     // ("they", "it"), -- m, f, ?
 ];
@@ -93,7 +96,7 @@ pub fn xenglish_plural(word_in_plural: &str) -> PluralizedWord {
         return pl;
     }
     panic!(
-        "pluraless:english_plural: the word {word_in_plural:?} is not in the \
+        "pluraless::english_plural: the word {word_in_plural:?} is not in the \
          list of special cases and is not ending in 's', please adapt the list"
     )
 }
