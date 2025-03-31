@@ -3184,8 +3184,11 @@ fn add_to_command(
 
         if !global_opts.quiet {
             println!(
-                "Done. Now edit the new {files} in {target_directory:?} \
-             to complete the metadata."
+                "Done.\n\
+                 Now edit the new {files} in {target_directory:?} to complete \
+                 the metadata.\n\
+                 Run `xmlhub help-attributes` to learn about what to enter into \
+                 the individual fields."
             );
         }
     }
