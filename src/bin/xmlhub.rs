@@ -3038,6 +3038,8 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
                 &prepared_file.content,
                 global_opts.quiet,
             )?;
+
+            // COPY of this part in add_to_command!
             if prepared_file.data_was_removed && !global_opts.quiet {
                 println!(
                     "NOTE: data in the file {target_path:?} has been removed \
@@ -3155,7 +3157,6 @@ fn add_to_command(
                 .collect();
             if !existing_target_paths.is_empty() {
                 pluralized! { existing_target_paths.len() => these, paths, exist, them }
-
                 bail!(
                     "{these} target {paths} already {exist}, specify the --force option \
                      to overwrite {them}: \n   \
@@ -3180,6 +3181,14 @@ fn add_to_command(
             // source path, which is a different path. We need to copy the
             // file even if no modification is carried out at the same
             // time!
+
+            // COPY from prepare_command! Except for s/data in/data from/.
+            if prepared_file.data_was_removed && !global_opts.quiet {
+                println!(
+                    "NOTE: data from the file {target_path:?} has been removed \
+                     (use `--no-blind` to keep it)"
+                );
+            }
 
             // Keep existing files in trash, even with --force?
             overwrite_file_moving_to_trash_if_exists(
