@@ -2981,8 +2981,8 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
 
     if data_was_removed && !quiet {
         println!(
-            "NOTE: data from the file {source_path:?} has been removed \
-             (use `--no-blind` to keep it)"
+            "NOTE: data from this document has been removed \
+             (use `--no-blind` to keep it): {source_path:?}"
         );
     }
 
