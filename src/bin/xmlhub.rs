@@ -2878,6 +2878,7 @@ fn clone_to_command(
 struct PreparedFile {
     content: String,
     content_has_changed: bool,
+    #[allow(unused)]
     data_was_removed: bool,
 }
 
@@ -2976,6 +2977,15 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
 
     let (content, content_has_changed) = modified_document.to_string_and_modified()?;
 
+    let data_was_removed = n_blinded != 0;
+
+    if data_was_removed && !quiet {
+        println!(
+            "NOTE: data from the file {source_path:?} has been removed \
+             (use `--no-blind` to keep it)"
+        );
+    }
+
     Ok(PreparedFile {
         content,
         content_has_changed,
@@ -3038,14 +3048,6 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
                 &prepared_file.content,
                 global_opts.quiet,
             )?;
-
-            // COPY of this part in add_to_command!
-            if prepared_file.data_was_removed && !global_opts.quiet {
-                println!(
-                    "NOTE: data in the file {target_path:?} has been removed \
-                     (use `--no-blind` to keep it)"
-                );
-            }
         } else {
             if !global_opts.quiet {
                 println!("File is unchanged (already prepared): {target_path:?}");
@@ -3181,14 +3183,6 @@ fn add_to_command(
             // source path, which is a different path. We need to copy the
             // file even if no modification is carried out at the same
             // time!
-
-            // COPY from prepare_command! Except for s/data in/data from/.
-            if prepared_file.data_was_removed && !global_opts.quiet {
-                println!(
-                    "NOTE: data from the file {target_path:?} has been removed \
-                     (use `--no-blind` to keep it)"
-                );
-            }
 
             // Keep existing files in trash, even with --force?
             overwrite_file_moving_to_trash_if_exists(
