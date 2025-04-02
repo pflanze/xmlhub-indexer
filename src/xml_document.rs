@@ -18,14 +18,18 @@ pub struct XMLDocumentLocation<'a> {
 
 impl<'a> XMLDocumentLocation<'a> {
     pub fn start_line_and_col(&self) -> (usize, usize) {
-        let start = str_line_col((0, 0), &self.xmldocument.as_str()[0..self.byte_range.start]);
-        start
+        str_line_col((0, 0), &self.xmldocument.as_str()[0..self.byte_range.start])
+    }
+
+    pub fn start_col(&self) -> usize {
+        str_col(0, &self.xmldocument.as_str()[0..self.byte_range.start])
     }
 }
 
 /// Returns (line, column), based on `start`, of the end of `s` with
 /// respect of the start of `s`, 0-based (for columns--for lines it
-/// depends what you feed in).
+/// depends what you feed in). Note that column in `start` and in the
+/// result is in characters, not bytes.
 fn str_line_col(start: (usize, usize), s: &str) -> (usize, usize) {
     let (mut line, mut col) = start;
     for c in s.chars() {
@@ -43,6 +47,39 @@ fn str_line_col(start: (usize, usize), s: &str) -> (usize, usize) {
         }
     }
     (line, col)
+}
+
+/// Returns the column, based on `start_col`, of the end of `s` with
+/// respect of the start of `s`. Scans backwards from the end of `s`
+/// to find the last newline before the end (if any), since this will
+/// be faster in larger documents than scanning from the start (which
+/// is what str_line_col does, necessarily since it has to count the
+/// lines). Note that column in `start_col` and in the result is in
+/// characters, not bytes.
+fn str_col(start_col: usize, s: &str) -> usize {
+    for (i, c) in s.chars().rev().enumerate() {
+        match c {
+            '\n' | '\r' => {
+                return i;
+            }
+            _ => (),
+        }
+    }
+    start_col
+}
+
+#[test]
+fn t_str_col() {
+    assert_eq!(str_col(0, ""), 0);
+    assert_eq!(str_col(0, "hello"), 0);
+    let t = |s: &str| str_col(s.len(), s);
+    assert_eq!(t("hello"), 5);
+    assert_eq!(t("hello\n"), 0);
+    assert_eq!(t("hello\nworld!"), 6);
+    assert_eq!(
+        t("hello\nworld!\nmotör"),
+        5 /* positions are in characters, not bytes! */
+    );
 }
 
 /// Format line, col in the format as used by roxmltree itself, and

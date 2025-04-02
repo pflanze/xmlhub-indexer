@@ -273,10 +273,10 @@ impl<'d> ModifiedXMLDocument<'d> {
                     // How to know how much to indent on the next line?
                     // Check the horizontal position of the position where
                     // we insert the comment:
-                    let (_element_start_line, element_start_col) = self
+                    let element_start_col = self
                         .xml_document
                         .index_to_location(element.range().start)
-                        .start_line_and_col();
+                        .start_col();
                     let indent = " ".repeat(element_start_col);
 
                     self.document.push(Modification::Insert(
