@@ -149,11 +149,13 @@ impl<'d> ModifiedDocument<'d> {
         Ok(())
     }
 
-    /// Return the resulting string
+    /// Return the resulting string. Panics if the applied
+    /// modifications use ranges that don't adhere to UTF-8
+    /// boundaries.
     pub fn to_string(&mut self) -> Result<String> {
         let mut output = Vec::new();
         self.write_to(&mut output)?;
-        Ok(String::from_utf8(output).expect("modification ranges are correct; XX not ensured"))
+        Ok(String::from_utf8(output).expect("modification ranges are correct"))
     }
 
     /// Return the resulting string, and whether that string is
