@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     ffi::OsString,
     path::{Path, PathBuf},
     sync::{
@@ -86,7 +87,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         path: P2,
         subpath_check: CheckExpectedSubpathsExist,
         allow_subrepositories: bool,
-    ) -> Result<CheckedCheckoutContext1<'s, PathBuf>>
+    ) -> Result<CheckedCheckoutContext1<'s, Cow<Path>>>
     where
         's: 'p,
         P: Clone,
@@ -98,7 +99,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         while !current_path.is_empty() {
             // XX is_dir()? How do the shared-database things work?
             if current_path.append(".git").exists() {
-                let repo = self.replace_working_dir_path(current_path.to_owned());
+                let repo = self.replace_working_dir_path(Cow::from(current_path.to_owned()));
                 match repo.check1(subpath_check) {
                     Ok(r) => return Ok(r),
                     Err(e) => {

@@ -241,6 +241,10 @@ fn get_beast_version(document: &Document) -> Result<BeastVersion> {
 #[clap(set_term_width = get_terminal_width())]
 /// Build an index of the files in the XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
+///
+/// To add a new file, want to use the `add-to`, `check`, then `build`
+/// subcommands in sequence. See the help about them via e.g. `xmlhub
+/// help add-to`.
 struct Opts {
     /// Show the program version. It was copied from `git describe
     /// --tags ..` at compile time.
@@ -308,8 +312,14 @@ enum Command {
     /// Show all metadata attributes and describe their possible
     /// values.
     HelpAttributes,
-    /// Rebuild the XML Hub index.
+    /// Rebuild the XML Hub index, and by default commit the changed
+    /// index. If you want to check your file while you edit it, use
+    /// the `check` subcommand instead first.
     Build(BuildOpts),
+    /// Check the correctness of a single file, without
+    /// committing. Use this while editing. Once your document yields
+    /// no more errors, run the `build` subcommand.
+    Check(CheckOpts),
     /// Clone the XML Hub repository and apply merge config change.
     CloneTo(CloneToOpts),
     /// Prepare some XML file(s) by adding a metadata template to
@@ -322,7 +332,9 @@ enum Command {
     Prepare(PrepareOpts),
     /// Add some XML file(s) to a XML Hub repository clone and carry
     /// out the `prepare` action on them at the same time. This leaves
-    /// the original file unchanged.
+    /// the original file unchanged. The next step afterwards is to
+    /// edit the file and run the `check` subcommand until there are
+    /// no errors.
     AddTo(AddToOpts),
 }
 
@@ -373,7 +385,7 @@ struct BuildOpts {
     #[clap(long)]
     open: bool,
 
-    /// Same as `--open` but only opens a browser if the file has
+    /// Same as `--open` but only opens a browser if the index has
     /// changed since the last Git commit to it.
     #[clap(long)]
     open_if_changed: bool,
@@ -433,8 +445,9 @@ struct BuildOpts {
     #[clap(long)]
     no_branch_check: bool,
 
-    /// Omit the check for the `BASE_PATH` directory to contain items
-    /// that make it look like a legit xmlhub repository clone.
+    /// Omit the check for the Git clone at the `BASE_PATH` directory
+    /// to contain items that make it look like a legit xmlhub
+    /// repository clone.
     #[clap(long)]
     no_repo_check: bool,
 
@@ -448,6 +461,39 @@ struct BuildOpts {
     /// Hub. The default is `.`.
     #[clap(long)]
     base_path: Option<PathBuf>,
+}
+
+#[derive(clap::Parser, Debug, Clone)]
+struct CheckOpts {
+    /// Open the generated `README.html` file in a web browser.
+    /// Tries the browsers specified in the `BROWSER` environment
+    /// variable (split on ':' into program names or paths (on macOS
+    /// don't pass paths into `/Applications`, just give the
+    /// application name; you could use paths to scripts)), otherwise
+    /// `sensile-browser`, `firefox`, `chromium`, `chrome`, and on
+    /// macOS `safari`. Fails if none worked. Note: only opens the
+    /// file if it was actually written to (i.e. when there were no
+    /// errors or `--write-errors` was given).
+    #[clap(long)]
+    open: bool,
+
+    /// Same as `--open` but only opens a browser if the index has
+    /// changed since the last Git commit to it.
+    #[clap(long)]
+    open_if_changed: bool,
+
+    /// Omit the check for the Git clone containing the FILE_PATHS to
+    /// contain items that make it look like a legit xmlhub repository
+    /// clone.
+    #[clap(long)]
+    no_repo_check: bool,
+
+    /// The path(s) to the XML file(s) you're currently working on and
+    /// want to check. Must be somewhere in a Git checkout of the XML
+    /// Hub (this is because `check` will still rebuild the index, too
+    /// (but never commit it), so that you can see the effect of your
+    /// file).
+    file_paths: Vec<PathBuf>,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2002,6 +2048,42 @@ fn eprintln_running(s: String) {
     _ = writeln!(&mut stderr(), "+ running: {s}");
 }
 
+/// Map each file to the info extracted from it (or `FileErrors`
+/// when there were errors), including path and an id, held in a
+/// `FileInfo` struct. Generate the ids on the go for each of them
+/// by `enumerate`ing the values (the enumeration number value is
+/// passed as the `id` argument to the function given to `map`).
+/// The id is used to refer to each item in document-local links in
+/// the generated HTML/Markdown files.
+fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileErrors>> {
+    paths
+        .into_par_iter()
+        .enumerate()
+        .map(|(id, path)| -> Result<FileInfo, FileErrors> {
+            let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
+                path: path.clone(),
+                errors: vec![format!("{e:#}")],
+            })?;
+            let metadata =
+                parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
+                    FileErrors {
+                        path: path.clone(),
+                        errors,
+                    }
+                })?;
+            // We're currently doing nothing else with
+            // `xmldocument` (which holds the tree of all elements
+            // in the document). It would be possible to extract
+            // information from the XML tree for further indexes
+            // by defining another kind of indexing than metadata
+            // attributes, defining extractors for those, doing
+            // the extraction here and adding the results to
+            // `FileInfo`.
+            Ok(FileInfo { id, path, metadata })
+        })
+        .collect()
+}
+
 /// The subset of the options of `BuildOpts` used by `build_index`
 struct BuildIndexOpts {
     pull: bool,
@@ -2024,8 +2106,8 @@ fn build_index(
     build_index_opts: BuildIndexOpts,
     base_path: &Path,
     git_log_version_checker: &XmlhubCheckVersion,
-    xmlhub_checkout: &CheckedCheckoutContext1<&Path>,
-    maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<&Path>>,
+    xmlhub_checkout: &CheckedCheckoutContext1<Cow<Path>>,
+    maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<Cow<Path>>>,
 ) -> Result<i32> {
     let BuildIndexOpts {
         pull,
@@ -2137,7 +2219,7 @@ fn build_index(
                     )
                 })?;
                 paths.push(BaseAndRelPath::new(
-                    Some(shared_base_path.clone()),
+                    Some(Arc::clone(&shared_base_path)),
                     relative_path.to_owned(),
                 ));
             }
@@ -2161,41 +2243,8 @@ fn build_index(
         paths
     };
 
-    // Map each file to the info extracted from it (or `FileErrors`
-    // when there were errors), including path and an id, held in a
-    // `FileInfo` struct. Generate the ids on the go for each of them
-    // by `enumerate`ing the values (the enumeration number value is
-    // passed as the `id` argument to the function given to `map`).
-    // The id is used to refer to each item in document-local links in
-    // the generated HTML/Markdown files.
-    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = {
-        paths
-            .into_par_iter()
-            .enumerate()
-            .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-                let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
-                    path: path.clone(),
-                    errors: vec![format!("{e:#}")],
-                })?;
-                let metadata =
-                    parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
-                        FileErrors {
-                            path: path.clone(),
-                            errors,
-                        }
-                    })?;
-                // We're currently doing nothing else with
-                // `xmldocument` (which holds the tree of all elements
-                // in the document). It would be possible to extract
-                // information from the XML tree for further indexes
-                // by defining another kind of indexing than metadata
-                // attributes, defining extractors for those, doing
-                // the extraction here and adding the results to
-                // `FileInfo`.
-                Ok(FileInfo { id, path, metadata })
-            })
-            .collect()
-    };
+    // See help text on `read_file_infos` for what it's doing.
+    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = read_file_infos(paths);
 
     // Partition fileinfo_or_errors into vectors with only the
     // successful and only the erroneous results.
@@ -2450,7 +2499,7 @@ fn build_index(
 
                 // Get an owned version of the base path and then
                 // append path segments to it.
-                let mut path = xmlhub_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path().to_owned();
                 path.push(HTML_FILE.path_from_repo_top);
                 let mut out = BufWriter::new(File::create(&path)?);
                 html.print_html_document(make_htmldocument(&html)?, &mut out)?;
@@ -2462,7 +2511,7 @@ fn build_index(
                     check_dry_run! {
                         message: "git diff",
                         html_file_has_changed = !git(
-                            xmlhub_checkout.working_dir_path,
+                            xmlhub_checkout.working_dir_path(),
                             &["diff", "--no-patch", "--exit-code", "--",
                               HTML_FILE.path_from_repo_top],
                             false
@@ -2472,7 +2521,7 @@ fn build_index(
                 Ok(html_file_has_changed)
             },
             || -> Result<_> {
-                let mut path = xmlhub_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path().to_owned();
                 path.push(MD_FILE.path_from_repo_top);
                 make_mddocument()?
                     .write_to_file(&path)
@@ -2480,7 +2529,7 @@ fn build_index(
                 Ok(())
             },
             || -> Result<_> {
-                let mut path = xmlhub_checkout.working_dir_path.to_owned();
+                let mut path = xmlhub_checkout.working_dir_path().to_owned();
                 path.push(ATTRIBUTES_FILE.path_from_repo_top);
                 make_attributes_md()?
                     .write_to_file(&path)
@@ -2512,7 +2561,7 @@ fn build_index(
             let mut items: Vec<GitStatusItem> = vec![];
             check_dry_run! {
                 message: "git status",
-                items = git_status(xmlhub_checkout.working_dir_path)?
+                items = git_status(xmlhub_checkout.working_dir_path())?
             }
             let daemon_folder_name_with_slash = format!("{}/", *DAEMON_FOLDER_NAME);
             let ignore_path = |path: &str| -> bool {
@@ -2549,7 +2598,7 @@ fn build_index(
             check_dry_run! {
                 message: format!("git add -f -- {written_files:?}"),
                 git(
-                    xmlhub_checkout.working_dir_path,
+                    xmlhub_checkout.working_dir_path(),
                     &append(&["add", "-f", "--"], &written_files),
                     global_opts.quiet
                 )?
@@ -2559,7 +2608,7 @@ fn build_index(
             check_dry_run! {
                 message: format!("git commit -m .. -- {written_files:?}"),
                 did_commit = git(
-                    xmlhub_checkout.working_dir_path,
+                    xmlhub_checkout.working_dir_path(),
                     &append(
                         &[
                             "commit",
@@ -2583,7 +2632,7 @@ fn build_index(
                     check_dry_run! {
                         message: format!("git push {default_remote_for_push:?}"),
                         git_push::<&str>(
-                            xmlhub_checkout.working_dir_path,
+                            xmlhub_checkout.working_dir_path(),
                             default_remote_for_push,
                             &[],
                             global_opts.quiet
@@ -2647,7 +2696,8 @@ fn git_log_version_checker(
 }
 
 /// Execute a `build` command: prepare and run `build_index` in the
-/// requested mode (interactive, batch, daemon).
+/// requested mode (interactive, batch, daemon). (Never returns `Ok`
+/// but exits directly in the non-`Err` case. `!` is not stable yet.)
 fn build_command(
     program_version: GitVersion<SemVersion>,
     global_opts: &Opts,
@@ -2688,7 +2738,7 @@ fn build_command(
         git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
 
     let xmlhub_checkout = XMLHUB_CHECKOUT
-        .replace_working_dir_path(base_path.as_ref())
+        .replace_working_dir_path(base_path.clone())
         .check1(no_repo_check)?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
@@ -2783,6 +2833,130 @@ fn build_command(
         let _main_lock = get_main_lock()?;
         std::process::exit(build_index_once()?);
     }
+}
+
+/// Execute a `check` command: prepare and run `build_index` in
+/// interactive mode, do not commit. (Never returns `Ok` but exits
+/// directly in the non-`Err` case. `!` is not stable yet.)
+fn check_command(
+    program_version: GitVersion<SemVersion>,
+    global_opts: &Opts,
+    check_opts: CheckOpts,
+) -> Result<()> {
+    let CheckOpts {
+        file_paths,
+        open,
+        open_if_changed,
+        no_repo_check,
+    } = check_opts;
+    // What about these?:
+    // no_branch_check, -- just use true?
+    // ignore_untracked, -- just use true?
+
+    let no_repo_check = typed_from_no_repo_check(no_repo_check);
+
+    let xmlhub_checkouts: Vec<CheckedCheckoutContext1<Cow<Path>>> = file_paths
+        .iter()
+        .map(|file_path| {
+            XMLHUB_CHECKOUT
+                .checked_from_subpath(file_path, no_repo_check, false)
+                .with_context(|| anyhow!("checking repository for file {file_path:?}"))
+        })
+        .collect::<Result<_>>()?;
+
+    let mut maybe_base_path: Option<&Path> = None;
+    for xmlhub_checkout in &xmlhub_checkouts {
+        if let Some(path) = maybe_base_path {
+            let path2 = xmlhub_checkout.working_dir_path();
+            if path != path2 {
+                bail!("`check` currently needs all FILE_PATHS arguments to be within the same Git clone")
+            }
+        } else {
+            maybe_base_path = Some(xmlhub_checkout.working_dir_path());
+        }
+    }
+    let base_path =
+        maybe_base_path.ok_or_else(|| anyhow!("`check` needs at least one FILE_PATHS argument"))?;
+
+    let git_log_version_checker =
+        git_log_version_checker(program_version, global_opts.no_version_check, base_path);
+
+    let maybe_checked_xmlhub_checkout = None;
+
+    // First, check all the paths are XML files. Partial/adapted copy
+    // of the code in build_index.
+    let paths: Vec<BaseAndRelPath> = {
+        let shared_base_path = Arc::new(base_path.to_owned());
+        file_paths
+            .into_iter()
+            .map(|file_path| {
+                let relative_path = file_path
+                    .strip_prefix(base_path)
+                    .expect("already checked to be in same repo directory");
+                let barp = BaseAndRelPath::new(
+                    Some(Arc::clone(&shared_base_path)),
+                    relative_path.to_owned(),
+                );
+                let is_xml = if let Some(ext) = barp.extension() {
+                    ext.eq_ignore_ascii_case("xml")
+                } else {
+                    false
+                };
+                if is_xml {
+                    Ok(barp)
+                } else {
+                    bail!("not an XML file path, it does not have a .xml suffix: {file_path:?}")
+                }
+            })
+            .collect::<Result<_>>()?
+    };
+
+    // Then run build_index first, because of the run of
+    // `git_log_version_checker`, we want that to be done "early", uh,
+    // not early anyway. XXX look into when that is called
+    // exactly. And XXX using `ok_on_written_errors`, but is that
+    // doing all the errors? Relying on that.
+    build_index(
+        &global_opts,
+        BuildIndexOpts {
+            pull: false,
+            batch: false,
+            ignore_untracked: false,
+            write_errors: true,
+            silent_on_written_errors: true,
+            ok_on_written_errors: true,
+            open_if_changed,
+            no_commit: true,
+            no_commit_errors: true, // but not committing anyway
+            no_branch_check: true,  // ?
+            open,
+        },
+        base_path,
+        &git_log_version_checker,
+        &xmlhub_checkouts[0],
+        &maybe_checked_xmlhub_checkout,
+    )?;
+
+    // Now check the given paths explicitly.
+    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = read_file_infos(paths);
+    let mut exit_code = 0;
+    let mut err = stderr().lock();
+    for fileinfo_or_error in fileinfo_or_errors {
+        match fileinfo_or_error {
+            Ok(fileinfo) => {
+                writeln!(
+                    &mut err,
+                    "    For {:?}: no errors",
+                    fileinfo.path.rel_path()
+                )?;
+            }
+            Err(e) => {
+                exit_code = 1;
+                e.print_plain(&mut err)?;
+            }
+        }
+    }
+    std::process::exit(exit_code);
 }
 
 /// Execute a `clone-to` command.
@@ -3439,6 +3613,27 @@ fn main() -> Result<()> {
                     no_version_check,
                     command: Some(command),
                 },
+                Command::Check(CheckOpts {
+                    file_paths,
+                    open,
+                    open_if_changed,
+                    no_repo_check,
+                }) => Opts {
+                    v,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::Check(CheckOpts {
+                        file_paths,
+                        open,
+                        open_if_changed,
+                        no_repo_check,
+                    })),
+                },
             },
             None => {
                 bail!("missing command argument. Please run with the `--help` option for help.")
@@ -3454,6 +3649,9 @@ fn main() -> Result<()> {
     {
         Command::Build(command_opts) => {
             build_command(program_version, &global_opts, command_opts.clone())
+        }
+        Command::Check(command_opts) => {
+            check_command(program_version, &global_opts, command_opts.clone())
         }
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &global_opts, command_opts.clone())
