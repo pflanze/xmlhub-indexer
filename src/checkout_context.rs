@@ -87,7 +87,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         path: P2,
         subpath_check: CheckExpectedSubpathsExist,
         allow_subrepositories: bool,
-    ) -> Result<CheckedCheckoutContext1<'s, Cow<Path>>>
+    ) -> Result<CheckedCheckoutContext1<'s, Cow<'s, Path>>>
     where
         's: 'p,
         P: Clone,
