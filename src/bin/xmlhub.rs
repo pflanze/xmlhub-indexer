@@ -939,8 +939,21 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
-            desc: "XXX",
+            desc: "DOI of the papers listed in `Citation'.",
             need: AttributeNeed::Optional,
+            kind: AttributeKind::StringList {
+                input_separator: ",",
+            },
+            autolink: false,
+            indexing: AttributeIndexing::Index {
+                first_word_only: false,
+                use_lowercase: false,
+            },
+        },
+        AttributeSpecification {
+            key: AttributeName("Contact"),
+            desc: "Whom to contact (and how) for more information on this file.",
+            need: AttributeNeed::Required,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
@@ -951,9 +964,9 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: AttributeName("Contact"),
-            desc: "Whom to contact (and how) for more information on this file.",
-            need: AttributeNeed::Required,
+            key: AttributeName("Repository"),
+            desc: "Original repository for the xml file.",
+            need: AttributeNeed::Optional,
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
