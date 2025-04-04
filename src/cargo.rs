@@ -34,7 +34,14 @@ pub fn check_cargo_toml_no_path<P: AsRef<Path> + Debug>(cargo_toml_path: P) -> R
                 match val {
                     Value::Table(table) => {
                         if let Some(path) = table.get("path") {
-                            bad.push((section_name, package_name, path));
+                            let ok = if let Some(s) = path.as_str() {
+                                s.starts_with("libs/")
+                            } else {
+                                false
+                            };
+                            if !ok {
+                                bad.push((section_name, package_name, path));
+                            }
                         }
                     }
                     Value::String(_) => (),
