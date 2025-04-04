@@ -368,7 +368,7 @@ fn main() -> Result<()> {
     // they don't have the source in the same locations; we are not
     // talking "cargo publish" which would remove the path directives,
     // but people using the clone of this repository directly!)
-    //XXX now have path entries for libs  unless_dry_run(check_cargo_toml_no_path("Cargo.toml"))?;
+    unless_dry_run(check_cargo_toml_no_path("Cargo.toml"))?;
 
     // Check everything and run the test suite to make sure we are
     // ready for release.
