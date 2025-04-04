@@ -143,17 +143,12 @@ impl Effect for PushSourceToRemote {
     type Provides = SourcePushed;
 
     fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
-        match git_push(
+        git_push(
             SOURCE_CHECKOUT.working_dir_path(),
             &self.remote_name,
             &[SOURCE_CHECKOUT.branch_name, &self.tag_name],
             false,
-        ) {
-            Ok(()) => (),
-            Err(e) => {
-                eprintln!("Error pushing the source, but will go on: {e:?}");
-            }
-        }
+        )?;
         Ok(SourcePushed)
     }
 }
