@@ -27,7 +27,7 @@ chj-util = { version = "0.2.1" }
 pluraless = { path = "libs/pluraless" }
 
 # Note: generally using older version since I know/verified those and
-# they are compatible with rustc from Debian stable.
+# they are (maybe not all any more) compatible with rustc from Debian stable.
 
 #xmlparser = "0.13.6"
 # ^ OH careful, recent owner change, was abandoned and merged into
@@ -45,9 +45,8 @@ thiserror = "1.0.37"
 walkdir = "2"
 os_info = "=3.7"
 rayon = "=1.5.3"
-# use old version since it's known, and doesn't have additional
-# dependencies
 toml = "0.5"
 nix = "0.24.3"
 num_threads  = "=0.1.6"
 trash = "2.1.5"
+fips205 = "0.4.1"
