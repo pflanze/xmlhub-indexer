@@ -10,6 +10,7 @@ pub mod file_lock;
 pub mod file_util;
 pub mod flattened;
 pub mod forking_loop;
+pub mod get_terminal_width;
 pub mod git;
 pub mod git_check_version;
 pub mod git_version;

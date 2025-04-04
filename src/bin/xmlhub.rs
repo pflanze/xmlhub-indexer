@@ -38,6 +38,7 @@ use xmlhub_indexer::{
     daemon::{Daemon, DaemonMode},
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
+    get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
@@ -155,15 +156,6 @@ lazy_static! {
         true, // verify HTML correctness
         Arc::new(format!("change the limit in {}:{}", file!(), line!()))
     );
-}
-
-fn get_terminal_width() -> usize {
-    let default = 120;
-    if let Some((terminal_size::Width(width), _height)) = terminal_size::terminal_size() {
-        usize::from(width).checked_sub(4).unwrap_or(default)
-    } else {
-        default
-    }
 }
 
 /// What would normally be called the "major" version in a semantic
