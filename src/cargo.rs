@@ -1,10 +1,12 @@
+use std::{fmt::Debug, path::Path};
+
 use anyhow::{anyhow, bail, Context, Result};
 use toml::Value;
 
-pub fn check_cargo_toml_no_path(cargo_toml_path: &str) -> Result<()> {
+pub fn check_cargo_toml_no_path<P: AsRef<Path> + Debug>(cargo_toml_path: P) -> Result<()> {
     (|| -> Result<()> {
         let string =
-            std::fs::read_to_string(cargo_toml_path).with_context(|| anyhow!("reading file"))?;
+            std::fs::read_to_string(&cargo_toml_path).with_context(|| anyhow!("reading file"))?;
         let val: Value = string.parse()?;
         let top = val
             .as_table()
