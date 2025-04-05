@@ -1367,6 +1367,7 @@ dependencies = [
  "pluraless",
  "rayon",
  "roxmltree",
+ "serde",
  "terminal_size",
  "thiserror",
  "toml",
