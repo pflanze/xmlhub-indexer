@@ -180,8 +180,8 @@ pub struct AppSignature {
 impl JsonFile for AppSignature {
     type Header = AppSignatureKeyHeader;
     const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::Signature;
-    const PERMS: u16 = 0o0444;
-    const EXCLUSIVE: bool = true;
+    const PERMS: u16 = 0o0644;
+    const EXCLUSIVE: bool = false;
 }
 
 impl SaveLoadKeyFile for AppSignature {
