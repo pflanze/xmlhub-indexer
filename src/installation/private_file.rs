@@ -8,10 +8,17 @@ use nix::{
 /// Call POSIX `open`, but wrap the resulting `fd` in
 /// `std::fs::File`. Example:
 ///
-///     let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC;
+///     use nix::{
+///         fcntl::OFlag,
+///         sys::stat::Mode,
+///     };
+///     use xmlhub_indexer::installation::private_file::posix_open;
+///
+///     let bits_u16: u16 = 0o0644;
+///     let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_EXCL;
 ///     let mode: Mode = Mode::from_bits(bits_u16.into())
 ///         .expect("statically defined valid permission bits");
-///     let file = posix_open(path, flags, mode)?;
+///     let _file_result = posix_open("/tmp/some_path", flags, mode);
 ///
 pub fn posix_open<P: AsRef<Path>>(
     path: P,
