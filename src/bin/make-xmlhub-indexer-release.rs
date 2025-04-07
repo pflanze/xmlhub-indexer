@@ -11,9 +11,9 @@ use xmlhub_indexer::{
     effect::{bind, Effect, NoOp},
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
-    util::{
-        ask_yn, create_dir_levels_if_necessary, hostname, prog_version, sha256sum, stringify_error,
-    },
+    path_util::AppendToPath,
+    sha256::sha256sum,
+    util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
 
@@ -183,10 +183,10 @@ impl Effect for BuildBinaryAndSha256sum {
         // complain about them later when actually needed (this will
         // be the case on Windows where the `sha256sum` command may
         // not be available, but we also don't publish the binary.)
-        let sha256sum = sha256sum(
-            SOURCE_CHECKOUT.working_dir_path(),
-            XMLHUB_INDEXER_BINARY_FILE,
-        );
+        let path = SOURCE_CHECKOUT
+            .working_dir_path()
+            .append(XMLHUB_INDEXER_BINARY_FILE);
+        let sha256sum = sha256sum(&path).with_context(|| anyhow!("hashing file {path:?}"));
 
         Ok(Sha256sumOfBinary { sha256sum })
     }

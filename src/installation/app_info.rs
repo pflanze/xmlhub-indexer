@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::util::sha256sum;
+use crate::sha256::sha256sum;
 
 use super::json_file::{JsonFile, JsonFileHeader};
 
@@ -73,7 +73,7 @@ impl AppInfo {
     /// Returns an error if the contents of the file at `path` does
     /// not match the expected hash. Returns the file path if OK.
     pub fn verify_binary<P: AsRef<Path>>(&self, path: P) -> Result<P> {
-        let effective_hash = sha256sum(&PathBuf::from("."), path.as_ref())?;
+        let effective_hash = sha256sum(path.as_ref())?;
 
         if effective_hash != self.sha256 {
             bail!(

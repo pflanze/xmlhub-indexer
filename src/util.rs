@@ -1,7 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::OsStr,
     fmt::Display,
     fs::{create_dir, OpenOptions},
     io::BufReader,
@@ -109,17 +108,6 @@ pub fn prog_version(in_dir: &Path, prog_name: &str) -> Result<String> {
 
 pub fn hostname() -> Result<String> {
     run_stdout_string::<_, &str, &str>(".", "hostname", &[], &[], &[0], true)
-}
-
-/// Calculate SHA-256 hash sum for the given path (currently by
-/// calling the external `sha256sum` binary) as hex string.
-pub fn sha256sum<P: AsRef<OsStr>>(base: &Path, path: P) -> Result<String> {
-    let stdout = run_stdout_string(base, "sha256sum", &[path.as_ref()], &[], &[0], true)?;
-    if let Some(pos) = stdout.find(|c: char| c.is_whitespace()) {
-        Ok(stdout[0..pos].to_string())
-    } else {
-        Ok(stdout)
-    }
 }
 
 pub fn stringify_error<T: Display, E: Display>(res: Result<T, E>) -> String {
