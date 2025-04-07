@@ -1,9 +1,9 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::sha256::sha256sum;
+use crate::{path_util::add_extension, sha256::sha256sum};
 
 use super::json_file::{JsonFile, JsonFileHeader};
 
@@ -70,6 +70,27 @@ impl JsonFile for AppInfo {
 }
 
 impl AppInfo {
+    const SUFFIX: &str = "info";
+
+    pub fn info_path_for_app_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
+        let mut path = path.as_ref().to_owned();
+        if !add_extension(&mut path, Self::SUFFIX) {
+            let path: &Path = path.as_ref();
+            bail!("path does not have a file name: {path:?}")
+        }
+        Ok(path)
+    }
+
+    /// Load the info file for the given app executable file
+    pub fn load_for_app_path<P: AsRef<Path>>(executable_path: P) -> Result<Self> {
+        Self::load(&Self::info_path_for_app_path(executable_path)?)
+    }
+
+    /// Save the info file for the given app executable file
+    pub fn save_for_app_path<P: AsRef<Path>>(&self, executable_path: P) -> Result<()> {
+        self.save(&Self::info_path_for_app_path(executable_path)?)
+    }
+
     /// Returns an error if the contents of the file at `path` does
     /// not match the expected hash. Returns the file path if OK.
     pub fn verify_binary<P: AsRef<Path>>(&self, path: P) -> Result<P> {
