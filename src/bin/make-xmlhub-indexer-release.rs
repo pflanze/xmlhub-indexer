@@ -3,6 +3,7 @@ use std::{env::current_dir, ffi::OsStr, fmt::Debug, path::PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 
+use debug_ignore::DebugIgnore;
 use xmlhub_indexer::{
     cargo::check_cargo_toml_no_path,
     checkout_context::CheckExpectedSubpathsExist,
@@ -12,7 +13,11 @@ use xmlhub_indexer::{
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
     installation::app_info::AppInfo,
-    installation::util::{get_creator, get_timestamp},
+    installation::{
+        app_signature::{AppSignaturePrivateKey, SaveLoadKeyFile},
+        json_file::JsonFile,
+        util::{get_creator, get_timestamp},
+    },
     path_util::AppendToPath,
     sha256::sha256sum_paranoid,
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
@@ -72,6 +77,14 @@ struct Opts {
     /// `--no-require-local-user` option to allow that.
     #[clap(long)]
     local_user: Option<String>,
+
+    /// When releasing a binary, the path to an app signature private
+    /// key is required. Generate such a key pair via
+    /// `xmlhub-indexer-signature gen-key`. But the key also has to be
+    /// part of XXX trust list or it won't be accepted when XXX
+    /// upgrading.
+    #[clap(long)]
+    app_private_key: Option<PathBuf>,
 
     /// In my experience on the Mac, the `--local-user` option is
     /// needed when signing; if you want to try it anyway, omit the
@@ -195,7 +208,7 @@ impl Effect for BuildBinaryAndSha256sum {
 }
 
 #[derive(Debug)]
-struct ReleaseBinary {
+struct ReleaseBinary<'t> {
     copy_binary_to: PathBuf,
     source_version_tag: String,
     hostname: String,
@@ -204,6 +217,7 @@ struct ReleaseBinary {
     rustc_version: String,
     cargo_version: String,
     os_version: String,
+    app_signature_private_key: DebugIgnore<&'t AppSignaturePrivateKey>,
     sign: bool,
     local_user: Option<String>,
     push_to_remote: Option<String>,
@@ -212,7 +226,7 @@ struct ReleaseBinary {
 #[derive(Debug)]
 struct Done;
 
-impl Effect for ReleaseBinary {
+impl<'t> Effect for ReleaseBinary<'t> {
     type Requires = Sha256sumOfBinary;
     type Provides = Done;
 
@@ -249,7 +263,13 @@ impl Effect for ReleaseBinary {
             creator,
             build_date: get_timestamp(),
         };
-        app_info.save_for_app_path(&self.copy_binary_to)?;
+        let app_info_path = app_info.save_for_app_path(&self.copy_binary_to)?;
+
+        // Sign that file.
+        let app_info_contents = std::fs::read(&app_info_path)
+            .with_context(|| anyhow!("reading app info file {app_info_path:?}"))?;
+        let signature = self.app_signature_private_key.sign(&app_info_contents)?;
+        signature.save_to_base(&app_info_path)?;
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
@@ -323,7 +343,7 @@ fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
 }
 
 fn main() -> Result<()> {
-    let opts = Opts::from_args();
+    let opts: Opts = Opts::from_args();
 
     let sign = if opts.sign && opts.no_sign {
         bail!("conflicting sign options given")
@@ -473,6 +493,8 @@ fn main() -> Result<()> {
         )
     };
 
+    let app_signature_private_key;
+
     // Should we publish the binary?
     let release_binary: Box<dyn Effect<Requires = Sha256sumOfBinary, Provides = Done>> =
         if opts.no_publish_binary {
@@ -481,6 +503,12 @@ fn main() -> Result<()> {
                 "not publishing binary because --no-publish-binary option was given".into(),
             )
         } else {
+            let app_private_key = &opts.app_private_key.ok_or_else(|| {
+                anyhow!("when publishing the binary, `--app-private-key` is required")
+            })?;
+            app_signature_private_key = AppSignaturePrivateKey::load(&app_private_key)
+                .with_context(|| anyhow!("loading private key from {app_private_key:?}"))?;
+
             let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
             binaries_checkout.check_status()?;
 
@@ -588,6 +616,7 @@ fn main() -> Result<()> {
                     rustc_version,
                     cargo_version,
                     os_version,
+                    app_signature_private_key: (&app_signature_private_key).into(),
                 })
             };
             match std::env::consts::OS {

@@ -87,8 +87,10 @@ impl AppInfo {
     }
 
     /// Save the info file for the given app executable file
-    pub fn save_for_app_path<P: AsRef<Path>>(&self, executable_path: P) -> Result<()> {
-        self.save(&Self::info_path_for_app_path(executable_path)?)
+    pub fn save_for_app_path<P: AsRef<Path>>(&self, executable_path: P) -> Result<PathBuf> {
+        let info_path = Self::info_path_for_app_path(executable_path)?;
+        self.save(&info_path)?;
+        Ok(info_path)
     }
 
     /// Returns an error if the contents of the file at `path` does
