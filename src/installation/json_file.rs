@@ -27,6 +27,11 @@ pub trait JsonFile: Sized + Serialize + DeserializeOwned {
     type Header: JsonFileHeader + Serialize + DeserializeOwned;
     const VERSION_AND_KIND: <<Self as JsonFile>::Header as JsonFileHeader>::VersionAndKind;
     const PERMS: u16;
+    /// When `EXCLUSIVE` is true, saves with `O_EXCL`, meaning you
+    /// have to unlink (or separate-file-and-rename) yourself! Note
+    /// that if you give false, you should also use writable targets,
+    /// i.e. use PERMS like 0o0644.
+    const EXCLUSIVE: bool;
 
     fn from_reader<R: Read>(mut input: R) -> Result<Self> {
         let header: Self::Header = serde_json_read1(&mut input)?;
@@ -51,10 +56,13 @@ pub trait JsonFile: Sized + Serialize + DeserializeOwned {
         Ok(())
     }
 
-    /// Note: saves with `O_EXCL`, meaning you have to unlink (or
-    /// separate-file-and-rename) yourself!
     fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_EXCL;
+        let overwrite_flag = if Self::EXCLUSIVE {
+            OFlag::O_EXCL
+        } else {
+            OFlag::O_TRUNC
+        };
+        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | overwrite_flag;
         let mode: Mode =
             Mode::from_bits(Self::PERMS.into()).expect("statically defined valid permission bits");
         let out = posix_open(&path, flags, mode)?;

@@ -124,6 +124,7 @@ impl JsonFile for AppSignaturePublicKey {
     type Header = AppSignatureKeyHeader;
     const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::PublicKey;
     const PERMS: u16 = 0o0444;
+    const EXCLUSIVE: bool = true;
 }
 
 impl SaveLoadKeyFile for AppSignaturePublicKey {
@@ -150,6 +151,7 @@ impl JsonFile for AppSignaturePrivateKey {
     type Header = AppSignatureKeyHeader;
     const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::PrivateKey;
     const PERMS: u16 = 0o0400;
+    const EXCLUSIVE: bool = true;
 }
 
 impl SaveLoadKeyFile for AppSignaturePrivateKey {
@@ -179,6 +181,7 @@ impl JsonFile for AppSignature {
     type Header = AppSignatureKeyHeader;
     const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::Signature;
     const PERMS: u16 = 0o0444;
+    const EXCLUSIVE: bool = true;
 }
 
 impl SaveLoadKeyFile for AppSignature {

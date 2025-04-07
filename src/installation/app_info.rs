@@ -67,6 +67,7 @@ impl JsonFile for AppInfo {
     type Header = AppInfoHeader;
     const VERSION_AND_KIND: () = ();
     const PERMS: u16 = 0o644;
+    const EXCLUSIVE: bool = false;
 }
 
 impl AppInfo {
