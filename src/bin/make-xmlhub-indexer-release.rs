@@ -11,6 +11,7 @@ use xmlhub_indexer::{
     effect::{bind, Effect, NoOp},
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
+    installation::util::{get_creator, get_timestamp},
     path_util::AppendToPath,
     sha256::sha256sum_paranoid,
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
@@ -466,6 +467,69 @@ fn main() -> Result<()> {
             binaries_checkout.check_status()?;
 
             let push_to_remote = if push {
+                // *Not* doing a git "pull" because that can lead to
+                // merges, also it's unclear how security should be
+                // treated: merging without requiring a tag signature
+                // check could lead to unsafe contents merged and
+                // subsequently signed.
+
+                // But, we can do a "remote update" and complain about the
+                // situation.
+                {
+                    // FUTURE: proper abstraction for running git
+                    // directly on checkout contexts, also,
+                    // abstraction for making error checks with
+                    // dry_run easier? `unless_dry_run` from above
+                    // does not transfer values, and wouldn't make
+                    // sense. and the macro from xmlhub.rs doesn't
+                    // apply here because we still want to run the
+                    // commands.
+                    match git(
+                        binaries_checkout.working_dir_path(),
+                        &["remote", "update", &binaries_checkout.default_remote],
+                        false,
+                    ) {
+                        Ok(did_it) => {
+                            if !did_it {
+                                if opts.dry_run {
+                                    eprintln!(
+                                        "dry-run: would stop because git remote update \
+                                         on the binaries repository was not successful"
+                                    );
+                                } else {
+                                    bail!(
+                                        "git remote update on the binaries repository \
+                                         was not successful"
+                                    )
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if opts.dry_run {
+                                eprintln!("dry-run: would stop because of {e:#}");
+                            } else {
+                                Err(e)?
+                            }
+                        }
+                    }
+
+                    let branch = binaries_checkout.branch_name;
+                    let remote_branch = format!("{}/{}", binaries_checkout.default_remote, branch);
+                    let remote_branch_is_ancestor = git(
+                        binaries_checkout.working_dir_path(),
+                        &["merge-base", "--is-ancestor", "--", &remote_branch, branch],
+                        false,
+                    )?;
+                    if !remote_branch_is_ancestor {
+                        bail!(
+                            "the remote branch {remote_branch:?} is not an ancestor of \
+                             (or the same as the) the local branch {branch:?} in \
+                             the working directory {:?}",
+                            binaries_checkout.working_dir_path(),
+                        )
+                    }
+                }
+
                 Some(binaries_checkout.default_remote.clone())
             } else {
                 None
