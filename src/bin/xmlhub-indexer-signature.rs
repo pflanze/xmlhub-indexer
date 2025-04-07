@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 
@@ -29,23 +31,23 @@ enum Command {
         /// Base path to save the key to: give a file name but without
         /// suffix. Two files will be written with `.pub` and `.priv`
         /// appended.
-        output_path: String,
+        output_path: PathBuf,
     },
     /// Create a signature for a file.
     Sign {
         /// The path to the file to be signed. The signature is
         /// written to the path with `.sig` appended.
-        file_path: String,
+        file_path: PathBuf,
         /// The path to the private key file to use for signing.
-        private_key_path: String,
+        private_key_path: PathBuf,
     },
     /// Verify a signature for a file.
     Verify {
         /// The path to the file to be verified. The signature is read
         /// from the path with `.sig` appended.
-        file_path: String,
+        file_path: PathBuf,
         /// The path to the public key file to use for verification.
-        public_key_path: String,
+        public_key_path: PathBuf,
     },
 }
 

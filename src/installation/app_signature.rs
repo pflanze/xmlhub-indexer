@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use fips205::{
@@ -7,7 +10,10 @@ use fips205::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::utillib::hex::{decode_hex, to_hex_string};
+use crate::{
+    path_util::add_extension,
+    utillib::hex::{decode_hex, to_hex_string},
+};
 
 use super::{
     json_file::{JsonFile, JsonFileHeader},
@@ -65,14 +71,25 @@ impl JsonFileHeader for AppSignatureKeyHeader {
 pub trait SaveLoadKeyFile: Serialize + JsonFile<Header = AppSignatureKeyHeader> {
     const SUFFIX: &'static str;
 
-    fn save_to_base(&self, path_without_suffix: &str) -> Result<()> {
-        let path = format!("{path_without_suffix}.{}", Self::SUFFIX);
+    fn path_add_suffix<P: AsRef<Path>>(path_without_suffix: P) -> Result<PathBuf> {
+        let mut path = path_without_suffix.as_ref().to_owned();
+        if !add_extension(&mut path, Self::SUFFIX) {
+            bail!(
+                "cannot add extension to path {:?} (does not have a file name)",
+                path_without_suffix.as_ref()
+            );
+        }
+        Ok(path)
+    }
+
+    fn save_to_base<P: AsRef<Path>>(&self, path_without_suffix: P) -> Result<()> {
+        let path = Self::path_add_suffix(path_without_suffix)?;
         self.save(&path)
             .with_context(|| anyhow!("writing to file {path:?}"))
     }
 
-    fn load_from_base(path_without_suffix: &str) -> Result<Self> {
-        let path = format!("{path_without_suffix}.{}", Self::SUFFIX);
+    fn load_from_base<P: AsRef<Path>>(path_without_suffix: P) -> Result<Self> {
+        let path = Self::path_add_suffix(path_without_suffix)?;
         JsonFile::load(&path).with_context(|| anyhow!("reading from file {path:?}"))
     }
 }
@@ -306,10 +323,10 @@ impl AppSignatureKeyPair {
         })
     }
 
-    pub fn save_to_base(self, path_without_suffix: &str) -> Result<()> {
+    pub fn save_to_base<P: AsRef<Path>>(self, path_without_suffix: P) -> Result<()> {
         let (public_key, private_key) = self.split();
-        public_key.save_to_base(path_without_suffix)?;
-        private_key.save_to_base(path_without_suffix)?;
+        public_key.save_to_base(path_without_suffix.as_ref())?;
+        private_key.save_to_base(path_without_suffix.as_ref())?;
         Ok(())
     }
 }
