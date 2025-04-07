@@ -509,6 +509,9 @@ fn main() -> Result<()> {
             app_signature_private_key = AppSignaturePrivateKey::load(&app_private_key)
                 .with_context(|| anyhow!("loading private key from {app_private_key:?}"))?;
 
+            // XX Bug: this check is too 'early', I mean it fetches
+            // the remote even if !push. Not very important in
+            // practise since we'll always have a remote, OK?
             let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
             binaries_checkout.check_status()?;
 
