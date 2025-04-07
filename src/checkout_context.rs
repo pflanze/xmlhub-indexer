@@ -277,8 +277,7 @@ impl<'s, P: AsRef<Path>> CheckedCheckoutContext1<'s, P> {
         git_remote_get_default_for_branch(self.working_dir_path(), self.branch_name)?.ok_or_else(
             || {
                 anyhow!(
-                    "branch {:?} in {:?} does not have a default remote set, \
-                     you can't push because of that",
+                    "branch {:?} in {:?} does not have a default remote set",
                     self.branch_name,
                     self.working_dir_path()
                 )
