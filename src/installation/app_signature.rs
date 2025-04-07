@@ -1,68 +1,34 @@
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-};
+use std::fmt::Display;
 
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::Local;
 use fips205::{
     slh_dsa_shake_128s,
     traits::{SerDes, Signer, Verifier},
 };
-use nix::{fcntl::OFlag, sys::stat::Mode};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{
-    util::hostname,
-    utillib::hex::{decode_hex, to_hex_string},
+use crate::utillib::hex::{decode_hex, to_hex_string};
+
+use super::{
+    json_file::{JsonFile, JsonFileHeader},
+    util::{get_creator, get_timestamp},
 };
-
-use super::private_file::posix_open;
-
-/// Read individual JSON items from a stream
-pub fn serde_json_reader<T: DeserializeOwned, R: Read>(
-    input: R,
-) -> impl Iterator<Item = Result<T, serde_json::Error>> {
-    serde_json::Deserializer::from_reader(input).into_iter()
-}
-
-/// Read individual JSON items from a stream
-pub fn serde_json_maybe_read1<T: DeserializeOwned, R: Read>(
-    input: R,
-) -> Result<Option<T>, serde_json::Error> {
-    let mut iter = serde_json_reader::<T, R>(input);
-    iter.next().transpose()
-}
-
-/// Read exactly one JSON item from a stream
-pub fn serde_json_read1<T: DeserializeOwned, R: Read>(input: R) -> Result<T> {
-    if let Some(item) = serde_json_maybe_read1::<T, R>(input)? {
-        Ok(item)
-    } else {
-        bail!("premature EOF reading JSON item")
-    }
-}
-
-/// Current time in rfc2822 format.
-fn get_timestamp() -> String {
-    Local::now().to_rfc2822()
-}
-
-/// Get user@hostname
-fn get_creator() -> Result<String> {
-    let username = std::env::var("USER").context("retrieving USER environment variable")?;
-    let hostname = hostname()?;
-    Ok(format!("{username}@{hostname}"))
-}
 
 const APP_SIGNATURE_KEY_VERSION: u32 = 1;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AppSignatureFileKind {
     PublicKey,
     PrivateKey,
     // PublicAndPrivateKeyPair, // ever used?
     Signature,
+}
+
+// just proxy Display to Debug, sigh
+impl Display for AppSignatureFileKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -71,68 +37,43 @@ pub struct AppSignatureKeyHeader {
     pub kind: AppSignatureFileKind,
 }
 
-pub trait SaveLoadKeyFile: Serialize + DeserializeOwned + Sized + 'static {
-    const SUFFIX: &'static str;
-    const KIND: AppSignatureFileKind;
-    const PERMS: u16;
+impl JsonFileHeader for AppSignatureKeyHeader {
+    type VersionAndKind = AppSignatureFileKind;
 
-    fn writeln<W: Write>(&self, out: &mut W) -> Result<()> {
-        let header = AppSignatureKeyHeader {
-            app_signature_key_version: APP_SIGNATURE_KEY_VERSION,
-            kind: Self::KIND,
-        };
-        serde_json::to_writer(&mut *out, &header)?;
-        out.write_all(b"\n")?;
-        serde_json::to_writer(&mut *out, self)?;
-        out.write_all(b"\n")?;
+    fn check_version_and_kind(&self, kind: &Self::VersionAndKind) -> Result<()> {
+        if self.app_signature_key_version != APP_SIGNATURE_KEY_VERSION {
+            bail!(
+                "incompatible file format version, expected {}, got {}",
+                APP_SIGNATURE_KEY_VERSION,
+                self.app_signature_key_version
+            )
+        }
+        if self.kind != *kind {
+            bail!("invalid file kind, expected {}, got {}", kind, self.kind)
+        }
         Ok(())
     }
 
+    fn new_with_version_and_kind(kind: &Self::VersionAndKind) -> Self {
+        AppSignatureKeyHeader {
+            app_signature_key_version: APP_SIGNATURE_KEY_VERSION,
+            kind: kind.clone(),
+        }
+    }
+}
+
+pub trait SaveLoadKeyFile: Serialize + JsonFile<Header = AppSignatureKeyHeader> {
+    const SUFFIX: &'static str;
+
     fn save_to_base(&self, path_without_suffix: &str) -> Result<()> {
         let path = format!("{path_without_suffix}.{}", Self::SUFFIX);
-        (|| -> Result<()> {
-            // No need for O_EXCL since we make it read-only via mode
-            // and thus won't accidentally overwrite it anyway, OK?
-            let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC;
-            let mode: Mode = Mode::from_bits(Self::PERMS.into())
-                .expect("statically defined valid permission bits");
-            let out = posix_open(&path, flags, mode)?;
-            let mut out = BufWriter::new(out);
-            self.writeln(&mut out)?;
-            out.flush()?;
-            Ok(())
-        })()
-        .with_context(|| anyhow!("writing to file {path:?}"))
-    }
-
-    fn from_reader<R: Read>(mut input: R) -> Result<Self> {
-        let header: AppSignatureKeyHeader = serde_json_read1(&mut input)?;
-        if header.app_signature_key_version != APP_SIGNATURE_KEY_VERSION {
-            bail!(
-                "invalid key version, expected {}, got {}",
-                APP_SIGNATURE_KEY_VERSION,
-                header.app_signature_key_version
-            )
-        }
-        if header.kind != Self::KIND {
-            bail!(
-                "invalid key kind, expected {:?}, got {:?}",
-                Self::KIND,
-                header.kind
-            )
-        }
-        // Could use serde_json_read1 again, or let it error out now
-        // if more than one item left?
-        Ok(serde_json::from_reader(&mut input)?)
+        self.save(&path)
+            .with_context(|| anyhow!("writing to file {path:?}"))
     }
 
     fn load_from_base(path_without_suffix: &str) -> Result<Self> {
         let path = format!("{path_without_suffix}.{}", Self::SUFFIX);
-        (|| -> Result<Self> {
-            let inp = BufReader::new(File::open(&path)?);
-            Ok(Self::from_reader(inp)?)
-        })()
-        .with_context(|| anyhow!("reading from file {path:?}"))
+        JsonFile::load(&path).with_context(|| anyhow!("reading from file {path:?}"))
     }
 }
 
@@ -162,10 +103,14 @@ pub struct AppSignaturePublicKey {
     pub public_key: String,
 }
 
+impl JsonFile for AppSignaturePublicKey {
+    type Header = AppSignatureKeyHeader;
+    const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::PublicKey;
+    const PERMS: u16 = 0o0444;
+}
+
 impl SaveLoadKeyFile for AppSignaturePublicKey {
     const SUFFIX: &'static str = "pub";
-    const KIND: AppSignatureFileKind = AppSignatureFileKind::PublicKey;
-    const PERMS: u16 = 0o0444;
 }
 
 impl From<(FileMetadata, slh_dsa_shake_128s::PublicKey)> for AppSignaturePublicKey {
@@ -184,10 +129,14 @@ pub struct AppSignaturePrivateKey {
     pub private_key: String,
 }
 
+impl JsonFile for AppSignaturePrivateKey {
+    type Header = AppSignatureKeyHeader;
+    const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::PrivateKey;
+    const PERMS: u16 = 0o0400;
+}
+
 impl SaveLoadKeyFile for AppSignaturePrivateKey {
     const SUFFIX: &'static str = "priv";
-    const KIND: AppSignatureFileKind = AppSignatureFileKind::PrivateKey;
-    const PERMS: u16 = 0o0400;
 }
 
 impl From<(FileMetadata, slh_dsa_shake_128s::PrivateKey)> for AppSignaturePrivateKey {
@@ -209,10 +158,14 @@ pub struct AppSignature {
     pub signature: String,
 }
 
+impl JsonFile for AppSignature {
+    type Header = AppSignatureKeyHeader;
+    const VERSION_AND_KIND: AppSignatureFileKind = AppSignatureFileKind::Signature;
+    const PERMS: u16 = 0o0444;
+}
+
 impl SaveLoadKeyFile for AppSignature {
     const SUFFIX: &'static str = "sig";
-    const KIND: AppSignatureFileKind = AppSignatureFileKind::Signature;
-    const PERMS: u16 = 0o0444;
 }
 
 // -----------------------------------------------------------------------------
