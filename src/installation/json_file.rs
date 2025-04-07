@@ -51,10 +51,10 @@ pub trait JsonFile: Sized + Serialize + DeserializeOwned {
         Ok(())
     }
 
+    /// Note: saves with `O_EXCL`, meaning you have to unlink (or
+    /// separate-file-and-rename) yourself!
     fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        // No need for O_EXCL since we make it read-only via mode
-        // and thus won't accidentally overwrite it anyway, OK?
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC;
+        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_EXCL;
         let mode: Mode =
             Mode::from_bits(Self::PERMS.into()).expect("statically defined valid permission bits");
         let out = posix_open(&path, flags, mode)?;
