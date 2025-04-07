@@ -232,16 +232,6 @@ impl Effect for ReleaseBinary {
             )
         })?;
 
-        let binary_commit_message = format!(
-            "{} / SHA-256: {}\n\n{}",
-            self.source_version_tag, sha256sum, self.partial_commit_message
-        );
-
-        let tag_message_if_signed = format!(
-            "{}\n\nsha256sum: {}",
-            self.partial_commit_message, sha256sum
-        );
-
         git(
             BINARIES_CHECKOUT.working_dir_path(),
             // No worries about adding "." as check_status() was run
@@ -251,6 +241,11 @@ impl Effect for ReleaseBinary {
             false,
         )?;
 
+        let binary_commit_message = format!(
+            "{} / SHA-256: {}\n\n{}",
+            self.source_version_tag, sha256sum, self.partial_commit_message
+        );
+
         git(
             BINARIES_CHECKOUT.working_dir_path(),
             &["commit", "-m", &binary_commit_message],
@@ -258,6 +253,11 @@ impl Effect for ReleaseBinary {
         )?;
 
         if self.sign {
+            let tag_message_if_signed = format!(
+                "{}\n\nsha256sum: {}",
+                self.partial_commit_message, sha256sum
+            );
+
             if !git_tag(
                 BINARIES_CHECKOUT.working_dir_path(),
                 &tag_name_if_signed,
