@@ -12,7 +12,7 @@ use xmlhub_indexer::{
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
     path_util::AppendToPath,
-    sha256::sha256sum,
+    sha256::sha256sum_paranoid,
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
 };
@@ -186,7 +186,7 @@ impl Effect for BuildBinaryAndSha256sum {
         let path = SOURCE_CHECKOUT
             .working_dir_path()
             .append(XMLHUB_INDEXER_BINARY_FILE);
-        let sha256sum = sha256sum(&path).with_context(|| anyhow!("hashing file {path:?}"));
+        let sha256sum = sha256sum_paranoid(&path).with_context(|| anyhow!("hashing file {path:?}"));
 
         Ok(Sha256sumOfBinary { sha256sum })
     }
