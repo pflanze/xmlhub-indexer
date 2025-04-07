@@ -66,7 +66,7 @@ pub struct AppInfo {
 impl JsonFile for AppInfo {
     type Header = AppInfoHeader;
     const VERSION_AND_KIND: () = ();
-    const PERMS: u16 = 0644;
+    const PERMS: u16 = 0o644;
 }
 
 impl AppInfo {
