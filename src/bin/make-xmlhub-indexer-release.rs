@@ -93,15 +93,27 @@ struct Opts {
     #[clap(long)]
     no_require_local_user: bool,
 
-    /// Push the branch and Git tag to the default remote (presumed to
-    /// be the upstream repository), for both the source and binary
-    /// repositories. This is the default.
+    /// Push the branch and Git tag in the *source* repository to the
+    /// default remote (presumed to be the upstream repository), for
+    /// both the source and binary repositories. This is the default.
     #[clap(long)]
-    push: bool,
+    push_source: bool,
 
-    /// Do not push the branch and Git tag. The default is to push.
+    /// Do not push the branch and Git tag to the *source*
+    /// repository. The default is to push.
     #[clap(long)]
-    no_push: bool,
+    no_push_source: bool,
+
+    /// Push the branch and Git tag in the *binary* repository to the
+    /// default remote (presumed to be the upstream repository), for
+    /// both the source and binary repositories. This is the default.
+    #[clap(long)]
+    push_binary: bool,
+
+    /// Do not push the branch and Git tag to the *binary*
+    /// repository. The default is to push.
+    #[clap(long)]
+    no_push_binary: bool,
 }
 
 // Don't need to store tag_name String in here since it's constant and
@@ -220,7 +232,7 @@ struct ReleaseBinary<'t> {
     app_signature_private_key: DebugIgnore<&'t AppSignaturePrivateKey>,
     sign: bool,
     local_user: Option<String>,
-    push_to_remote: Option<String>,
+    push_binary_to_remote: Option<String>,
 }
 
 #[derive(Debug)]
@@ -312,7 +324,7 @@ impl<'t> Effect for ReleaseBinary<'t> {
             }
         }
 
-        if let Some(remote_name) = &self.push_to_remote {
+        if let Some(remote_name) = &self.push_binary_to_remote {
             // (Calculate this command beforehand and show as effect?
             // Ah can't, tag_name_if_signed can only be calculated in
             // this effect.)
@@ -351,10 +363,16 @@ fn main() -> Result<()> {
         !opts.no_sign
     };
 
-    let push = if opts.push && opts.no_push {
-        bail!("conflicting push options given")
+    let push_source = if opts.push_source && opts.no_push_source {
+        bail!("conflicting push-source options given")
     } else {
-        !opts.no_push
+        !opts.no_push_source
+    };
+
+    let push_binary = if opts.push_binary && opts.no_push_binary {
+        bail!("conflicting push-binary options given")
+    } else {
+        !opts.no_push_binary
     };
 
     if sign {
@@ -455,7 +473,7 @@ fn main() -> Result<()> {
     };
 
     let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
-        if push {
+        if push_source {
             Box::new(PushSourceToRemote {
                 tag_name: new_version_tag_string.clone(),
                 remote_name: source_checkout.default_remote.clone(),
@@ -515,7 +533,7 @@ fn main() -> Result<()> {
             let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
             binaries_checkout.check_status()?;
 
-            let push_to_remote = if push {
+            let push_binary_to_remote = if push_binary {
                 // *Not* doing a git "pull" because that can lead to
                 // merges, also it's unclear how security should be
                 // treated: merging without requiring a tag signature
@@ -614,7 +632,7 @@ fn main() -> Result<()> {
                     partial_commit_message,
                     sign,
                     local_user: opts.local_user.clone(),
-                    push_to_remote,
+                    push_binary_to_remote,
                     source_commit: commit_id,
                     rustc_version,
                     cargo_version,
