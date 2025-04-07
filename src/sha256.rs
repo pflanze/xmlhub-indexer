@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 
-use crate::{command::run_stdout_string, utillib::hex::to_hex_string};
+use crate::{command::run_stdout_string, rayon_util::ParRun, utillib::hex::to_hex_string};
 
 /// Calculate SHA-256 hash sum for the given path as hex string.
 pub fn sha256sum<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {
@@ -55,9 +55,14 @@ pub fn sha256sum_external<P: AsRef<Path>>(path: P) -> Result<String> {
 /// Calculate SHA-256 hash sum for the given path as hex string, by
 /// using the `sha2` crate and by calling the external `sha256sum`
 /// executable and asserting that the results are the same.
-pub fn sha256sum_paranoid<P: AsRef<Path>>(path: P) -> Result<String> {
-    let external = sha256sum_external(path.as_ref())?;
-    let internal = sha256sum(path.as_ref())?;
+pub fn sha256sum_paranoid<P: AsRef<Path> + Sync>(path: P) -> Result<String> {
+    let (external, internal) = (
+        || sha256sum_external(path.as_ref()),
+        || sha256sum(path.as_ref()),
+    )
+        .par_run();
+    let external = external?;
+    let internal = internal?;
     assert_eq!(external, internal);
     Ok(external)
 }
