@@ -127,6 +127,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         }
     }
 
+    /// Check that working directory is clean.
     pub fn check_status(&self) -> Result<()> {
         let items = git_status(self.working_dir_path())?;
         if !items.is_empty() {
