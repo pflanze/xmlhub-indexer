@@ -1369,6 +1369,7 @@ dependencies = [
  "roxmltree",
  "serde",
  "serde_json",
+ "sha2",
  "terminal_size",
  "thiserror",
  "toml",
