@@ -271,6 +271,7 @@ impl<'s, P: AsRef<Path>> CheckedCheckoutContext1<'s, P> {
         Ok(())
     }
 
+    /// The remote name, not URL
     fn git_remote_get_default(&self) -> Result<String> {
         git_remote_get_default_for_branch(self.working_dir_path(), self.branch_name)?.ok_or_else(
             || {
@@ -288,6 +289,7 @@ impl<'s, P: AsRef<Path>> CheckedCheckoutContext1<'s, P> {
 #[derive(Debug, Clone)]
 pub struct CheckedCheckoutContext2<'s, P: AsRef<Path>> {
     parent: CheckedCheckoutContext1<'s, P>,
+    /// The remote name, not URL
     pub default_remote: String,
 }
 
