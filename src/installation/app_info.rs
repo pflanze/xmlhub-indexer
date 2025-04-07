@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{path_util::add_extension, sha256::sha256sum};
@@ -83,13 +83,15 @@ impl AppInfo {
 
     /// Load the info file for the given app executable file
     pub fn load_for_app_path<P: AsRef<Path>>(executable_path: P) -> Result<Self> {
-        Self::load(&Self::info_path_for_app_path(executable_path)?)
+        let info_path = Self::info_path_for_app_path(executable_path)?;
+        Self::load(&info_path).with_context(|| anyhow!("loading from path {info_path:?}"))
     }
 
     /// Save the info file for the given app executable file
     pub fn save_for_app_path<P: AsRef<Path>>(&self, executable_path: P) -> Result<PathBuf> {
         let info_path = Self::info_path_for_app_path(executable_path)?;
-        self.save(&info_path)?;
+        self.save(&info_path)
+            .with_context(|| anyhow!("saving to path {info_path:?}"))?;
         Ok(info_path)
     }
 
