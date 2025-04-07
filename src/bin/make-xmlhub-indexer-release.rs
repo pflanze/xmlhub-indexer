@@ -11,6 +11,7 @@ use xmlhub_indexer::{
     effect::{bind, Effect, NoOp},
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
+    installation::app_info::AppInfo,
     installation::util::{get_creator, get_timestamp},
     path_util::AppendToPath,
     sha256::sha256sum_paranoid,
@@ -198,7 +199,11 @@ struct ReleaseBinary {
     copy_binary_to: PathBuf,
     source_version_tag: String,
     hostname: String,
+    source_commit: String,
     partial_commit_message: String,
+    rustc_version: String,
+    cargo_version: String,
+    os_version: String,
     sign: bool,
     local_user: Option<String>,
     push_to_remote: Option<String>,
@@ -232,6 +237,19 @@ impl Effect for ReleaseBinary {
                 self.copy_binary_to
             )
         })?;
+
+        let creator = get_creator()?;
+        let app_info = AppInfo {
+            sha256: sha256sum.clone(),
+            version: self.source_version_tag.clone(),
+            source_commit: self.source_commit.clone(),
+            rustc_version: self.rustc_version.clone(),
+            cargo_version: self.cargo_version.clone(),
+            os_version: self.os_version.clone(),
+            creator,
+            build_date: get_timestamp(),
+        };
+        app_info.save_for_app_path(&self.copy_binary_to)?;
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
@@ -566,6 +584,10 @@ fn main() -> Result<()> {
                     sign,
                     local_user: opts.local_user.clone(),
                     push_to_remote,
+                    source_commit: commit_id,
+                    rustc_version,
+                    cargo_version,
+                    os_version,
                 })
             };
             match std::env::consts::OS {
