@@ -43,10 +43,6 @@ pub fn copy_to_cargo_bin_dir(path: &Path) -> Result<(Done, PathBuf)> {
 /// path to the shell startup file of the currently running shell, if
 /// not already part of the current `PATH`.
 pub fn install_executable(path: &Path) -> Result<Done> {
-    let path_canonical = path
-        .canonicalize()
-        .with_context(|| anyhow!("building canonical path to executable, {path:?}"))?;
-
     let shell_type = ShellType::from_env()?;
     let (done1, cargo_bin_dir) = copy_to_cargo_bin_dir(path)?;
 
@@ -66,7 +62,7 @@ pub fn install_executable(path: &Path) -> Result<Done> {
                 }
             })
             .collect();
-        if parts.contains(&path_canonical) {
+        if parts.contains(&cargo_bin_dir) {
             Done::nothing()
         } else {
             shell_type.add_to_path_in_init_file(&cargo_bin_dir)?
