@@ -36,8 +36,8 @@ You can build the program yourself:
 
  3. Go to the top level directory of your Git checkout, i.e. `cd
     xmlhub-indexer` after you ran the above command. Then run `cargo
-    install --path .`. You should now be able to call the program via
-    `xmlhub`.
+    run --release --bin xmlhub -- install`. You should now be able to
+    call the program via `xmlhub`.
 
     Alternatively, if the above fails for some reason, you can run
     `cargo build --release` (still from the xmlhub-indexer directory),
