@@ -18,8 +18,12 @@ pub enum ShellType {
 
 impl ShellType {
     pub fn from_env() -> Result<Self> {
-        let shell_name = std::env::var("SHELL").context("reading SHELL environment variable")?;
-        match shell_name.as_str() {
+        let shell_path: PathBuf = std::env::var("SHELL")
+            .context("reading SHELL environment variable")?
+            .into();
+        let shell_name = shell_path.file_name()
+            .ok_or_else(|| anyhow!("SHELL environment variable contains path {shell_path:?} which is missing a file name"))?;
+        match shell_name.to_string_lossy().as_ref() {
             "bash" => Ok(Self::Bash),
             "csh" => Ok(Self::Csh),
             _ => bail!("don't know shell {shell_name:?}"),
