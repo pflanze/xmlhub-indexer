@@ -1,5 +1,5 @@
 use std::{
-    fs::{copy, remove_file},
+    fs::{copy, create_dir_all, remove_file},
     path::{Path, PathBuf},
 };
 
@@ -34,6 +34,9 @@ pub fn copy_to_cargo_bin_dir(path: &Path) -> Result<(Done, PathBuf)> {
         .file_name()
         .ok_or_else(|| anyhow!("missing file name in path {path:?}"))?;
     let cargo_bin_dir = cargo_bin_dir()?;
+    create_dir_all(&cargo_bin_dir).with_context(|| {
+        anyhow!("creating directory {cargo_bin_dir:?} or if necessary parent directories")
+    })?;
     let target_path = (&cargo_bin_dir).append(file_name);
     let done = copy_file(path, &target_path)?;
     Ok((done, cargo_bin_dir))
