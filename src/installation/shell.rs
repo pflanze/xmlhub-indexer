@@ -45,6 +45,10 @@ impl ShellType {
     /// that is re-initialized on every shell open, to avoid having to
     /// re-login.
     pub fn add_to_path_in_init_file(self, dir_path: &Path) -> Result<Done> {
+        if !dir_path.is_dir() {
+            bail!("path does not point to a directory: {dir_path:?}")
+        }
+
         let dir_path_string = dir_path.to_str().with_context(|| {
             anyhow!(
                 "path is not representable in unicode, thus can't be put \
