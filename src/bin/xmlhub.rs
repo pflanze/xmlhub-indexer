@@ -2918,16 +2918,24 @@ fn check_command(
     // of the code in build_index.
     let paths: Vec<BaseAndRelPath> = {
         let shared_base_path = Arc::new(base_path.to_owned());
+        let canonicalized_base_path = base_path
+            .canonicalize()
+            .with_context(|| anyhow!("canonicalizing the BASE_PATH {base_path:?}"))?;
         file_paths
             .into_iter()
             .map(|file_path| {
-                let relative_path = file_path.strip_prefix(base_path).unwrap_or_else(|_| {
-                    panic!(
-                        "already checked to be in same repo directory; \
+                let canonicalized_file_path = file_path
+                    .canonicalize()
+                    .with_context(|| anyhow!("canonicalizing the file path {file_path:?}"))?;
+                let relative_path = canonicalized_file_path
+                    .strip_prefix(&canonicalized_base_path)
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "already checked to be in same repo directory; \
                          file_path = {file_path:?}, \
                          base_path = {base_path:?}"
-                    )
-                });
+                        )
+                    });
                 let barp = BaseAndRelPath::new(
                     Some(Arc::clone(&shared_base_path)),
                     relative_path.to_owned(),
