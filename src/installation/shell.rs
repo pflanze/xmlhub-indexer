@@ -14,6 +14,7 @@ use super::done::Done;
 pub enum ShellType {
     Bash,
     Csh,
+    Zsh,
 }
 
 impl ShellType {
@@ -26,6 +27,7 @@ impl ShellType {
         match shell_name.to_string_lossy().as_ref() {
             "bash" => Ok(Self::Bash),
             "csh" => Ok(Self::Csh),
+            "zsh" => Ok(Self::Zsh),
             _ => bail!("don't know shell {shell_name:?}"),
         }
     }
@@ -34,6 +36,7 @@ impl ShellType {
         match self {
             Self::Bash => ".bashrc",
             Self::Csh => ".cshenv",
+            Self::Zsh => ".zshenv",
         }
     }
 
