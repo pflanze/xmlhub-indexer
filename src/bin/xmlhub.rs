@@ -2921,9 +2921,13 @@ fn check_command(
         file_paths
             .into_iter()
             .map(|file_path| {
-                let relative_path = file_path
-                    .strip_prefix(base_path)
-                    .expect("already checked to be in same repo directory");
+                let relative_path = file_path.strip_prefix(base_path).unwrap_or_else(|_| {
+                    panic!(
+                        "already checked to be in same repo directory; \
+                         file_path = {file_path:?}, \
+                         base_path = {base_path:?}"
+                    )
+                });
                 let barp = BaseAndRelPath::new(
                     Some(Arc::clone(&shared_base_path)),
                     relative_path.to_owned(),
