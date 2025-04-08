@@ -3486,8 +3486,10 @@ fn main() -> Result<()> {
             command,
         } = Opts::parse();
 
+        // `--version`
         if v {
             println!("{REPO_NAME} {program_version}");
+            println!("Compiled for architecture: {}", std::env::consts::ARCH);
             return Ok(());
         }
 
