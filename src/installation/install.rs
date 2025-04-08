@@ -40,7 +40,7 @@ pub fn copy_to_cargo_bin_dir(path: &Path) -> Result<(Done, PathBuf)> {
 /// Copy executable from `path` to `~/.cargo/bin/`, and add the latter
 /// path to the shell startup file of the currently running shell, if
 /// not already part of the current `PATH`.
-pub fn install_file(path: &Path) -> Result<Done> {
+pub fn install_executable(path: &Path) -> Result<Done> {
     let path_canonical = path
         .canonicalize()
         .with_context(|| anyhow!("building canonical path to executable, {path:?}"))?;

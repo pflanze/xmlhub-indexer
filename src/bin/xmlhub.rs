@@ -41,6 +41,7 @@ use xmlhub_indexer::{
     get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
+    installation::install::install_executable,
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
@@ -304,6 +305,11 @@ enum Command {
     /// Show all metadata attributes and describe their possible
     /// values.
     HelpAttributes,
+    /// Install this executable so that it can be run without having
+    /// to specify the full path to it. Note: you have to start a new
+    /// shell to pick up the change in the `PATH` environment variable
+    /// setting.
+    Install(InstallOpts),
     /// Rebuild the XML Hub index, and by default commit the changed
     /// index. If you want to check your file while you edit it, use
     /// the `check` subcommand instead first.
@@ -329,6 +335,9 @@ enum Command {
     /// no errors.
     AddTo(AddToOpts),
 }
+
+#[derive(clap::Parser, Debug, Clone)]
+struct InstallOpts {}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct BuildOpts {
@@ -2700,6 +2709,23 @@ fn git_log_version_checker(
     }
 }
 
+/// Execute an `install` command
+fn install_command(global_opts: &Opts, command_opts: InstallOpts) -> Result<()> {
+    let InstallOpts {} = command_opts;
+
+    if global_opts.dry_run {
+        // XX todo?
+        bail!("--dry-run is not currently supported for `install`")
+    }
+
+    let own_path = std::env::current_exe()
+        .with_context(|| anyhow!("getting the path to the running executable"))?;
+    let done = install_executable(&own_path)?;
+    println!("Successfully installed the executable:\n\n{done}");
+
+    Ok(())
+}
+
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon). (Never returns `Ok`
 /// but exits directly in the non-`Err` case. `!` is not stable yet.)
@@ -3455,6 +3481,17 @@ fn main() -> Result<()> {
 
         match command {
             Some(command) => match command {
+                Command::Install(InstallOpts {}) => Opts {
+                    v,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::Install(InstallOpts {})),
+                },
                 Command::Build(BuildOpts {
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
@@ -3652,6 +3689,7 @@ fn main() -> Result<()> {
         .as_ref()
         .expect("`None` is dispatched above already")
     {
+        Command::Install(command_opts) => install_command(&global_opts, command_opts.clone()),
         Command::Build(command_opts) => {
             build_command(program_version, &global_opts, command_opts.clone())
         }
