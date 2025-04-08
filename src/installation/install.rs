@@ -28,13 +28,15 @@ pub fn copy_file(source_path: &Path, target_path: &Path) -> Result<Done> {
     Ok(format!("copied file from {source_path:?} to {target_path:?}").into())
 }
 
+/// Returns the path to the bin dir
 pub fn copy_to_cargo_bin_dir(path: &Path) -> Result<(Done, PathBuf)> {
     let file_name = path
         .file_name()
         .ok_or_else(|| anyhow!("missing file name in path {path:?}"))?;
-    let target_path = cargo_bin_dir()?.append(file_name);
+    let cargo_bin_dir = cargo_bin_dir()?;
+    let target_path = (&cargo_bin_dir).append(file_name);
     let done = copy_file(path, &target_path)?;
-    Ok((done, target_path))
+    Ok((done, cargo_bin_dir))
 }
 
 /// Copy executable from `path` to `~/.cargo/bin/`, and add the latter
