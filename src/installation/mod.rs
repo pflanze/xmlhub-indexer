@@ -1,9 +1,13 @@
 pub mod app_info;
 pub mod app_signature;
+pub mod binaries_repo;
+pub mod defaults;
 pub mod done;
+pub mod git_based_upgrade;
 pub mod install;
 pub mod json_file;
 pub mod private_file;
 pub mod serde_json_util;
 pub mod shell;
+pub mod trusted_keys;
 pub mod util;

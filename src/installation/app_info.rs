@@ -82,10 +82,20 @@ impl AppInfo {
         Ok(path)
     }
 
-    /// Load the info file for the given app executable file
-    pub fn load_for_app_path<P: AsRef<Path>>(executable_path: P) -> Result<Self> {
+    /// Load the info file for the given app executable file. Also
+    /// returns the path to the info file and the bytes of the content since the info file is likely
+    /// to be verified with a signature. (XX: change API to only give
+    /// the info file if the signature is valid?)
+    pub fn load_for_app_path<P: AsRef<Path>>(
+        executable_path: P,
+    ) -> Result<(Self, PathBuf, Vec<u8>)> {
         let info_path = Self::info_path_for_app_path(executable_path)?;
-        Self::load(&info_path).with_context(|| anyhow!("loading from path {info_path:?}"))
+        let content = std::fs::read(&info_path)
+            .with_context(|| anyhow!("reading app info file {info_path:?}"))?;
+        let content_bytes: &[u8] = &content;
+        let slf = Self::from_reader(content_bytes)
+            .with_context(|| anyhow!("loading from path {info_path:?}"))?;
+        Ok((slf, info_path, content))
     }
 
     /// Save the info file for the given app executable file

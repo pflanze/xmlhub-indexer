@@ -1,3 +1,5 @@
+//! `xmlhub_indexer_defaults` was supposed to be xmlhub specific but
+//! is also covering application upgrades now. (TODO: clean up)
 use crate::checkout_context::CheckoutContext;
 
 /// The relative path from `SOURCE_CHECKOUT.working_dir_path` to the

@@ -15,6 +15,7 @@ use xmlhub_indexer::{
     installation::app_info::AppInfo,
     installation::{
         app_signature::{AppSignaturePrivateKey, SaveLoadKeyFile},
+        binaries_repo::BinariesRepoSection,
         json_file::JsonFile,
         util::{get_creator, get_timestamp},
     },
@@ -602,12 +603,11 @@ fn main() -> Result<()> {
                 None
             };
 
-            let in_dir = |dir_segments: &[&str]| {
-                let mut binary_target_path = PathBuf::from(binaries_checkout.working_dir_path());
-                for segment in dir_segments {
-                    binary_target_path.push(segment)
-                }
-                binary_target_path.push(file_name(XMLHUB_INDEXER_BINARY_FILE));
+            if let Ok(repo_section) = BinariesRepoSection::from_local_os_and_arch() {
+                let binary_target_path = binaries_checkout
+                    .working_dir_path()
+                    .append(repo_section.installation_subpath())
+                    .append(file_name(XMLHUB_INDEXER_BINARY_FILE));
 
                 let partial_commit_message = format!(
                     "Version {new_version_tag_string}\n\
@@ -639,14 +639,11 @@ fn main() -> Result<()> {
                     os_version,
                     app_signature_private_key: (&app_signature_private_key).into(),
                 })
-            };
-            match std::env::consts::OS {
-                "macos" => in_dir(&["macOS", std::env::consts::ARCH]),
-                "linux" => in_dir(&["linux", std::env::consts::ARCH]),
-                _ => NoOp::providing(
+            } else {
+                NoOp::providing(
                     Done,
                     "binaries are only published on macOS and Linux".into(),
-                ),
+                )
             }
         };
 

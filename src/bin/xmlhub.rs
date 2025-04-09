@@ -41,7 +41,7 @@ use xmlhub_indexer::{
     get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
-    installation::install::install_executable,
+    installation::{git_based_upgrade::git_based_upgrade, install::install_executable},
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
@@ -310,6 +310,9 @@ enum Command {
     /// shell to pick up the change in the `PATH` environment variable
     /// setting.
     Install(InstallOpts),
+    /// Upgrade this executable to the newest binary available from
+    /// the `xmlhub-indexer-binaries` repository.
+    Upgrade(UpgradeOpts),
     /// Rebuild the XML Hub index, and by default commit the changed
     /// index. If you want to check your file while you edit it, use
     /// the `check` subcommand instead first.
@@ -338,6 +341,9 @@ enum Command {
 
 #[derive(clap::Parser, Debug, Clone)]
 struct InstallOpts {}
+
+#[derive(clap::Parser, Debug, Clone)]
+struct UpgradeOpts {}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct BuildOpts {
@@ -2717,11 +2723,36 @@ fn install_command(global_opts: &Opts, command_opts: InstallOpts) -> Result<()> 
         // XX todo?
         bail!("--dry-run is not currently supported for `install`")
     }
+    if global_opts.verbose {
+        // XX todo?
+        bail!("--verbose is not currently supported for `install`")
+    }
 
     let own_path = std::env::current_exe()
         .with_context(|| anyhow!("getting the path to the running executable"))?;
     let done = install_executable(&own_path)?;
     println!("Successfully installed the executable:\n\n{done}");
+
+    Ok(())
+}
+
+/// Execute an `upgrade` command
+fn upgrade_command(global_opts: &Opts, command_opts: UpgradeOpts) -> Result<()> {
+    let UpgradeOpts {} = command_opts;
+
+    if global_opts.dry_run {
+        // XX todo?
+        bail!("--dry-run is not currently supported for `upgrade`")
+    }
+    if global_opts.verbose {
+        // XX todo?
+        bail!("--verbose is not currently supported for `upgrade`")
+    }
+
+    // XX change to use Done approach? It only does so partially
+    // now. (Is it better or worse to not print steps that were
+    // already successful?)
+    git_based_upgrade()?;
 
     Ok(())
 }
@@ -3512,6 +3543,17 @@ fn main() -> Result<()> {
                     no_version_check,
                     command: Some(Command::Install(InstallOpts {})),
                 },
+                Command::Upgrade(UpgradeOpts {}) => Opts {
+                    v,
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                    command: Some(Command::Upgrade(UpgradeOpts {})),
+                },
                 Command::Build(BuildOpts {
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
@@ -3710,6 +3752,7 @@ fn main() -> Result<()> {
         .expect("`None` is dispatched above already")
     {
         Command::Install(command_opts) => install_command(&global_opts, command_opts.clone()),
+        Command::Upgrade(command_opts) => upgrade_command(&global_opts, command_opts.clone()),
         Command::Build(command_opts) => {
             build_command(program_version, &global_opts, command_opts.clone())
         }
