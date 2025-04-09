@@ -510,6 +510,11 @@ struct CloneToOpts {
     #[clap(long)]
     no_verbose: bool,
 
+    /// Do not use the official XML Hub repository, but instead one
+    /// for experimenting with
+    #[clap(long)]
+    experiment: bool,
+
     /// The desired path to the future base directory of the Git
     /// checkout of the XML Hub, i.e. the directory and subdirectory
     /// name where the xmlhub repository should be cloned to. The
@@ -3042,6 +3047,7 @@ fn clone_to_command(
     let CloneToOpts {
         no_verbose,
         base_path,
+        experiment,
     } = command_opts;
 
     let base_path = base_path
@@ -3068,7 +3074,15 @@ fn clone_to_command(
         }
     }
 
-    let checkout = XMLHUB_CHECKOUT.replace_working_dir_path(base_path);
+    let mut checkout = XMLHUB_CHECKOUT.replace_working_dir_path(base_path);
+    if experiment {
+        checkout.supposed_upstream_git_url =
+            "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git";
+        // unused (XXX is there really no other place that needs the
+        // override, when working with an already-cloned repository?)
+        checkout.supposed_upstream_web_url =
+            "https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments";
+    }
 
     if base_path.is_dir() && base_path.append(".git").is_dir() {
         eprintln!("git checkout at {base_path:?} already exists, just configuring it");
@@ -3642,6 +3656,7 @@ fn main() -> Result<()> {
                 Command::CloneTo(CloneToOpts {
                     no_verbose,
                     base_path,
+                    experiment,
                 }) => Opts {
                     v,
                     verbose,
@@ -3654,6 +3669,7 @@ fn main() -> Result<()> {
                     command: Some(Command::CloneTo(CloneToOpts {
                         no_verbose,
                         base_path,
+                        experiment,
                     })),
                 },
                 Command::Prepare(PrepareOpts {
