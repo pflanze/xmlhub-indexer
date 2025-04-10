@@ -216,3 +216,12 @@ fn t_format_anchor_name() {
         "Format_a_string_so_that_it_can_be_safely_used_as_an_anchor_n"
     );
 }
+
+// unused?
+pub fn bool_to_yes_no(val: bool) -> &'static str {
+    if val {
+        "yes"
+    } else {
+        "no"
+    }
+}

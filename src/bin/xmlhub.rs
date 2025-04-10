@@ -50,6 +50,7 @@ use xmlhub_indexer::{
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
+    xmlhub_autolink::{doi_autolink, Autolink},
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
@@ -703,11 +704,7 @@ struct AttributeSpecification {
     desc: &'static str,
     need: AttributeNeed,
     kind: AttributeKind,
-    /// Whether to automatically find http and https URLs in the
-    /// text and create links with them (i.e. the string `"See
-    /// https://example.com."` is turned into the HTML code `See
-    /// <a href="https://example.com">https://example.com</a>.`)
-    autolink: bool,
+    autolink: Autolink,
     indexing: AttributeIndexing,
 }
 
@@ -745,18 +742,10 @@ impl AttributeSpecification {
                     })?,
                 )?,
                 html.td([], kind.to_html(html)?)?,
-                html.td([], html.text(bool_to_yes_no(*autolink))?)?,
+                html.td([], html.text(autolink.to_text())?)?,
                 html.td([], indexing.to_html(kind.is_list(), html)?)?,
             ],
         )
-    }
-}
-
-fn bool_to_yes_no(val: bool) -> &'static str {
-    if val {
-        "yes"
-    } else {
-        "no"
     }
 }
 
@@ -778,7 +767,7 @@ impl Display for AttributeSpecification {
         f.write_fmt(format_args!("    kind: {kind:?}\n"))?;
         f.write_fmt(format_args!(
             "    autolink: {}\n",
-            bool_to_yes_no(*autolink)
+            autolink.to_text() // XX too long?
         ))?;
         f.write_fmt(format_args!("    indexing: {indexing:?}\n"))?;
         Ok(())
@@ -813,7 +802,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::StringList {
                 input_separator: ",",
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: true,
@@ -826,7 +815,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -839,7 +828,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::StringList {
                 input_separator: ",",
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: true,
                 use_lowercase: false,
@@ -852,7 +841,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -862,7 +851,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -873,7 +862,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
@@ -883,7 +872,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::StringList {
                 input_separator: ",",
             },
-            autolink: false,
+            autolink: Autolink::Doi,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -896,7 +885,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -909,7 +898,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             kind: AttributeKind::String {
                 normalize_whitespace: false,
             },
-            autolink: true,
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
@@ -1060,7 +1049,11 @@ impl AttributeValue {
             AttributeValueKind::String(value) => {
                 let softpre = SoftPre {
                     tabs_to_nbsp: Some(8),
-                    autolink: spec.autolink,
+                    autolink: match spec.autolink {
+                        Autolink::None => false,
+                        Autolink::Web => true,
+                        Autolink::Doi => false,
+                    },
                     input_line_separator: "\n",
                 };
                 let body = softpre.format(value, html)?.to_aslice(html)?;
@@ -1076,10 +1069,10 @@ impl AttributeValue {
                     need_comma = true;
                     // Do not do SoftPre for string list items, but only
                     // autolink (if requested). Then wrap in <q></q>.
-                    let text_marked_up = if spec.autolink {
-                        ahtml::util::autolink(html, text)?
-                    } else {
-                        html.text_slice(text)?
+                    let text_marked_up = match spec.autolink {
+                        Autolink::None => html.text_slice(text)?,
+                        Autolink::Web => ahtml::util::autolink(html, text)?,
+                        Autolink::Doi => doi_autolink(text, html)?,
                     };
                     body.push(html.q([], possibly_link(text, text_marked_up)?)?)?;
                 }
