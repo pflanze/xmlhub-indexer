@@ -26,6 +26,15 @@ impl Autolink {
             Autolink::Doi => "link DOI identifiers",
         }
     }
+
+    /// Do not use `SoftPre`, only do the autolinking.
+    pub fn format_html(self, text: &str, html: &HtmlAllocator) -> Result<ASlice<Node>> {
+        match self {
+            Autolink::None => html.text_slice(text),
+            Autolink::Web => ahtml::util::autolink(html, text),
+            Autolink::Doi => doi_autolink(text, html),
+        }
+    }
 }
 
 fn first_char_byte_count(s: &str) -> usize {

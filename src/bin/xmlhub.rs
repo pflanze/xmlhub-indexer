@@ -50,7 +50,7 @@ use xmlhub_indexer::{
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
-    xmlhub_autolink::{doi_autolink, Autolink},
+    xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
@@ -1052,6 +1052,8 @@ impl AttributeValue {
                     autolink: match spec.autolink {
                         Autolink::None => false,
                         Autolink::Web => true,
+                        // XX never need to link DOI values in full
+                        // text, do we? Currently silently ignored!
                         Autolink::Doi => false,
                     },
                     input_line_separator: "\n",
@@ -1069,11 +1071,7 @@ impl AttributeValue {
                     need_comma = true;
                     // Do not do SoftPre for string list items, but only
                     // autolink (if requested). Then wrap in <q></q>.
-                    let text_marked_up = match spec.autolink {
-                        Autolink::None => html.text_slice(text)?,
-                        Autolink::Web => ahtml::util::autolink(html, text)?,
-                        Autolink::Doi => doi_autolink(text, html)?,
-                    };
+                    let text_marked_up = spec.autolink.format_html(text, html)?;
                     body.push(html.q([], possibly_link(text, text_marked_up)?)?)?;
                 }
                 html.div([], body)
@@ -1727,6 +1725,7 @@ impl KeyStringPreparation {
 fn build_index_section(
     attribute_key: AttributeName,
     key_string_normalization: KeyStringPreparation,
+    autolink: Autolink,
     file_infos: &[FileInfo],
 ) -> Result<Section> {
     // Build an index by the value for attribute_key (lower-casing the
@@ -1774,7 +1773,7 @@ fn build_index_section(
                         [],
                         html.a(
                             [att("name", &anchor_name), att("id", &anchor_name)],
-                            html.text(key_string)?,
+                            autolink.format_html(key_string, &*html)?,
                         )?,
                     )?,
                 )?,
@@ -2228,7 +2227,7 @@ fn build_index(
                     // `None`, which is dropped by `filter_map`.
                     spec.indexing
                         .key_string_preparation()
-                        .map(|prep| build_index_section(spec.key, prep, &file_infos))
+                        .map(|prep| build_index_section(spec.key, prep, spec.autolink, &file_infos))
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Section {
