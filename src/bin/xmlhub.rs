@@ -51,14 +51,16 @@ use xmlhub_indexer::{
     util::{append, list_get_by_key, InsertValue},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_check_version::XmlhubCheckVersion,
-    xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
+    xmlhub_clone_to::{clone_to_command, CloneToOpts},
+    xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
+    xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
     xmlhub_types::OutputFile,
 };
 
 // -------------------------------------------------------------------------
 // Various settings in addition to those imported from
 // `xmlhub_indexer_defaults` (see `xmlhub_indexer_defaults.rs` to edit
-// those!).
+// those!) and `src/xmlhub_global_opts.rs`.
 
 /// Comment added to XML files when blinding `<data>` XML elements
 const DEFAULT_COMMENT_FOR_BLINDED_DATA: &str =
@@ -82,17 +84,6 @@ const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
 
 /// Max number of log files before they are deleted.
 const MAX_LOG_FILES_DEFAULT: usize = 100;
-
-/// The index file in HTML format (the one viewed when using `--open`
-/// locally).
-const HTML_FILE: OutputFile = OutputFile {
-    path_from_repo_top: "README.html",
-};
-
-/// The index file in markdown format (the one viewed on GitLab).
-const MD_FILE: OutputFile = OutputFile {
-    path_from_repo_top: "README.md",
-};
 
 /// The file describing the attributes (for contributors).
 const ATTRIBUTES_FILE: OutputFile = OutputFile {
@@ -122,9 +113,6 @@ fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
 
 // -------------------------------------------------------------------------
 // Derived values:
-
-/// The name of the command line program.
-const PROGRAM_NAME: &str = file_name(XMLHUB_INDEXER_BINARY_FILE);
 
 /// The name of the program in the abstract (repository name).
 const REPO_NAME: &str = file_name(SOURCE_CHECKOUT.supposed_upstream_web_url);
@@ -246,49 +234,8 @@ struct Opts {
     #[clap(long = "version")]
     v: bool,
 
-    /// Show external modifying commands that are run. Note that this
-    /// does not disable `--quiet`.
-    #[clap(short, long)]
-    verbose: bool,
-
-    /// Suppress some unimportant output; useful with `--daemon` to
-    /// reduce the amount of log space required. Note that this does
-    /// not disable `--verbose`.
-    #[clap(short, long)]
-    quiet: bool,
-
-    /// When running in `--daemon start` mode, for the log messages,
-    /// use time stamps in the local time zone. The default is to use
-    /// UTC.
-    #[clap(long)]
-    localtime: bool,
-
-    /// When running in `--daemon start` mode, the maximum size of a
-    /// log file in bytes before the current file is renamed and a new
-    /// one is created instead. Default: 1000000.
-    #[clap(long)]
-    max_log_file_size: Option<u64>,
-
-    /// When running in `--daemon start` mode, the number of numbered
-    /// log files before the oldest files are automatically
-    /// deleted. Careful: will delete as many files as needed to get
-    /// their count down to the given number (if you give 0 it will
-    /// delete them all.) Default: 100.
-    #[clap(long)]
-    max_log_files: Option<usize>,
-
-    /// Do not run external processes like git or browsers,
-    /// i.e. ignore all the options asking to do so. Instead just say
-    /// on stderr what would be done. Still writes to the output
-    /// files, though.
-    #[clap(long)]
-    dry_run: bool,
-
-    /// Do not check the program version against versions specified in
-    /// the automatic commit messages in the xmlhub repo. Only use if
-    /// you know what you're doing.
-    #[clap(long)]
-    no_version_check: bool,
+    #[clap(flatten)]
+    global: GlobalOpts,
 
     /// The subcommand to run. Use `--help` after the sub-command to
     /// get a list of the allowed options there.
@@ -501,26 +448,6 @@ struct CheckOpts {
     /// (but never commit it), so that you can see the effect of your
     /// file).
     file_paths: Vec<PathBuf>,
-}
-
-#[derive(clap::Parser, Debug, Clone)]
-struct CloneToOpts {
-    /// Do not show the Git commands that are run (by default, they
-    /// are shown even if the global `--verbose` option was not given)
-    #[clap(long)]
-    no_verbose: bool,
-
-    /// Do not use the official XML Hub repository, but instead one
-    /// for experimenting with
-    #[clap(long)]
-    experiment: bool,
-
-    /// The desired path to the future base directory of the Git
-    /// checkout of the XML Hub, i.e. the directory and subdirectory
-    /// name where the xmlhub repository should be cloned to. The
-    /// parent directory of the given path must exist, the
-    /// subdirectory must not exist before running the command.
-    base_path: Option<PathBuf>,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2064,15 +1991,6 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
     )
 }
 
-// Helpers for the varous check_dry_run macros. Do not actually use
-// `eprintln!` since that can panic.
-fn eprintln_dry_run(s: String) {
-    _ = writeln!(&mut stderr(), "+ --dry-run: would run: {s}");
-}
-fn eprintln_running(s: String) {
-    _ = writeln!(&mut stderr(), "+ running: {s}");
-}
-
 /// Map each file to the info extracted from it (or `FileErrors`
 /// when there were errors), including path and an id, held in a
 /// `FileInfo` struct. Generate the ids on the go for each of them
@@ -2127,7 +2045,7 @@ struct BuildIndexOpts {
 /// Run one conversion from the XML files to the index files. Returns
 /// the exit code to exit the program with.
 fn build_index(
-    global_opts: &Opts,
+    global_opts: &GlobalOpts,
     build_index_opts: BuildIndexOpts,
     base_path: &Path,
     git_log_version_checker: &XmlhubCheckVersion,
@@ -2155,10 +2073,10 @@ fn build_index(
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
             if global_opts.dry_run {
-                eprintln_dry_run(s());
+                xmlhub_indexer::dry_run::eprintln_dry_run(s());
             } else {
                 if global_opts.verbose {
-                    eprintln_running(s());
+                    xmlhub_indexer::dry_run::eprintln_running(s());
                 }
                 $body;
             }
@@ -2705,23 +2623,8 @@ fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
     }
 }
 
-fn git_log_version_checker(
-    program_version: GitVersion<SemVersion>,
-    no_version_check: bool,
-    base_path: &Path,
-) -> XmlhubCheckVersion {
-    XmlhubCheckVersion {
-        program_name: PROGRAM_NAME,
-        program_version: program_version.into(),
-        no_version_check,
-        base_path: base_path.into(),
-        html_file: (&HTML_FILE).into(),
-        md_file: (&MD_FILE).into(),
-    }
-}
-
 /// Execute an `install` command
-fn install_command(global_opts: &Opts, command_opts: InstallOpts) -> Result<()> {
+fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> Result<()> {
     let InstallOpts {} = command_opts;
 
     if global_opts.dry_run {
@@ -2742,7 +2645,7 @@ fn install_command(global_opts: &Opts, command_opts: InstallOpts) -> Result<()> 
 }
 
 /// Execute an `upgrade` command
-fn upgrade_command(global_opts: &Opts, command_opts: UpgradeOpts) -> Result<()> {
+fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Result<()> {
     let UpgradeOpts {} = command_opts;
 
     if global_opts.dry_run {
@@ -2767,7 +2670,7 @@ fn upgrade_command(global_opts: &Opts, command_opts: UpgradeOpts) -> Result<()> 
 /// but exits directly in the non-`Err` case. `!` is not stable yet.)
 fn build_command(
     program_version: GitVersion<SemVersion>,
-    global_opts: &Opts,
+    global_opts: &GlobalOpts,
     build_opts: BuildOpts,
 ) -> Result<()> {
     let BuildOpts {
@@ -2907,7 +2810,7 @@ fn build_command(
 /// directly in the non-`Err` case. `!` is not stable yet.)
 fn check_command(
     program_version: GitVersion<SemVersion>,
-    global_opts: &Opts,
+    global_opts: &GlobalOpts,
     check_opts: CheckOpts,
 ) -> Result<()> {
     let CheckOpts {
@@ -3036,105 +2939,6 @@ fn check_command(
         }
     }
     std::process::exit(exit_code);
-}
-
-/// Execute a `clone-to` command.
-fn clone_to_command(
-    program_version: GitVersion<SemVersion>,
-    global_opts: &Opts,
-    command_opts: CloneToOpts,
-) -> Result<()> {
-    let CloneToOpts {
-        no_verbose,
-        base_path,
-        experiment,
-    } = command_opts;
-
-    let base_path = base_path
-        .as_ref()
-        .ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
-
-    let git_log_version_checker =
-        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
-
-    // Define a macro to only run $body if opts.dry_run is false,
-    // otherwise show $message instead, or show $message anyway if
-    // command_opts.no_verbose is false.
-    macro_rules! check_dry_run {
-        { message: $message:expr, $body:expr } => {
-            let s = || -> String { $message.into() };
-            if global_opts.dry_run {
-                eprintln_dry_run(s());
-            } else {
-                if ! no_verbose {
-                    eprintln_running(s());
-                }
-                $body;
-            }
-        }
-    }
-
-    let mut checkout = XMLHUB_CHECKOUT.replace_working_dir_path(base_path);
-    if experiment {
-        checkout.supposed_upstream_git_url =
-            "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git";
-        // unused (XXX is there really no other place that needs the
-        // override, when working with an already-cloned repository?)
-        checkout.supposed_upstream_web_url =
-            "https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments";
-    }
-
-    if base_path.is_dir() && base_path.append(".git").is_dir() {
-        eprintln!("git checkout at {base_path:?} already exists, just configuring it");
-    } else {
-        let parent_dir = base_path
-            .parent()
-            .ok_or_else(
-                // This only happens for the path "".
-                || anyhow!("the given path {base_path:?} has no parent directory"),
-            )?
-            .fixup();
-
-        let url = checkout.supposed_upstream_git_url;
-
-        let subfolder_name = base_path.file_name().ok_or_else(|| {
-            anyhow!("the given path {base_path:?} is missing the subdirectory name")
-        })?;
-
-        check_dry_run! {
-            message: format!("cd {:?} && git clone {:?} {:?}",
-                             parent_dir,
-                             url,
-                             subfolder_name),
-            git(
-                &parent_dir,
-                &[ OsString::from("clone"), OsString::from(url), subfolder_name.into() ],
-                false
-            )?
-        }
-
-        if !global_opts.dry_run {
-            // Do not check subpaths here, as the `clone-to`
-            // subcommand knows the correct repository to clone from,
-            // if that doesn't contain the expected files, so be it,
-            // don't give an error.
-            checkout.check1(CheckExpectedSubpathsExist::No)?;
-        }
-    }
-
-    check_dry_run! {
-        message: format!("cd {:?} && git config pull.rebase false", base_path),
-        git(
-            base_path,
-            &[ "config", "pull.rebase", "false" ],
-            false
-        )?
-    }
-
-    // Check that we are up to dealing with this repository, OK?
-    git_log_version_checker.check_git_log()?;
-
-    Ok(())
 }
 
 struct PreparedFile {
@@ -3273,7 +3077,7 @@ fn overwrite_file_moving_to_trash_if_exists(
 }
 
 /// Execute a `prepare` command.
-fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> {
+fn prepare_command(global_opts: &GlobalOpts, command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
         files_to_prepare,
         no_blind,
@@ -3322,7 +3126,7 @@ fn prepare_command(global_opts: &Opts, command_opts: PrepareOpts) -> Result<()> 
 /// Execute an `add-to` command.
 fn add_to_command(
     program_version: GitVersion<SemVersion>,
-    global_opts: &Opts,
+    global_opts: &GlobalOpts,
     command_opts: AddToOpts,
 ) -> Result<()> {
     let AddToOpts {
@@ -3513,7 +3317,7 @@ fn main() -> Result<()> {
 
     // Retrieve the command line options / arguments, and fix
     // those that are overridden by others.
-    let global_opts = {
+    let opts = {
         // Create an `Opts` from program arguments then deconstruct it
         // immediately, binding the values in the fields to same-named
         // variables, except where followed by `:`, in which case
@@ -3521,13 +3325,16 @@ fn main() -> Result<()> {
         // to the field name.
         let Opts {
             v,
-            verbose,
-            dry_run,
-            no_version_check,
-            quiet,
-            localtime,
-            max_log_file_size,
-            max_log_files,
+            global:
+                GlobalOpts {
+                    verbose,
+                    quiet,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
+                    dry_run,
+                    no_version_check,
+                },
             command,
         } = Opts::parse();
 
@@ -3548,24 +3355,28 @@ fn main() -> Result<()> {
             Some(command) => match command {
                 Command::Install(InstallOpts {}) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::Install(InstallOpts {})),
                 },
                 Command::Upgrade(UpgradeOpts {}) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::Upgrade(UpgradeOpts {})),
                 },
                 Command::Build(BuildOpts {
@@ -3626,13 +3437,15 @@ fn main() -> Result<()> {
                     // Pack the variables into a new struct
                     Opts {
                         v,
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
+                        global: GlobalOpts {
+                            verbose,
+                            quiet,
+                            localtime,
+                            max_log_file_size,
+                            max_log_files,
+                            dry_run,
+                            no_version_check,
+                        },
                         command: Some(Command::Build(BuildOpts {
                             write_errors,
                             no_commit_errors,
@@ -3655,20 +3468,22 @@ fn main() -> Result<()> {
                 }
                 Command::CloneTo(CloneToOpts {
                     no_verbose,
-                    base_path,
+                    target_path: base_path,
                     experiment,
                 }) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::CloneTo(CloneToOpts {
                         no_verbose,
-                        base_path,
+                        target_path: base_path,
                         experiment,
                     })),
                 },
@@ -3679,13 +3494,15 @@ fn main() -> Result<()> {
                     ignore_version,
                 }) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::Prepare(PrepareOpts {
                         files_to_prepare,
                         no_blind,
@@ -3704,13 +3521,15 @@ fn main() -> Result<()> {
                     ignore_version,
                 }) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::AddTo(AddToOpts {
                         target_directory,
                         files_to_add,
@@ -3724,13 +3543,15 @@ fn main() -> Result<()> {
                 },
                 Command::HelpContributing | Command::HelpAttributes => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(command),
                 },
                 Command::Check(CheckOpts {
@@ -3740,13 +3561,15 @@ fn main() -> Result<()> {
                     no_repo_check,
                 }) => Opts {
                     v,
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
                     command: Some(Command::Check(CheckOpts {
                         file_paths,
                         open,
@@ -3762,29 +3585,29 @@ fn main() -> Result<()> {
     };
 
     // Run the requested command
-    match global_opts
+    match opts
         .command
         .as_ref()
         .expect("`None` is dispatched above already")
     {
-        Command::Install(command_opts) => install_command(&global_opts, command_opts.clone()),
-        Command::Upgrade(command_opts) => upgrade_command(&global_opts, command_opts.clone()),
+        Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
+        Command::Upgrade(command_opts) => upgrade_command(&opts.global, command_opts.clone()),
         Command::Build(command_opts) => {
-            build_command(program_version, &global_opts, command_opts.clone())
+            build_command(program_version, &opts.global, command_opts.clone())
         }
         Command::Check(command_opts) => {
-            check_command(program_version, &global_opts, command_opts.clone())
+            check_command(program_version, &opts.global, command_opts.clone())
         }
         Command::CloneTo(command_opts) => {
-            clone_to_command(program_version, &global_opts, command_opts.clone())
+            clone_to_command(program_version, &opts.global, command_opts.clone())
         }
         Command::Prepare(command_opts) => {
             // `prepare` can't check `program_version` as it is not
             // given the path to the repository
-            prepare_command(&global_opts, command_opts.clone())
+            prepare_command(&opts.global, command_opts.clone())
         }
         Command::AddTo(command_opts) => {
-            add_to_command(program_version, &global_opts, command_opts.clone())
+            add_to_command(program_version, &opts.global, command_opts.clone())
         }
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes => help_attributes_command(),

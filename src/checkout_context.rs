@@ -12,6 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use nix::NixPath;
 
 use crate::{
+    const_util::file_name,
     git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
     path_util::{AppendToPath, FixupPath},
 };
@@ -26,10 +27,12 @@ pub struct CheckoutContext<'s, P: AsRef<Path>> {
     /// expected to be the same in the local checkout
     pub branch_name: &'s str,
     /// Where the upstream repository should be, for `git clone` (and
-    /// push) purposes. Currently only used for error message.
+    /// push) purposes.
     pub supposed_upstream_git_url: &'s str,
     /// Where the upstream repository should be, for visiting by web
-    /// browser. Ditto.
+    /// browser. Note that for `supposed_upstream_repo_name()` to
+    /// work, this must end in the repository name without a slash at
+    /// the end.
     pub supposed_upstream_web_url: &'s str,
     /// Check these sub-paths in a repository when
     /// `CheckExpectedSubpathsExist::Yes` is given to `check1`
@@ -46,7 +49,7 @@ pub enum CheckExpectedSubpathsExist {
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
     /// Does not check `path`. Call `check1` later if you like.
-    pub fn replace_working_dir_path<'p, P2>(&'s self, path: P2) -> CheckoutContext<'p, P2>
+    pub fn replace_working_dir_path<'t, 'p, P2>(&'t self, path: P2) -> CheckoutContext<'s, P2>
     where
         's: 'p,
         P: Clone,
@@ -70,6 +73,13 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             supposed_upstream_web_url,
             expected_sub_paths,
         }
+    }
+
+    /// The name of a repository in upstream (i.e. what `git clone
+    /// $url` chooses as the local directory name for the clone);
+    /// relies on the web url ending with that name.
+    pub fn supposed_upstream_repo_name(&self) -> &'s str {
+        file_name(&self.supposed_upstream_web_url)
     }
 
     /// Accepts any subpath inside this repository and finds the
@@ -143,7 +153,9 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
         self.working_dir_path.as_ref()
     }
 
-    /// Checks that the working dir exists. For further checks, see
+    /// Checks that the working dir exists (and has a .git subdir),
+    /// and if requested via `subpath_check`, checks for the expected
+    /// sub-paths. For further checks, see
     /// `CheckedCheckoutContext1::check2`.
     pub fn check1(
         self,
