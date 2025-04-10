@@ -1366,6 +1366,7 @@ dependencies = [
  "debug-ignore",
  "fips205",
  "itertools 0.11.0",
+ "kstring",
  "lazy_static",
  "nix",
  "num_threads",
