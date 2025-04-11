@@ -13,8 +13,8 @@ use std::{
 
 // Use from external dependencies
 use ahtml::{
-    att, flat::Flat, util::SoftPre, AId, ASlice, HtmlAllocator, HtmlAllocatorPool, Node, Print,
-    SerHtmlFrag, ToASlice,
+    att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, HtmlAllocatorPool, Node,
+    Print, SerHtmlFrag,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
@@ -111,6 +111,10 @@ fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
         [],
     )
 }
+
+/// Used afer a value for linking back to the index entry (similar to
+/// linking back from a footnote)
+const BACK_TO_INDEX_SYMBOL: &str = "↑";
 
 // -------------------------------------------------------------------------
 // Derived values:
@@ -1025,23 +1029,32 @@ impl AttributeValue {
     /// both .html and .md files. An `ASlice<Node>` is a list of
     /// elements (nodes), directly usable as the body (child elements)
     /// for another element.
-    fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
+    fn to_html(&self, html: &HtmlAllocator) -> Result<Flat<Node>> {
         let AttributeValue { spec, value } = self;
-        // Make a function `possibly_link` that takes the raw
-        // `key_value` string and the prepared value and wraps the
-        // latter with a link to the index for `spec`key`, to the
-        // entry for `key_value`, if the spec says it is indexed
-        // (otherwise just wrap the body in a `<div>` element).
-        let possibly_link = {
+        // Make a function `possibly_link_back` that takes the raw
+        // `key_value` string and the prepared value and adds a link
+        // to the index for `spec`key`, to the entry for `key_value`,
+        // if the spec says it is indexed.
+        let possibly_link_back = {
             let key_string_preparation = spec.indexing.key_string_preparation();
-            move |key_value, body| {
+            move |key_value, body: Flat<Node>| -> Result<Flat<Node>> {
                 if let Some(key_string_preparation) = &key_string_preparation {
                     let anchor_name = spec
                         .key
                         .anchor_name(&key_string_preparation.prepare_key_string(key_value));
-                    html.a([att("href", format!("#{anchor_name}"))], body)
+                    let mut vec = html.new_vec();
+                    vec.push_flat(body)?;
+                    // vec.push(html.nbsp()?)?;
+                    vec.push(html.a(
+                        [
+                            att("href", format!("#{anchor_name}")),
+                            att("title", "jump to index entry"),
+                        ],
+                        html.text(BACK_TO_INDEX_SYMBOL)?,
+                    )?)?;
+                    Ok(Flat::Slice(vec.as_slice()))
                 } else {
-                    html.div([], body)
+                    Ok(body)
                 }
             }
         };
@@ -1058,8 +1071,18 @@ impl AttributeValue {
                     },
                     input_line_separator: "\n",
                 };
-                let body = softpre.format(value, html)?.to_aslice(html)?;
-                possibly_link(value, body)
+                let body = softpre.format(value.trim(), html)?;
+                let body_node: &Node = html.get_node(body).expect("just allocated");
+                let body_element: &Element =
+                    body_node.as_element().expect("softpre returns an element");
+                // XX softpre must allow to omit the ending <br>! Hack:
+                let full_body: ASlice<Node> = body_element.body;
+                let (keep, _br) = full_body
+                    .split_at(full_body.len() - 1)
+                    .expect("always getting at least 1 br");
+                let linked_slice = possibly_link_back(value, Flat::Slice(keep))?;
+                html.element(body_element.meta, body_element.attr, linked_slice)
+                    .map(Flat::One)
             }
             AttributeValueKind::StringList(value) => {
                 let mut body = html.new_vec();
@@ -1071,12 +1094,12 @@ impl AttributeValue {
                     need_comma = true;
                     // Do not do SoftPre for string list items, but only
                     // autolink (if requested). Then wrap in <q></q>.
-                    let text_marked_up = spec.autolink.format_html(text, html)?;
-                    body.push(html.q([], possibly_link(text, text_marked_up)?)?)?;
+                    let text_marked_up = html.q([], spec.autolink.format_html(text, html)?)?;
+                    body.push_flat(possibly_link_back(text, Flat::One(text_marked_up))?)?;
                 }
-                html.div([], body)
+                Ok(Flat::Slice(body.as_slice()))
             }
-            AttributeValueKind::NA => html.i([], html.text("n.A.")?),
+            AttributeValueKind::NA => html.i([], html.text("n.A.")?).map(Flat::One),
         }
     }
 }
@@ -1117,13 +1140,13 @@ impl Metadata {
     fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
         let mut table_body = html.new_vec();
         for (attribute_name, opt_attval) in self.sorted_entries() {
-            let attval_html = if let Some(attval) = opt_attval {
+            let attval_html: Flat<Node> = if let Some(attval) = opt_attval {
                 attval.to_html(html)?
             } else {
                 // Entry is missing in the file; show that fact.
                 // (Also report that top-level as a warning? That
                 // would be a bit ugly to implement.)
-                html.i(
+                Flat::One(html.i(
                     [
                         att("style", "color: red;"),
                         att(
@@ -1135,7 +1158,7 @@ impl Metadata {
                         ),
                     ],
                     html.text("entry missing")?,
-                )?
+                )?)
             };
             table_body.push(html.tr(
                 [],
@@ -1947,10 +1970,14 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
                 [
                     html.text(
                         "From the index, click on a link to jump to the info box \
-                     about that file, or on the ",
+                         about that file, or on the ",
                     )?,
                     document_symbol(html)?,
-                    html.text(" symbol to open the XML file directly.")?,
+                    html.text(format!(
+                        " symbol to open the XML file directly. From the info box, \
+                         click on the {BACK_TO_INDEX_SYMBOL} symbol to jump to the \
+                         index position for that value.",
+                    ))?,
                 ],
             )?,
             html.p(
