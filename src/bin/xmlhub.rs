@@ -50,6 +50,7 @@ use xmlhub_indexer::{
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
     util::{append, list_get_by_key, InsertValue},
+    utillib::setpriority::{setpriority, PriorityWhich},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
@@ -2830,6 +2831,9 @@ fn build_command(
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1,
                         )?;
+
+                        // Set nicety (scheduling priority):
+                        setpriority(PriorityWhich::Process(0), 10)?;
 
                         // Build the index once, throwing away the Ok
                         // return value (replacing it with `()`, since
