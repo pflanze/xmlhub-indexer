@@ -151,9 +151,7 @@ with an error in that case.
 There is a script
 [`examples/xmlhub-daemon`](examples/xmlhub-daemon)
 that you could adapt for starting the server process from
-e.g. crontab, with some limits to terminate the indexer if it uses too
-much RAM or CPU due to a bug or abuse by the people uploading XML
-files.
+e.g. crontab.
 
 ### Additional settings
 

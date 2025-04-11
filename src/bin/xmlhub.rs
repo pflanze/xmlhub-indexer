@@ -20,6 +20,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
 use lazy_static::lazy_static;
+use nix::sys::resource::{setrlimit, Resource};
 use pluraless::pluralized;
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
@@ -85,6 +86,16 @@ const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
 
 /// Max number of log files before they are deleted.
 const MAX_LOG_FILES_DEFAULT: usize = 100;
+
+/// Address space memory limit set inside every worker child, in
+/// bytes. Much is needed as the HtmlAllocator regions pre-allocate a
+/// lot of virtual memory even if it is never needed. There are no RSS
+/// resource limits in Linux (except via cgroups in some cases).
+const AS_BYTES_LIMIT_IN_WORKER_CHILD: u64 = 3 * 1024 * 1024 * 1024;
+
+/// Limit on CPU time, for the soft limit (a hard limit is set to 1
+/// second higher than this value).
+const CPU_SECONDS_LIMIT_IN_WORKER_CHILD: u64 = 3;
 
 /// The file describing the attributes (for contributors).
 const ATTRIBUTES_FILE: OutputFile = OutputFile {
@@ -2805,14 +2816,30 @@ fn build_command(
                         },
                         ..Default::default()
                     },
-                    // The action run in the child process: build the
-                    // index once, throwing away the Ok return value
-                    // (replacing it with `()`, since `forking_loop`
-                    // expects that (it exits the child with exit code
-                    // 0 whenever the action returned Ok, and that's
-                    // OK for us, thus we can and need to drop the
-                    // code from `build_index`).
-                    || build_index_once().map(|_exit_code| ()),
+                    // The action run in the child process
+                    || {
+                        // Set resource limits in case there are issues that
+                        // lead to overuse of CPU or memory
+                        setrlimit(
+                            Resource::RLIMIT_AS,
+                            AS_BYTES_LIMIT_IN_WORKER_CHILD,
+                            AS_BYTES_LIMIT_IN_WORKER_CHILD,
+                        )?;
+                        setrlimit(
+                            Resource::RLIMIT_CPU,
+                            CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
+                            CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1,
+                        )?;
+
+                        // Build the index once, throwing away the Ok
+                        // return value (replacing it with `()`, since
+                        // `forking_loop` expects that (it exits the
+                        // child with exit code 0 whenever the action
+                        // returned Ok, and that's OK for us, thus we
+                        // can and need to drop the code from
+                        // `build_index`).
+                        build_index_once().map(|_exit_code| ())
+                    },
                 )
             },
         };

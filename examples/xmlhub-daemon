@@ -8,23 +8,8 @@ cd ~/xmlhub-indexer
 
 cargo build --quiet --release
 
-# Set up limits before potentially starting the daemon:
-
-# Limits on real memory (RSS) is complicated on Linux, thus set limit
-# on virtual memory only, for now.
-
-# Virtual memory limit in KB, must be large because xmlhub
-# allocates some large vectors that are only partially used, so even
-# though the real used memory is much lower, we must allow for it to
-# allocate those large vectors.
-ulimit -v 3000000
-
-# CPU seconds across all cores; this is mostly just for 1 run, because
-# those happen in a fresh child process each time. XXX but there will
-# be a problem (theoretical only?) that the controlling parent process
-# will accumulate CPU time and will hit the limit, too, after a long
-# time. Should set this limit in the child from within Rust!
-ulimit -t 3
+# (Note: xmlhub now sets resource limits internally in every forked
+# worker child; you don't need to set any limits outside.)
 
 exec target/release/xmlhub build "${XMLHUB_CHECKOUT-$HOME/tmp/xmlhub}" \
      --localtime --max-log-file-size 100000 --max-log-files 20 --quiet \
