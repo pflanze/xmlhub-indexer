@@ -95,7 +95,7 @@ const AS_BYTES_LIMIT_IN_WORKER_CHILD: u64 = 3 * 1024 * 1024 * 1024;
 
 /// Limit on CPU time, for the soft limit (a hard limit is set to 1
 /// second higher than this value).
-const CPU_SECONDS_LIMIT_IN_WORKER_CHILD: u64 = 3;
+const CPU_SECONDS_LIMIT_IN_WORKER_CHILD: u64 = 5;
 
 /// The file describing the attributes (for contributors).
 const ATTRIBUTES_FILE: OutputFile = OutputFile {
