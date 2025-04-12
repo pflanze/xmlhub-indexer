@@ -325,6 +325,9 @@ struct ChangelogOpts {
     /// Which version to end with (inclusive)
     #[clap(long)]
     to: Option<GitVersion<SemVersion>>,
+    /// Whether it's OK to have `--from` > `--to`
+    #[clap(long)]
+    allow_downgrades: bool,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2716,10 +2719,15 @@ fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Resul
 
 /// Execute a `changelog` command
 fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
-    let ChangelogOpts { from, to } = command_opts;
+    let ChangelogOpts {
+        from,
+        to,
+        allow_downgrades,
+    } = command_opts;
 
     let changelog = Changelog::new()?;
-    let part = changelog.get_between_versions(false, from.as_ref(), to.as_ref())?;
+    let part =
+        changelog.get_between_versions(allow_downgrades, false, from.as_ref(), to.as_ref())?;
 
     part.display(
         &ChangelogDisplay {
@@ -3685,7 +3693,11 @@ fn main() -> Result<()> {
                         no_repo_check,
                     })),
                 },
-                Command::Changelog(ChangelogOpts { from, to }) => Opts {
+                Command::Changelog(ChangelogOpts {
+                    from,
+                    to,
+                    allow_downgrades,
+                }) => Opts {
                     v,
                     version_only,
                     global: GlobalOpts {
@@ -3697,7 +3709,11 @@ fn main() -> Result<()> {
                         dry_run,
                         no_version_check,
                     },
-                    command: Some(Command::Changelog(ChangelogOpts { from, to })),
+                    command: Some(Command::Changelog(ChangelogOpts {
+                        from,
+                        to,
+                        allow_downgrades,
+                    })),
                 },
             },
             None => {

@@ -27,6 +27,7 @@ pub struct Changelog<'t, 't0: 't> {
     pub include_from: bool,
     pub from: Option<RefOrOwned<'t, GitVersion<SemVersion>>>,
     pub to: Option<RefOrOwned<'t, GitVersion<SemVersion>>>,
+    pub is_downgrade: bool,
 
     /// The title from the Changelog.md, not used.
     pub title: Option<&'static str>,
@@ -84,6 +85,17 @@ pub struct ChangelogSection<'t0> {
     pub entries: Vec<&'static str>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ChangelogGetError {
+    #[error("given `from` release number is after `to`: {0} > {1}")]
+    FromAfterTo(String, String),
+    #[error(
+        "Changelog.md has wrongly ordered releases, \
+         or there is a bug: expected {0} < {1}"
+    )]
+    ChangelogFileHasWronglyOrderedReleases(String, String),
+}
+
 // Do not impl `Display` as we want the `ChangelogDisplay` options,
 // and don't want to make that part of `Changelog`.
 impl<'t, 't0> Changelog<'t, 't0> {
@@ -133,7 +145,15 @@ impl<'t, 't0> Changelog<'t, 't0> {
                 .map(|v| format!("version {v}"))
                 .unwrap_or("the end".into());
             let from_or_since = if self.include_from { "from" } else { "since" };
-            writeln!(out, "# Changes {from_or_since} {from} until {to}")?;
+            writeln!(
+                out,
+                "# Changes {from_or_since} {from} until {to}{}",
+                if self.is_downgrade {
+                    " (for downgrade)"
+                } else {
+                    ""
+                }
+            )?;
         }
 
         match style {
@@ -184,20 +204,7 @@ impl<'t, 't0> Changelog<'t, 't0> {
             }
         }
     }
-}
 
-#[derive(thiserror::Error, Debug)]
-pub enum ChangelogGetError {
-    #[error("given `from` release number is after `to`: {0} > {1}")]
-    FromAfterTo(String, String),
-    #[error(
-        "Changelog.md has wrongly ordered releases, \
-         or there is a bug: expected {0} < {1}"
-    )]
-    ChangelogFileHasWronglyOrderedReleases(String, String),
-}
-
-impl<'t, 't0> Changelog<'t, 't0> {
     pub fn new() -> Result<Self> {
         let mut title = None;
         let mut newest = None;
@@ -250,6 +257,7 @@ impl<'t, 't0> Changelog<'t, 't0> {
             include_from: true,
             from: None.into(),
             to: None.into(),
+            is_downgrade: false,
         })
     }
 
@@ -257,9 +265,11 @@ impl<'t, 't0> Changelog<'t, 't0> {
     /// if None, the beginning or end of the whole changelog,
     /// respectively. `include_from` indicates whether the from
     /// release line should be included (but without its items!) or
-    /// not.
+    /// not. If `allow_downgrades` is false, gives an error if `from`
+    /// > `to`.
     pub fn get_between_versions<'s>(
         &'s self,
+        allow_downgrades: bool,
         include_from: bool,
         // evil to use 's here?
         from: Option<&'s GitVersion<SemVersion>>,
@@ -268,16 +278,25 @@ impl<'t, 't0> Changelog<'t, 't0> {
     where
         's: 't, // ah, because Cow may own the storage, then referncing it is 's not 't
     {
-        if let Some(from) = from {
-            if let Some(to) = to {
-                if from > to {
-                    return Err(ChangelogGetError::FromAfterTo(
-                        format!("{from}"),
-                        format!("{to}"),
-                    ));
+        let is_downgrade = {
+            let mut is_downgrade = false;
+            if let Some(from) = from {
+                if let Some(to) = to {
+                    if from > to {
+                        if !allow_downgrades {
+                            return Err(ChangelogGetError::FromAfterTo(
+                                format!("{from}"),
+                                format!("{to}"),
+                            ));
+                        }
+                        is_downgrade = true;
+                    }
                 }
             }
-        }
+            is_downgrade
+        };
+
+        let (from, to) = if is_downgrade { (to, from) } else { (from, to) };
 
         let (possibly_after_start, after_end) = {
             let len = self.entries.len();
@@ -337,6 +356,7 @@ impl<'t, 't0> Changelog<'t, 't0> {
             include_from,
             from: from.map(RefOrOwned::from),
             to: to.map(RefOrOwned::from),
+            is_downgrade,
             title: self.title,
             newest: self.newest,
             entries: (&self.entries[possibly_after_start..after_end]).into(),
@@ -350,7 +370,7 @@ fn t_changelog() -> Result<()> {
     let changelog = Changelog::new()?;
     let from = GitVersion::from_str("v1.2")?;
     let to = GitVersion::from_str("v6")?;
-    let sublog = changelog.get_between_versions(true, Some(&from), Some(&to))?;
+    let sublog = changelog.get_between_versions(false, true, Some(&from), Some(&to))?;
     assert!(changelog.entries.len() > sublog.entries.len());
     Ok(())
 }

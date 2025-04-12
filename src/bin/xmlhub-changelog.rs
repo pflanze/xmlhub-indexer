@@ -20,6 +20,8 @@ struct Opts {
     newest_item_first: bool,
     #[clap(long)]
     as_sections: bool,
+    #[clap(long)]
+    allow_downgrades: bool,
 
     #[clap(long)]
     from: Option<GitVersion<SemVersion>>,
@@ -30,8 +32,12 @@ struct Opts {
 fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
     let changelog = Changelog::new()?;
-    let part =
-        changelog.get_between_versions(opts.include_from, opts.from.as_ref(), opts.to.as_ref())?;
+    let part = changelog.get_between_versions(
+        opts.allow_downgrades,
+        opts.include_from,
+        opts.from.as_ref(),
+        opts.to.as_ref(),
+    )?;
 
     part.display(
         &ChangelogDisplay {
