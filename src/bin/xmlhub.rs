@@ -3397,7 +3397,11 @@ fn main() -> Result<()> {
         // `--version`
         if v {
             println!("{REPO_NAME} {program_version}");
-            println!("Compiled for architecture: {}", std::env::consts::ARCH);
+            println!(
+                "Compiled for OS/architecture: {}/{}",
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
             let profile = if cfg!(debug_assertions) {
                 "debug"
             } else {
