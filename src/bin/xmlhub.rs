@@ -32,6 +32,7 @@ use walkdir::WalkDir;
 use xmlhub_indexer::{
     backoff::{LoopVerbosity, LoopWithBackoff},
     browser::spawn_browser,
+    changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle},
     checkout_context::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
     },
@@ -282,6 +283,8 @@ enum Command {
     /// Upgrade this executable to the newest binary available from
     /// the `xmlhub-indexer-binaries` repository.
     Upgrade(UpgradeOpts),
+    /// View the version history of this program
+    Changelog(ChangelogOpts),
     /// Rebuild the XML Hub index, and by default commit the changed
     /// index. If you want to check your file while you edit it, use
     /// the `check` subcommand instead first.
@@ -313,6 +316,16 @@ struct InstallOpts {}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct UpgradeOpts {}
+
+#[derive(clap::Parser, Debug, Clone)]
+struct ChangelogOpts {
+    /// Which version to start from (exclusive)
+    #[clap(long)]
+    from: Option<GitVersion<SemVersion>>,
+    /// Which version to end with (inclusive)
+    #[clap(long)]
+    to: Option<GitVersion<SemVersion>>,
+}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct BuildOpts {
@@ -2701,6 +2714,28 @@ fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Resul
     Ok(())
 }
 
+/// Execute a `changelog` command
+fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
+    let ChangelogOpts { from, to } = command_opts;
+
+    let changelog = Changelog::new()?;
+    let part = changelog.get_between_versions(false, from.as_ref(), to.as_ref())?;
+
+    part.display(
+        &ChangelogDisplay {
+            generate_title: true,
+            style: ChangelogDisplayStyle::ReleasesAsSections {
+                print_colon_after_release: true,
+                newest_section_first: false,
+                newest_item_first: false,
+            },
+        },
+        &mut stdout(),
+    )?;
+
+    Ok(())
+}
+
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon). (Never returns `Ok`
 /// but exits directly in the non-`Err` case. `!` is not stable yet.)
@@ -3650,6 +3685,20 @@ fn main() -> Result<()> {
                         no_repo_check,
                     })),
                 },
+                Command::Changelog(ChangelogOpts { from, to }) => Opts {
+                    v,
+                    version_only,
+                    global: GlobalOpts {
+                        verbose,
+                        quiet,
+                        localtime,
+                        max_log_file_size,
+                        max_log_files,
+                        dry_run,
+                        no_version_check,
+                    },
+                    command: Some(Command::Changelog(ChangelogOpts { from, to })),
+                },
             },
             None => {
                 bail!("missing command argument. Please run with the `--help` option for help.")
@@ -3665,6 +3714,7 @@ fn main() -> Result<()> {
     {
         Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
         Command::Upgrade(command_opts) => upgrade_command(&opts.global, command_opts.clone()),
+        Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
         Command::Build(command_opts) => {
             build_command(program_version, &opts.global, command_opts.clone())
         }
