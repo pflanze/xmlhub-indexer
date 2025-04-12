@@ -17,7 +17,7 @@ use super::{
     app_info::AppInfo,
     app_signature::{AppSignature, SaveLoadKeyFile},
     binaries_repo::BinariesRepoSection,
-    defaults::create_installation_state_dir,
+    defaults::global_app_state_dir,
     install::install_executable,
     trusted_keys::get_trusted_key,
 };
@@ -25,12 +25,13 @@ use super::{
 // Todo: change to git remote update and reset, so that trimming the
 // upstream repository every now and then would be possible?
 pub fn pull_verified_executable() -> Result<PathBuf> {
-    let installation_state_dir = create_installation_state_dir()?;
-
     let binaries_repo_name = "xmlhub-indexer-binaries";
 
-    let binaries_checkout = BINARIES_CHECKOUT
-        .replace_working_dir_path(installation_state_dir.append(binaries_repo_name));
+    let binaries_checkout = BINARIES_CHECKOUT.replace_working_dir_path(
+        global_app_state_dir()?
+            .clones_base()?
+            .append(binaries_repo_name),
+    );
 
     if binaries_checkout.working_dir_path().is_dir() {
         println!("Updating the {binaries_repo_name} repository via git pull.");

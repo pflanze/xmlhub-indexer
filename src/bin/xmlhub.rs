@@ -16,6 +16,7 @@ use ahtml::{
     att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, HtmlAllocatorPool, Node,
     Print, SerHtmlFrag,
 };
+use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use itertools::{intersperse_with, Itertools};
@@ -43,7 +44,10 @@ use xmlhub_indexer::{
     get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
-    installation::{git_based_upgrade::git_based_upgrade, install::install_executable},
+    installation::{
+        defaults::global_app_state_dir, git_based_upgrade::git_based_upgrade,
+        install::install_executable,
+    },
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, FixupPath},
     rayon_util::ParRun,
@@ -328,6 +332,12 @@ struct ChangelogOpts {
     /// Whether it's OK to have `--from` > `--to`
     #[clap(long)]
     allow_downgrades: bool,
+    /// Print the log formatted as HTML (default: Markdown)
+    #[clap(long)]
+    print_html: bool,
+    /// Open the log in the browser (disables printing)
+    #[clap(long)]
+    open: bool,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2723,23 +2733,64 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         from,
         to,
         allow_downgrades,
+        print_html,
+        open,
     } = command_opts;
 
     let changelog = Changelog::new()?;
     let part =
         changelog.get_between_versions(allow_downgrades, false, from.as_ref(), to.as_ref())?;
 
-    part.display(
-        &ChangelogDisplay {
-            generate_title: true,
-            style: ChangelogDisplayStyle::ReleasesAsSections {
-                print_colon_after_release: true,
-                newest_section_first: false,
-                newest_item_first: false,
+    let print_markdown_to = |out: &mut dyn Write| {
+        part.display(
+            &ChangelogDisplay {
+                generate_title: true,
+                style: ChangelogDisplayStyle::ReleasesAsSections {
+                    print_colon_after_release: true,
+                    newest_section_first: false,
+                    newest_item_first: false,
+                },
             },
-        },
-        &mut stdout(),
-    )?;
+            out,
+        )
+    };
+
+    let print_html_to = |mut output: &mut dyn Write| -> Result<()> {
+        let mut out = Vec::new();
+        print_markdown_to(&mut out)?;
+        let markdown = String::from_utf8(out)?;
+        let html = HTML_ALLOCATOR_POOL.get();
+        let processed_markdown = markdown_to_html(&markdown, &*html)?;
+        let doc = html.html(
+            [],
+            [
+                html.head([], [html.title([], html.text("xmlhub changelog")?)?])?,
+                html.body([], processed_markdown.html())?,
+            ],
+        )?;
+        Ok(html.print_html_document(doc, &mut output)?)
+    };
+
+    if open {
+        let base = global_app_state_dir()?.upgrades_log_base()?;
+        let output_path = base.append("changes.html");
+        (|| -> Result<()> {
+            let mut output = BufWriter::new(File::create(&output_path)?);
+            print_html_to(&mut output)?;
+            output.flush()?;
+            Ok(())
+        })()
+        .with_context(|| anyhow!("writing to file {output_path:?}"))?;
+        spawn_browser(&PathBuf::from("."), &[&OsString::try_from(output_path)?])?;
+    } else {
+        let mut output = BufWriter::new(stdout().lock());
+        if print_html {
+            print_html_to(&mut output)?;
+        } else {
+            print_markdown_to(&mut output)?;
+        }
+        output.flush()?;
+    }
 
     Ok(())
 }
@@ -3697,6 +3748,8 @@ fn main() -> Result<()> {
                     from,
                     to,
                     allow_downgrades,
+                    print_html,
+                    open,
                 }) => Opts {
                     v,
                     version_only,
@@ -3713,6 +3766,8 @@ fn main() -> Result<()> {
                         from,
                         to,
                         allow_downgrades,
+                        print_html,
+                        open,
                     })),
                 },
             },
