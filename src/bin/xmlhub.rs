@@ -277,8 +277,8 @@ enum Command {
     /// option of the `build` subcommand.
     HelpContributing,
     /// Show all metadata attributes and describe their possible
-    /// values.
-    HelpAttributes,
+    /// values. Use `--open` to open in browser.
+    HelpAttributes(HelpAttributesOpts),
     /// Install this executable so that it can be run without having
     /// to specify the full path to it. Note: you have to start a new
     /// shell to pick up the change in the `PATH` environment variable
@@ -313,6 +313,13 @@ enum Command {
     /// edit the file and run the `check` subcommand until there are
     /// no errors.
     AddTo(AddToOpts),
+}
+
+#[derive(clap::Parser, Debug, Clone)]
+struct HelpAttributesOpts {
+    /// Open the attributes description in the browser (disables printing)
+    #[clap(long)]
+    open: bool,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2727,6 +2734,23 @@ fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Resul
     Ok(())
 }
 
+fn print_basic_standalone_html_page(
+    title: &str,
+    body: AId<Node>,
+    html: &HtmlAllocator,
+    mut output: &mut dyn Write,
+) -> Result<()> {
+    let doc = html.html(
+        [],
+        [
+            html.head([], [html.title([], html.text(title)?)?])?,
+            html.body([], body)?,
+        ],
+    )?;
+    html.print_html_document(doc, &mut output)?;
+    Ok(())
+}
+
 /// Execute a `changelog` command
 fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
     let ChangelogOpts {
@@ -2755,33 +2779,28 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         )
     };
 
-    let print_html_to = |mut output: &mut dyn Write| -> Result<()> {
+    let print_html_to = |output: &mut dyn Write| -> Result<()> {
         let mut out = Vec::new();
         print_markdown_to(&mut out)?;
         let markdown = String::from_utf8(out)?;
         let html = HTML_ALLOCATOR_POOL.get();
-        let processed_markdown = markdown_to_html(&markdown, &*html)?;
-        let doc = html.html(
-            [],
-            [
-                html.head([], [html.title([], html.text("xmlhub changelog")?)?])?,
-                html.body([], processed_markdown.html())?,
-            ],
+        let processed_markdown = markdown_to_html(&markdown, &html)?;
+        print_basic_standalone_html_page(
+            "xmlhub changelog",
+            processed_markdown.html(),
+            &html,
+            output,
         )?;
-        Ok(html.print_html_document(doc, &mut output)?)
+        Ok(())
     };
 
     if open {
         let base = global_app_state_dir()?.upgrades_log_base()?;
         let output_path = base.append("changes.html");
-        (|| -> Result<()> {
-            let mut output = BufWriter::new(File::create(&output_path)?);
-            print_html_to(&mut output)?;
-            output.flush()?;
-            Ok(())
-        })()
-        .with_context(|| anyhow!("writing to file {output_path:?}"))?;
-        spawn_browser(&PathBuf::from("."), &[&OsString::try_from(output_path)?])?;
+        with_output_to_file(&output_path, |output| -> Result<()> {
+            Ok(print_html_to(output)?)
+        })?;
+        spawn_browser_on_path(&output_path)?;
     } else {
         let mut output = BufWriter::new(stdout().lock());
         if print_html {
@@ -3440,22 +3459,60 @@ fn help_contributing_command() -> Result<()> {
     Ok(())
 }
 
-fn help_attributes_command() -> Result<()> {
-    let mut out = stdout().lock();
-    writeln!(
-        &mut out,
-        "List of the valid attributes and details about them:\n\n\
-         (Legend:\n \
-         need: whether a value is required for the attribute.\n \
-         kind: whether a single value is expected or a list, with how the text is parsed.\n \
-         autolink: yes means, automatically link what looks like URLs.\n \
-         indexing: whether the value(s) is/are indexed, and how.\n\
-         )\n"
-    )?;
+fn with_output_to_file(
+    output_path: &Path,
+    writer: impl FnOnce(&mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    (|| -> Result<()> {
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        writer(&mut output)?;
+        output.flush()?;
+        Ok(())
+    })()
+    .with_context(|| anyhow!("writing to file {output_path:?}"))
+}
 
-    for att in METADATA_SPECIFICATION {
-        writeln!(&mut out, "{}", att)?;
+fn spawn_browser_on_path(document_path: &Path) -> Result<()> {
+    spawn_browser(&PathBuf::from("."), &[&OsString::try_from(document_path)?])?;
+    Ok(())
+}
+
+fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
+    let HelpAttributesOpts { open } = command_opts;
+
+    if open {
+        let html = HTML_ALLOCATOR_POOL.get();
+        let spec_html = specifications_to_html(&html)?;
+        let output_path = global_app_state_dir()?
+            .upgrades_log_base()?
+            .append("attributes.html");
+        with_output_to_file(&output_path, |output| -> Result<()> {
+            Ok(print_basic_standalone_html_page(
+                "xmlhub attributes list",
+                spec_html,
+                &html,
+                output,
+            )?)
+        })?;
+        spawn_browser_on_path(&output_path)?;
+    } else {
+        let mut out = stdout().lock();
+        writeln!(
+            &mut out,
+            "List of the valid attributes and details about them:\n\n\
+             (Legend:\n \
+             need: whether a value is required for the attribute.\n \
+             kind: whether a single value is expected or a list, with how the text is parsed.\n \
+             autolink: yes means, automatically link what looks like URLs.\n \
+             indexing: whether the value(s) is/are indexed, and how.\n\
+             )\n"
+        )?;
+
+        for att in METADATA_SPECIFICATION {
+            writeln!(&mut out, "{}", att)?;
+        }
     }
+
     Ok(())
 }
 
@@ -3706,7 +3763,7 @@ fn main() -> Result<()> {
                         ignore_version,
                     })),
                 },
-                Command::HelpContributing | Command::HelpAttributes => Opts {
+                Command::HelpContributing | Command::HelpAttributes(_) => Opts {
                     v,
                     version_only,
                     global: GlobalOpts {
@@ -3783,9 +3840,12 @@ fn main() -> Result<()> {
         .as_ref()
         .expect("`None` is dispatched above already")
     {
+        Command::HelpContributing => help_contributing_command(),
+        Command::HelpAttributes(command_opts) => help_attributes_command(command_opts.clone()),
+        Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
+
         Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
         Command::Upgrade(command_opts) => upgrade_command(&opts.global, command_opts.clone()),
-        Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
         Command::Build(command_opts) => {
             build_command(program_version, &opts.global, command_opts.clone())
         }
@@ -3803,7 +3863,5 @@ fn main() -> Result<()> {
         Command::AddTo(command_opts) => {
             add_to_command(program_version, &opts.global, command_opts.clone())
         }
-        Command::HelpContributing => help_contributing_command(),
-        Command::HelpAttributes => help_attributes_command(),
     }
 }
