@@ -244,12 +244,17 @@ fn get_beast_version(document: &Document) -> Result<BeastVersion> {
 /// subcommands in sequence. See the help about them via e.g. `xmlhub
 /// help add-to`.
 struct Opts {
-    /// Show the program version. It was copied from `git describe
-    /// --tags ..` at compile time.
+    /// Show the program version (it was copied from `git describe
+    /// --tags ..` at compile time) as well as some other information
+    /// on the binary.
     // Note: can't name this field `version` as that's special-cased
     // in Clap.
     #[clap(long = "version")]
     v: bool,
+
+    /// Like `--version` but show *only* the program version.
+    #[clap(long)]
+    version_only: bool,
 
     #[clap(flatten)]
     global: GlobalOpts,
@@ -3375,6 +3380,7 @@ fn main() -> Result<()> {
         // to the field name.
         let Opts {
             v,
+            version_only,
             global:
                 GlobalOpts {
                     verbose,
@@ -3400,11 +3406,17 @@ fn main() -> Result<()> {
             println!("Compilation profile: {profile}");
             return Ok(());
         }
+        // `--version-only`
+        if version_only {
+            println!("{program_version}");
+            return Ok(());
+        }
 
         match command {
             Some(command) => match command {
                 Command::Install(InstallOpts {}) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3418,6 +3430,7 @@ fn main() -> Result<()> {
                 },
                 Command::Upgrade(UpgradeOpts {}) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3487,6 +3500,7 @@ fn main() -> Result<()> {
                     // Pack the variables into a new struct
                     Opts {
                         v,
+                        version_only,
                         global: GlobalOpts {
                             verbose,
                             quiet,
@@ -3522,6 +3536,7 @@ fn main() -> Result<()> {
                     experiment,
                 }) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3544,6 +3559,7 @@ fn main() -> Result<()> {
                     ignore_version,
                 }) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3571,6 +3587,7 @@ fn main() -> Result<()> {
                     ignore_version,
                 }) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3593,6 +3610,7 @@ fn main() -> Result<()> {
                 },
                 Command::HelpContributing | Command::HelpAttributes => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
@@ -3611,6 +3629,7 @@ fn main() -> Result<()> {
                     no_repo_check,
                 }) => Opts {
                     v,
+                    version_only,
                     global: GlobalOpts {
                         verbose,
                         quiet,
