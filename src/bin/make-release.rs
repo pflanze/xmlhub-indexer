@@ -1,4 +1,11 @@
-use std::{env::current_dir, ffi::OsStr, fmt::Debug, path::PathBuf};
+use std::{
+    env::current_dir,
+    ffi::{OsStr, OsString},
+    fmt::Debug,
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
@@ -6,6 +13,7 @@ use clap::Parser;
 use debug_ignore::DebugIgnore;
 use xmlhub_indexer::{
     cargo::check_cargo_toml_no_path,
+    changelog::CHANGELOG_FILE_NAME,
     checkout_context::CheckExpectedSubpathsExist,
     command::{run, Capturing},
     const_util::file_name,
@@ -117,26 +125,100 @@ struct Opts {
     no_push_binary: bool,
 }
 
+#[derive(Debug)]
+struct ChangelogTag {
+    tag_name: String,
+    date: String,
+}
+
+impl ChangelogTag {
+    fn release_line(&self) -> String {
+        let ChangelogTag { tag_name, date } = self;
+        format!("{tag_name} - {date}")
+    }
+
+    fn commit_message(&self) -> String {
+        format!("Update Changelog for release {}", self.tag_name)
+    }
+}
+
+#[derive(Debug)]
+struct UpdateChangelogWithTag {
+    changelog_path: PathBuf,
+    changelog_tag: ChangelogTag,
+}
+
+#[derive(Debug)]
+struct UpdatedChangelog {
+    tag_name: String,
+}
+
+impl Effect for UpdateChangelogWithTag {
+    type Requires = ();
+
+    type Provides = UpdatedChangelog;
+
+    fn run(self: Box<Self>, (): Self::Requires) -> Result<Self::Provides> {
+        let UpdateChangelogWithTag {
+            changelog_path,
+            changelog_tag,
+        } = *self;
+
+        // "v8 - 2025-04-11"
+        let mut out = OpenOptions::new()
+            .create(false)
+            .append(true)
+            .open(&changelog_path)
+            .with_context(|| {
+                anyhow!("opening {changelog_path:?} for appending, expecting it to exist")
+            })?;
+        let release_line = changelog_tag.release_line();
+        write!(&mut out, "\n{release_line}\n\n")
+            .with_context(|| anyhow!("writing to {changelog_path:?}"))?;
+        out.flush()?; // unbuffered anyway? error with context?
+
+        // Now also commit it. (Ah, passing around repositories in
+        // globals, simply.)
+        if !git(
+            SOURCE_CHECKOUT.working_dir_path(),
+            &[
+                OsString::from("commit"),
+                OsString::from("-m"),
+                OsString::from(changelog_tag.commit_message()),
+                // Git is OK with absolute paths
+                changelog_path.canonicalize()?.into(),
+            ],
+            false,
+        )? {
+            bail!("git commit for {changelog_path:?} returned false");
+        }
+
+        Ok(UpdatedChangelog {
+            tag_name: changelog_tag.tag_name,
+        })
+    }
+}
+
 // Don't need to store tag_name String in here since it's constant and
 // part of the individual contexts that need it.
 #[derive(Debug)]
 struct SourceReleaseTag;
 
+/// Tag name is taken from UpdatedChangelog
 #[derive(Debug)]
 struct CreateTag {
-    tag_name: String,
     sign: bool,
     local_user: Option<String>,
 }
 
 impl Effect for CreateTag {
-    type Requires = ();
+    type Requires = UpdatedChangelog;
     type Provides = SourceReleaseTag;
 
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+    fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         git_tag(
             SOURCE_CHECKOUT.working_dir_path(),
-            &self.tag_name,
+            &provided.tag_name,
             None,
             "via make-release.rs",
             self.sign,
@@ -147,7 +229,7 @@ impl Effect for CreateTag {
         {
             let path_str = ".released_version";
             let path = PathBuf::from(path_str);
-            std::fs::write(&path, &self.tag_name)
+            std::fs::write(&path, &provided.tag_name)
                 .with_context(|| anyhow!("path should be writable: {path:?}"))?;
             // (sleep 1s to avoid the next cargo run being a rebuild
             // again due to it being too close? don't bother.)
@@ -402,10 +484,6 @@ fn main() -> Result<()> {
         }
     };
 
-    if !ask_yn("Have you updated `Changelog.md`?")? {
-        bail!("you need to do that first")
-    }
-
     println!("\n====Preparing...=============================================================\n");
 
     // Make sure the current dir is the top directory of the
@@ -452,7 +530,7 @@ fn main() -> Result<()> {
                 )
             })?;
 
-    let (new_version_tag_string, need_tag) = {
+    let (new_version_tag_string, need_tag_in_any_case) = {
         if let Some((_depth, _sha1)) = &old_version.past_tag {
             let new_version = if opts.unchanged_output {
                 old_version.version.next_compatible()
@@ -464,18 +542,75 @@ fn main() -> Result<()> {
             (format!("v{}", old_version.version), false)
         }
     };
-    let tag_effect: Box<dyn Effect<Requires = (), Provides = SourceReleaseTag>> = if need_tag {
-        Box::new(CreateTag {
+
+    // Then we will possibly change the changelog. Verify if it
+    // already contains the release tag, too
+    let changelog_tag = {
+        let now = chrono::Local::now();
+        let date = now.date_naive().to_string();
+        ChangelogTag {
             tag_name: new_version_tag_string.clone(),
-            sign,
-            local_user: opts.local_user.clone(),
-        })
-    } else {
-        NoOp::providing(
-            SourceReleaseTag,
-            format!("using existing tag {new_version_tag_string:?}").into(),
-        )
+            date,
+        }
     };
+
+    let changelog_path = SOURCE_CHECKOUT
+        .working_dir_path()
+        .append(CHANGELOG_FILE_NAME);
+
+    let changelog_has_release = {
+        let mut lines = BufReader::new(File::open(&changelog_path)?).lines();
+        let release_line = changelog_tag.release_line();
+        lines.any(|line| {
+            let line = line.expect("reading after opening failing is rare");
+            let line = line.trim();
+            line == release_line
+        })
+    };
+
+    if !changelog_has_release {
+        if !ask_yn("Have you updated `Changelog.md`?")? {
+            bail!("you need to do that first")
+        }
+    }
+
+    let update_changelog_effect: Box<dyn Effect<Requires = (), Provides = UpdatedChangelog>> =
+        if changelog_has_release {
+            NoOp::providing(
+                UpdatedChangelog {
+                    tag_name: changelog_tag.tag_name.clone(),
+                },
+                format!(
+                    "Changelog file already contains the line {:?}",
+                    changelog_tag.release_line()
+                )
+                .into(),
+            )
+        } else {
+            Box::new(UpdateChangelogWithTag {
+                changelog_path,
+                changelog_tag,
+            })
+        };
+
+    // if !changelog_has_release, we need a tag because the
+    // UpdateChangelogWithTag action commits, hence, need a new tag --
+    // OH, that will simply fail, though!! Remove the tag? For now
+    // just let it fail when trying to make the tag again.
+    let need_tag = need_tag_in_any_case || !changelog_has_release;
+
+    let tag_effect: Box<dyn Effect<Requires = UpdatedChangelog, Provides = SourceReleaseTag>> =
+        if need_tag {
+            Box::new(CreateTag {
+                sign,
+                local_user: opts.local_user.clone(),
+            })
+        } else {
+            NoOp::providing(
+                SourceReleaseTag,
+                format!("using existing tag {new_version_tag_string:?}").into(),
+            )
+        };
 
     let push_to_remote: Box<dyn Effect<Requires = SourceReleaseTag, Provides = SourcePushed>> =
         if push_source {
@@ -652,8 +787,11 @@ fn main() -> Result<()> {
         };
 
     let effect = bind(
-        bind(bind(tag_effect, push_to_remote), build_binary),
-        release_binary,
+        update_changelog_effect,
+        bind(
+            bind(bind(tag_effect, push_to_remote), build_binary),
+            release_binary,
+        ),
     );
 
     // We have finished collecting the effect(s). Now show and perhaps

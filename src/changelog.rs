@@ -7,6 +7,7 @@ use crate::{
     ref_or_owned::RefOrOwned,
 };
 
+pub const CHANGELOG_FILE_NAME: &str = "Changelog.md";
 pub const CHANGELOG: &str = include_str!("../Changelog.md");
 
 #[derive(Clone, Debug)]
