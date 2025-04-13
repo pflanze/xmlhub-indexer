@@ -21,12 +21,12 @@ v1.2 - 2025-01-07
 
 v1.3 - 2025-01-08
 
-- When creating signature with git fails, mention that `--local-user` should be used.
-- Fix up `--local-user` arguments for macOS: replace non-breaking spaces from GUI tool with spaces for compatibility with command line gpg tool.
+- When creating a signature with git fails, mention that `--local-user` should be used.
+- Fix up `--local-user` arguments for macOS: replace non-breaking spaces copied from GUI tool with spaces for compatibility with command line gpg tool.
 
 v1.4 - 2025-01-09
 
-- Fix README on how to export key with gpg
+- Fix README on how to export a key with gpg
 
 v1.5 - 2025-01-09
 
@@ -39,8 +39,7 @@ v1.5 - 2025-01-09
 
 v2 - 2025-01-13
 
-- Teplace `xmltree` + `xml-rs` crates with `roxmltree` for a large speedup
-- Remove `--no-wellformedness-check` option (now unused)
+- Replace `xmltree` + `xml-rs` crates with `roxmltree` for a large speedup. Remove `--no-wellformedness-check` option (now unused).
 - `make-xmlhub-indexer-release`: check Cargo.toml for `path =` entries
 - `make-xmlhub-indexer-release`: ignore commit check with `--dry-run`, too
 - Docs and code improvements
@@ -53,12 +52,12 @@ v3 - 2025-01-17
 
 v4 - 2025-01-19
 
-- Add --no-branch-check option
+- Add `--no-branch-check` option
 - Change to jump to the box via the main link, instead use document icon to open the file
-- Move the document symbol (linkt to XML file) *after* each path
-- Also show the document symbol after the link in file info boxes
+- Move the document symbol (link to XML file) *after* each path
+- Show the document symbol after the link in file info boxes
 - Various internal refactors
-- Add link from info boxes to index entries for all indexed values
+- In info boxes, for all indexed values add a link to their index entry
 - Fix: pull from the remote *before* reading the paths
 - Add `--daemon` mode
 
@@ -66,7 +65,7 @@ v5 - 2025-01-28
 
 - carry location of comments from XML files into error messages
 - on XML reading errors, show "lines" or "line" depending on plurality
-- Use an SVG in place of the unicode document symbol
+- Use an SVG in place of the unicode document symbol due to the latter not showing on macOS
 
 v6 - 2025-02-07
 
@@ -87,8 +86,8 @@ v6.2 - 2025-03-03
 
 - Rename `xmlhub-build-index` program to `xmlhub`
 - add `build` command
-- change to read untracked files by default (instead of asking Git for the file list, ask the file system), add `--ignore-untracked`
-- messaging, incl. be clearer about what the commit refusal means.
+- change to read untracked files by default (instead of asking Git for the file list, ask the file system), add `--ignore-untracked` for the old behaviour
+- improve messaging, incl. be clearer about what the commit refusal means.
 - add `--help-contributing`
 
 cj9
@@ -99,17 +98,17 @@ cj9
 - README updates
 - use proper subcommands (via clap) with their own options
 - improve error messages; nicer display of untracked files in error messages about refusing to commit.
-- Move the state folder out of `.git/`. Ignore `.xmlhub/` folder (necessary in transition period until entry is in `.gitignore`).
+- Move the state folder out of `.git/`, to `.xmlhub/` at the root of the working directory. Ignore that folder when getting the file list (necessary in transition period until entry is in `.gitignore`).
 - add `clone-to` subcommand
-- format --help output to fit the terminal width (finally).
-- add `add` subcommand, blinds and adds comment template.
+- format `--help` output to fit the terminal width (finally).
+- add `add` subcommand, blinds data and adds comment template.
 
 cj10
 
-- add: avoid overwriting target paths, add --force to do so
+- `add`: avoid overwriting target paths, add `--force` to do so
 - add `prepare` subcommand, and fix docs on `add` subcommand
-- prepare: make use of the modified status (don't overwrite file if unchanged)
-- prepare: only add comment if modified
+- `prepare`: make use of the modified status (don't overwrite file if unchanged)
+- `prepare`: only add comment if modified
 - add and use `trash` crate to remove files before writing to their place.
 
 cj11
@@ -125,28 +124,28 @@ cj13
 
 - change `--help-contributing` option into a `help-contributing` subcommand
 - add `help-attributes` subcommand.
-- add `desc` field (title "Description") to `AttributeSpecification`, add to `attributes.md` and `help-attributes` output, add values for most attributes.
+- add `desc` field (title "Description") to `AttributeSpecification`, add it to `attributes.md` and `help-attributes` output, add values for most attributes.
 
 cj14
 
-- `add/prepare`: say when data in a file was blinded. Treat whitespace-only as no data (for messaging).
+- `add/prepare`: say when data in a file was blinded (treat whitespace-only data as no data).
 - `build`: make `BASE_PATH` optional: remove the positional argument and instead add a `--base-path` option.
 - rename `add` command to `add-to`
 - `add-to`: check that target_directory is in an xmlhub clone (verify correct repository by checking some subpaths)
-- add `--no-repo-check` options, make `--batch` (and indirectly --daemon) imply them.
+- add `--no-repo-check` options, make `--batch` (and indirectly `--daemon`) imply them.
 - Some internal refactoring for less error-prone option processing logic.
 - prepare/add-to: add empty lines before and after comment template
 - prepare/add-to: restrict to BEAST2 by default, add `--ignore-version`
 - rename BEAST "major" to "product" version number
-- daemon mode: log activity even in --quiet mode
-- ignore untracked files in batch/daemon mode
+- daemon mode: periodically log activity even in `--quiet` mode
+- ignore untracked files when committing in batch/daemon mode
 - `prepare/add-to`: only add header comments if missing
 - Cargo: add authors and license fields
 - Improve english pluralization.
 - `attributes.md`: make table titles bold.
-- `build`, when writing errors to the index files: add title on file paths, and show the document symbol on file paths.
+- `build`, when writing errors to the index files: add title (mouse-over) on file paths, and show the document symbol on file paths.
 - `build`: remove nonsensible `--timestamp` feature
-- Change build optimization to aim for for smaller size.
+- Change build optimization to aim for smaller size.
 - `clone`: check program version against the repository after cloning.
 - `add-to`: verify program version against the repo being added to.
 - `add-to`: nicer message--don't pretend to do something with no files.
@@ -154,8 +153,6 @@ cj14
 
 cj15
 
-- `add-to`: advise to use `help-attributes`
-- Say when sequence data was removed.
 - Improvements of terminal messages.
 - `add-to` and `prepare` now mention when data has been removed (and hint at the `--no-blind` option)
 - `add-to` now advises to use `help-attributes` after finishing; it also shows the target file path(s) so that those can easily be seen or copy pasted.
@@ -173,14 +170,14 @@ v7.1 - 2025-04-03
 
 - Fix make-xmlhub-indexer-release: allow `path` in `Cargo.toml`, as long as they are into the local repository.
 - Add installation infrastructure (not used yet) that installs into `~/.cargo/bin/` even if cargo is not installed, and adds code to shell startup files to add that to the `PATH`.
-- Add signing infrastructure based on fips205, and JSON files.
-- Add creation/reading of app `.info` files (`AppInfo` type) (includes reusable abstraction for JSON file based types).
+- Add signing infrastructure based on fips205 and a custom JSON based file format (includes a reusable abstraction for JSON file based type serialisation).
+- Add creation/reading of application `.info` files (`AppInfo` type).
 - Add internal sha2 hashing so that the binary does not need to rely on an external `sha256sum` command (also adds a `sha256sum-rs` binary, only meant for testing).
-- `make-xmlhub-indexer-release`: add a check that push will not fail before starting.
+- `make-xmlhub-indexer-release`: in data collection phase, add a check that push will not fail.
 
 cj17
 
-- `make-xmlhub-indexer-release`: save app info files, and sign them.
+- `make-xmlhub-indexer-release`: create app info files, and sign them.
 - JSON files now come in two modes: overwritable (e.g. `.info` files) and exclusive (do not overwrite, e.g. key files).
 
 cj18
@@ -193,7 +190,7 @@ v7.2 - 2025-04-08
 
 - Fix `xmlhub check`: handle relative paths from the current directory.
 - `xmlhub --version`: show architecture, and compilation profile.
-- Change README to recommend `cargo run --bin xmlhub install` over `cargo install` (the latter ignores `Cargo.lock` by default which is undesirable for security reasons).
+- Change README to recommend `cargo run --bin xmlhub --release install` instead of `cargo install --path .` (the latter ignores `Cargo.lock` by default which is undesirable for security reasons, also don't want to install the binaries other than `xmlhub`).
 - Add `xmlhub upgrade`
 
 cj19
@@ -208,7 +205,7 @@ v7.4 - 2025-04-10
 
 - Link `DOI` entries
 - Autolink values in index key positions, too.
-- From file info boxes, link back from individual values (when indexed) to the index via separate links (using up-arrow symbols).
+- From file info boxes, link back from individual values (when indexed) to the index via *separate* links (using up-arrow symbols) to allow automatic links to be used, too.
 
 v8 - 2025-04-11
 
