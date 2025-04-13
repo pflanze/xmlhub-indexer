@@ -45,7 +45,8 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
     installation::{
-        defaults::global_app_state_dir, git_based_upgrade::git_based_upgrade,
+        defaults::global_app_state_dir,
+        git_based_upgrade::{git_based_upgrade, UpgradeRules},
         install::install_executable,
     },
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
@@ -331,7 +332,20 @@ struct HelpAttributesOpts {
 struct InstallOpts {}
 
 #[derive(clap::Parser, Debug, Clone)]
-struct UpgradeOpts {}
+struct UpgradeOpts {
+    /// Even if the local executable is already up to date, re-install
+    /// it anyway (rarely useful, except for re-running the
+    /// installation of the shell settings, but `xmlhub install` will
+    /// achieve the same?--TODO: add force option there).
+    #[clap(long)]
+    force_reinstall: bool,
+    /// Install even if the local executable is newer than the
+    /// downloaded one. Only use if you know what you're doing
+    /// (normally your files and updated index files will not work
+    /// problem-free for others!).
+    #[clap(long)]
+    force_downgrade: bool,
+}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct ChangelogOpts {
@@ -2735,8 +2749,15 @@ fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> Resul
 }
 
 /// Execute an `upgrade` command
-fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Result<()> {
-    let UpgradeOpts {} = command_opts;
+fn upgrade_command(
+    program_version: GitVersion<SemVersion>,
+    global_opts: &GlobalOpts,
+    command_opts: UpgradeOpts,
+) -> Result<()> {
+    let UpgradeOpts {
+        force_reinstall,
+        force_downgrade,
+    } = command_opts;
 
     if global_opts.dry_run {
         // XX todo?
@@ -2750,7 +2771,11 @@ fn upgrade_command(global_opts: &GlobalOpts, command_opts: UpgradeOpts) -> Resul
     // XX change to use Done approach? It only does so partially
     // now. (Is it better or worse to not print steps that were
     // already successful?)
-    git_based_upgrade()?;
+    git_based_upgrade(UpgradeRules {
+        current_version: program_version,
+        force_downgrade,
+        force_reinstall,
+    })?;
 
     Ok(())
 }
@@ -3611,7 +3636,7 @@ fn main() -> Result<()> {
                     },
                     command: Some(Command::Install(InstallOpts {})),
                 },
-                Command::Upgrade(UpgradeOpts {}) => Opts {
+                Command::Upgrade(upgrade_opts) => Opts {
                     v,
                     version_only,
                     global: GlobalOpts {
@@ -3623,7 +3648,7 @@ fn main() -> Result<()> {
                         dry_run,
                         no_version_check,
                     },
-                    command: Some(Command::Upgrade(UpgradeOpts {})),
+                    command: Some(Command::Upgrade(upgrade_opts)),
                 },
                 Command::Build(BuildOpts {
                     write_errors: write_errors_,
@@ -3880,7 +3905,9 @@ fn main() -> Result<()> {
         Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
 
         Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
-        Command::Upgrade(command_opts) => upgrade_command(&opts.global, command_opts.clone()),
+        Command::Upgrade(command_opts) => {
+            upgrade_command(program_version, &opts.global, command_opts.clone())
+        }
 
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &opts.global, command_opts.clone())

@@ -1,13 +1,14 @@
 //! Upgrading an executable by (cloning and) pulling from a Git
 //! repository containing signed binaries.
 
-use std::path::PathBuf;
+use std::{cmp::Ordering, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
     const_util::file_name,
     git::git,
+    git_version::{GitVersion, SemVersion},
     path_util::AppendToPath,
     sha256::sha256sum,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
@@ -24,7 +25,7 @@ use super::{
 
 // Todo: change to git remote update and reset, so that trimming the
 // upstream repository every now and then would be possible?
-pub fn pull_verified_executable() -> Result<PathBuf> {
+pub fn pull_verified_executable() -> Result<(PathBuf, AppInfo)> {
     let binaries_repo_name = "xmlhub-indexer-binaries";
 
     let binaries_checkout = BINARIES_CHECKOUT.replace_working_dir_path(
@@ -64,7 +65,7 @@ pub fn pull_verified_executable() -> Result<PathBuf> {
         .working_dir_path()
         .append(repo_section.installation_subpath())
         .append(file_name(XMLHUB_INDEXER_BINARY_FILE));
-    let (info, info_path, info_bytes) = AppInfo::load_for_app_path(&binary_path)?;
+    let (app_info, info_path, info_bytes) = AppInfo::load_for_app_path(&binary_path)?;
     let sig = AppSignature::load_from_base(&info_path)?;
     let (is_valid, public_key) = sig.verify(&info_bytes)?;
     if is_valid {
@@ -74,14 +75,14 @@ pub fn pull_verified_executable() -> Result<PathBuf> {
                 sig.metadata.birth
             );
             let actual_hash = sha256sum(&binary_path).with_context(|| anyhow!(""))?;
-            if actual_hash == info.sha256 {
+            if actual_hash == app_info.sha256 {
                 println!("App file hash is valid.");
-                Ok(binary_path)
+                Ok((binary_path, app_info))
             } else {
                 bail!(
                     "invalid file hash: the file {binary_path:?} hashes to {actual_hash:?}, \
                      but its signed info file expects {:?}",
-                    info.sha256
+                    app_info.sha256
                 )
             }
         } else {
@@ -97,11 +98,79 @@ pub fn pull_verified_executable() -> Result<PathBuf> {
     }
 }
 
+/// Currently always upgrades when the remote version is newer. In the
+/// FUTURE might want to give explicit version requests, which can be
+/// satisfied from the Git history of the binaries repository.
+pub struct UpgradeRules {
+    pub current_version: GitVersion<SemVersion>,
+    /// Applies only if lower version is encountered
+    pub force_downgrade: bool,
+    /// Applies when the exact same version is encountered
+    pub force_reinstall: bool,
+}
+
 /// Get the repository with the binaries or refresh it, choose the
-/// right binary, verify signature on it, install it.
-pub fn git_based_upgrade() -> Result<()> {
-    let binary_path = pull_verified_executable()?;
-    let done = install_executable(&binary_path)?;
-    println!("Upgraded executable:\n\n{done}");
+/// right binary, verify signature on it, install it after possibly
+/// checking its app info against the version requirement given in
+/// `rules`.
+pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
+    let (binary_path, app_info) = pull_verified_executable()?;
+
+    let downloaded_version: GitVersion<SemVersion> = app_info.version.parse()?;
+
+    let UpgradeRules {
+        current_version,
+        force_downgrade,
+        force_reinstall,
+    } = rules;
+
+    let order = downloaded_version
+        .partial_cmp(&current_version)
+        .ok_or_else(|| anyhow!("bug, if this happens, Christian doesn't understand PartialOrd"))?;
+
+    enum Action {
+        DoNothingBecause(String),
+        InstallBecause(String),
+    }
+
+    let action = match order {
+        Ordering::Less => {
+            if force_downgrade {
+                Action::InstallBecause(format!("the --force-downgrade option was given"))
+            } else {
+                Action::DoNothingBecause(format!(
+                    "the downloaded version {downloaded_version} is older \
+                     than your version {current_version}.\n\
+                     Give the --force-downgrade option in case you really want to downgrade \
+                     (not recommended)"
+                ))
+            }
+        }
+        Ordering::Equal => {
+            if force_reinstall {
+                Action::InstallBecause(format!("the --force-reinstall option was given"))
+            } else {
+                Action::DoNothingBecause(format!(
+                    "your version {current_version} is already up to date.\n\
+                     Give the --force-reinstall option in case you want to re-install"
+                ))
+            }
+        }
+        Ordering::Greater => Action::InstallBecause(format!(
+            "the downloaded version {downloaded_version} is newer than your version {current_version}"
+        )),
+    };
+
+    match action {
+        Action::DoNothingBecause(msg) => {
+            println!("Do nothing because {msg}.");
+        }
+        Action::InstallBecause(msg) => {
+            println!("Installing because {msg}.");
+            let done = install_executable(&binary_path)?;
+            println!("Upgraded executable:\n\n{done}");
+        }
+    }
+
     Ok(())
 }
