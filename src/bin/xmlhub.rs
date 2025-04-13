@@ -3865,15 +3865,11 @@ fn main() -> Result<()> {
 
         Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
         Command::Upgrade(command_opts) => upgrade_command(&opts.global, command_opts.clone()),
-        Command::Build(command_opts) => {
-            build_command(program_version, &opts.global, command_opts.clone())
-        }
-        Command::Check(command_opts) => {
-            check_command(program_version, &opts.global, command_opts.clone())
-        }
+
         Command::CloneTo(command_opts) => {
             clone_to_command(program_version, &opts.global, command_opts.clone())
         }
+
         Command::Prepare(command_opts) => {
             // `prepare` can't check `program_version` as it is not
             // given the path to the repository
@@ -3881,6 +3877,12 @@ fn main() -> Result<()> {
         }
         Command::AddTo(command_opts) => {
             add_to_command(program_version, &opts.global, command_opts.clone())
+        }
+        Command::Check(command_opts) => {
+            check_command(program_version, &opts.global, command_opts.clone())
+        }
+        Command::Build(command_opts) => {
+            build_command(program_version, &opts.global, command_opts.clone())
         }
     }
 }
