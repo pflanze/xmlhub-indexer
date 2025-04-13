@@ -52,7 +52,7 @@ fn main() -> Result<()> {
                 ChangelogDisplayStyle::Innovative
             },
         },
-        &mut stdout(),
+        &mut stdout().lock(),
     )?;
     Ok(())
 }
