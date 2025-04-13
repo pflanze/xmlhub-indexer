@@ -32,7 +32,7 @@ use walkdir::WalkDir;
 // Use from src/*.rs
 use xmlhub_indexer::{
     backoff::{LoopVerbosity, LoopWithBackoff},
-    browser::spawn_browser,
+    browser::{spawn_browser, spawn_browser_on_path},
     changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle},
     checkout_context::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
@@ -3516,11 +3516,6 @@ fn with_output_to_file(
         Ok(())
     })()
     .with_context(|| anyhow!("writing to file {output_path:?}"))
-}
-
-fn spawn_browser_on_path(document_path: &Path) -> Result<()> {
-    spawn_browser(*CURRENT_DIRECTORY, &[&OsString::try_from(document_path)?])?;
-    Ok(())
 }
 
 fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {

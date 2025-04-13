@@ -10,6 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
     command::{run_outputs, spawn, Capturing},
+    path_util::CURRENT_DIRECTORY,
     util::{append, to_owned_items},
 };
 
@@ -164,4 +165,11 @@ pub fn spawn_browser(in_directory: &Path, arguments: &[&OsStr]) -> Result<()> {
             s => bail!("spawn_browser: don't know how to handle OS family {s:?}"),
         },
     }
+}
+
+/// Simplified call to just open a local filesystem path in the
+/// browser (absolute or relative to the current directory).
+pub fn spawn_browser_on_path(document_path: &Path) -> Result<()> {
+    spawn_browser(*CURRENT_DIRECTORY, &[&OsString::try_from(document_path)?])?;
+    Ok(())
 }
