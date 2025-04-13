@@ -219,3 +219,5 @@ v8 - 2025-04-11
 - Rename `make-xmlhub-indexer-release` to `make-release` (now that we don't install it anymore, it's fine to use a generic name)
 - When a version check on a repo detects an outdated executable, instruct the user to run `xmlhub upgrade`
 - `xmlhub upgrade`: verify that the remote version is actually newer, unless --force-* options are given
+- `make-release`: remind the user to update the `Changelog.md` file
+- `make-release`: update `Changelog.md` (after checking first) with release tag and date
