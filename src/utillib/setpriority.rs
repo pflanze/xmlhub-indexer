@@ -15,8 +15,14 @@ pub enum PriorityWhich {
     User(libc::id_t),
 }
 
+// Somehow the type `__priority_which_t` is *not* available on macOS
+// with the same libc version, 0.2.153, thus alias it here (without
+// the leading underscores, OK?) in guest space.
+#[allow(non_camel_case_types)]
+pub type priority_which_t = libc::c_uint;
+
 impl PriorityWhich {
-    fn which(self) -> libc::__priority_which_t {
+    fn which(self) -> priority_which_t {
         match self {
             PriorityWhich::Process(_) => libc::PRIO_PROCESS,
             PriorityWhich::ProcessGroup(_) => libc::PRIO_PGRP,
