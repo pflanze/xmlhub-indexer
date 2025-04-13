@@ -3654,6 +3654,13 @@ fn main() -> Result<()> {
                         silent_on_written_errors = true;
                         no_repo_check = true;
                         // Should we force `ignore_untracked` false?
+                        // No, rather, would want it to be true
+                        // because stale files from crashed git runs,
+                        // if they are .xml files, would lead to
+                        // spurious result. *But*, planning to use
+                        // setup for website where there is no
+                        // toplevel Git repository, thus wouldn't
+                        // work. => Issue to solve in the future.
                     } else {
                         pull = pull_;
                         push = push_;
