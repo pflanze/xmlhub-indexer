@@ -402,6 +402,10 @@ fn main() -> Result<()> {
         }
     };
 
+    if !ask_yn("Have you updated `Changelog.md`?")? {
+        bail!("you need to do that first")
+    }
+
     println!("\n====Preparing...=============================================================\n");
 
     // Make sure the current dir is the top directory of the
