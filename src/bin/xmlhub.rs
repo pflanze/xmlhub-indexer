@@ -3700,7 +3700,7 @@ fn main() -> Result<()> {
                 Command::CloneTo(CloneToOpts {
                     no_verbose,
                     target_path: base_path,
-                    experiment,
+                    experiments,
                 }) => Opts {
                     v,
                     version_only,
@@ -3716,7 +3716,7 @@ fn main() -> Result<()> {
                     command: Some(Command::CloneTo(CloneToOpts {
                         no_verbose,
                         target_path: base_path,
-                        experiment,
+                        experiments,
                     })),
                 },
                 Command::Prepare(PrepareOpts {

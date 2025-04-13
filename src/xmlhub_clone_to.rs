@@ -18,10 +18,10 @@ pub struct CloneToOpts {
     #[clap(long)]
     pub no_verbose: bool,
 
-    /// Do not use the official XML Hub repository, but instead one
-    /// for experimenting with
+    /// Instead of the official XML Hub repository, clone the
+    /// `xmlhub-experiments` repository for experimenting with
     #[clap(long)]
-    pub experiment: bool,
+    pub experiments: bool,
 
     /// Where to create the repository clone. If the given path is
     /// pointing to an existing directory, the name of the upstream
@@ -90,7 +90,7 @@ pub fn clone_to_command(
     let CloneToOpts {
         no_verbose,
         target_path,
-        experiment,
+        experiments,
     } = command_opts;
 
     let target_path =
@@ -101,7 +101,7 @@ pub fn clone_to_command(
         // CheckoutContext is not Copy. It allso allows it for
         // `const`, where it makes sense, but not for `static`.)
         let mut checkout = CHECKOUT;
-        if experiment {
+        if experiments {
             checkout.supposed_upstream_git_url =
                 "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git";
             // Unused (XXX is there really no other place that needs the
