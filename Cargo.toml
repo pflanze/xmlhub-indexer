@@ -23,7 +23,7 @@ overflow-checks = true
 ahtml = { version = "0.7.0" }
 auri = { version = "0.1.1" }
 chj-util = { version = "0.2.1" }
-ahtml-from-markdown = { version = "0.1.0", path = "../website/libs/ahtml-from-markdown" }
+ahtml-from-markdown = { version = "0.1.0" }
 
 pluraless = { path = "libs/pluraless" }
 
