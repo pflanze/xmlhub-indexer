@@ -289,7 +289,7 @@ for `let toplevel_section` for all the sections, or `let intro` for
 the intro text.
 
 There is a file with settings that are shared between the
-`xmlhub` and `make-xmlhub-indexer-release` programs:
+`xmlhub` and `make-release` programs:
 [`xmlhub_indexer_defaults.rs`](src/xmlhub_indexer_defaults.rs). You
 find docs on the fields in the [declaration of
 `CheckoutContext`](src/checkout_context.rs).
@@ -344,10 +344,10 @@ don't have to do this manually!:
   it was built), and if signing, also adding a git tag, then pushing
   branch and tag also back to GitLab.
 
-#### `make-xmlhub-indexer-release`
+#### `make-release`
 
 In addition to `xmlhub`, the xmlhub-indexer repository
-contains a `make-xmlhub-indexer-release` program which carries out all
+contains a `make-release` program which carries out all
 of the above steps automatically. It runs tests and collects
 information, then shows a summary of the changes that will be carried
 out and asks for confirmation before acting.
@@ -359,7 +359,7 @@ source and binary repositories; the new app signing is independent of
 gpg and always active). From within the "xmlhub-indexer" directory run
 (see below for how to get your key fingerprint):
 
-    cargo run --bin make-xmlhub-indexer-release -- --local-user "...your key fingerprint.."
+    cargo run --bin make-release -- --local-user "...your key fingerprint.."
 
 Caveats:
 
@@ -367,7 +367,7 @@ Caveats:
   option; if you use pushing and the "git push" step fails
   due to the remote (GitLab) having been updated by someone else in
   the meantime, you're expected to pull (and verify) the changes
-  yourself, then re-run the `make-xmlhub-indexer-release` program.
+  yourself, then re-run the `make-release` program.
 
 - It currently only publishes binaries when run on macOS or Linux, and
   it has not been tested on Windows at all.
@@ -401,7 +401,7 @@ via the `--version` option).)
 
 While care has been taken to try to make the `xmlhub` source
 code easy to understand (newbie-friendly), for
-`make-xmlhub-indexer-release` that goal has been dropped; it does use
+`make-release` that goal has been dropped; it does use
 some advanced Rust features.
 
 ### Quick Rust primer

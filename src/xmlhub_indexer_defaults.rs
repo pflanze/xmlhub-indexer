@@ -18,9 +18,9 @@ pub const XMLHUB_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
 };
 
 /// Information on the Git checkout of the xmlhub-indexer repo; used
-/// by both xmlhub.rs and make-xmlhub-indexer-release.rs
+/// by both xmlhub.rs and make-release.rs
 pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
-    // This path is only used by make-xmlhub-indexer-release.rs and
+    // This path is only used by make-release.rs and
     // replaced with the program argument for xmlhub.rs
     working_dir_path: ".",
     branch_name: "master",
@@ -30,7 +30,7 @@ pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
 };
 
 /// Information on the Git checkout of the xmlhub-indexer-binaries repo; currently used
-/// only by make-xmlhub-indexer-release.rs
+/// only by make-release.rs
 pub const BINARIES_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     working_dir_path: "../xmlhub-indexer-binaries/",
     branch_name: "master",

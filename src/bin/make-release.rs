@@ -138,7 +138,7 @@ impl Effect for CreateTag {
             SOURCE_CHECKOUT.working_dir_path(),
             &self.tag_name,
             None,
-            "via make-xmlhub-indexer-release.rs",
+            "via make-release.rs",
             self.sign,
             self.local_user.as_deref(),
         )?;
@@ -622,7 +622,7 @@ fn main() -> Result<()> {
                      - OS / version: {os_version}\n\
                      - arch: {os_arch}\n\
                      \n\
-                     Created by make-xmlhub-indexer-release.rs"
+                     Created by make-release.rs"
                 );
 
                 Box::new(ReleaseBinary {

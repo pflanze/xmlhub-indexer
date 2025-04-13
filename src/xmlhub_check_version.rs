@@ -1,6 +1,6 @@
 // Part of xmlhub, this is the first file after
 // xmlhub_indexer_defaults.rs that shall remain part of the lib crate
-// of the xmlhub + make-xmlhub-indexer-release binaries.
+// of the xmlhub + make-release binaries.
 
 //! Wrapper around git_check_version.rs for the xmlhub specific parts.
 

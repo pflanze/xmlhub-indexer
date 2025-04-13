@@ -21,7 +21,7 @@ fn main() {
     // dependencies via rerun-if-changed, but that can only be on env
     // vars (*outside* build.rs) or files or dirs. Hence:
 
-    // Rebuild if make-xmlhub-indexer-release creates/updates this file, which it
+    // Rebuild if make-release creates/updates this file, which it
     // does when it creates a tag. But also create the file right now
     // if it doesn't already exist, since if it's not there, cargo
     // will rebuild the binary every time it is invoked!
@@ -35,7 +35,7 @@ fn main() {
     // Also try to detect when Git has a new tag, this should take
     // care of the case where somebody makes a new tag manually, or
     // just a new commit (which is definitely bypassing
-    // make-xmlhub-indexer-release). The drawback of this is that when Git changes
+    // make-release). The drawback of this is that when Git changes
     // the layout of its metadata dir then this will stop working (and
     // already today, this will fail if packed refs are used).
     println!("cargo::rerun-if-changed=.git/logs/HEAD");
