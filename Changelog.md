@@ -214,3 +214,4 @@ v8 - 2025-04-11
 - Add `xmlhub --version-only` option; for `--version`, also show the OS.
 - Add `Changelog.md`, and `xmlhub changelog` subcommand.
 - `xmlhub help-attributes`: add `--open`, for the nicer HTML view, and make it the default, add `--print` for old behaviour.
+- `xmlhub clone-to`: rename `--experiment` option to `--experiments`
