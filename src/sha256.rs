@@ -1,13 +1,12 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::{fs::File, io::Read, path::Path};
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 
-use crate::{command::run_stdout_string, rayon_util::ParRun, utillib::hex::to_hex_string};
+use crate::{
+    command::run_stdout_string, path_util::CURRENT_DIRECTORY, rayon_util::ParRun,
+    utillib::hex::to_hex_string,
+};
 
 /// Calculate SHA-256 hash sum for the given path as hex string.
 pub fn sha256sum<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {
@@ -38,7 +37,7 @@ pub fn sha256sum<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {
 /// calling the external `sha256sum` executable.
 pub fn sha256sum_external<P: AsRef<Path>>(path: P) -> Result<String> {
     let stdout = run_stdout_string(
-        &PathBuf::from("."),
+        *CURRENT_DIRECTORY,
         "sha256sum",
         &[path.as_ref()],
         &[],

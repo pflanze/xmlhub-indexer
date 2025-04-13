@@ -49,7 +49,7 @@ use xmlhub_indexer::{
         install::install_executable,
     },
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
-    path_util::{AppendToPath, FixupPath},
+    path_util::{AppendToPath, CURRENT_DIRECTORY},
     rayon_util::ParRun,
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
@@ -2848,14 +2848,10 @@ fn build_command(
 
     let no_repo_check = typed_from_no_repo_check(no_repo_check);
 
-    let base_path = if let Some(base_path) = base_path {
+    let base_path: Cow<Path> = if let Some(base_path) = base_path {
         base_path.into()
     } else {
-        // The current directory. Use "", not ".", to make the
-        // path portable to Windows (reliably not needed?) and
-        // delegate the decision to the `FixupPath` trait, where I
-        // will care for it.
-        PathBuf::from("").fixup()
+        (*CURRENT_DIRECTORY).into()
     };
 
     let git_log_version_checker =
@@ -3478,7 +3474,7 @@ fn with_output_to_file(
 }
 
 fn spawn_browser_on_path(document_path: &Path) -> Result<()> {
-    spawn_browser(&PathBuf::from("."), &[&OsString::try_from(document_path)?])?;
+    spawn_browser(*CURRENT_DIRECTORY, &[&OsString::try_from(document_path)?])?;
     Ok(())
 }
 

@@ -5,7 +5,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use lazy_static::lazy_static;
 use nix::NixPath;
+
+lazy_static! {
+    pub static ref CURRENT_DIRECTORY: &'static Path = ".".as_ref();
+}
 
 /// Make it easy to append a segment to an existing path.
 pub trait AppendToPath {
@@ -51,7 +56,7 @@ impl<'t> FixupPath<'t> for &'t Path {
         Self: 't,
     {
         if self.is_empty() {
-            PathBuf::from(".").into()
+            (*CURRENT_DIRECTORY).into()
         } else {
             self.into()
         }
@@ -64,7 +69,7 @@ impl<'t> FixupPath<'t> for &'t PathBuf {
         Self: 't,
     {
         if self.is_empty() {
-            PathBuf::from(".").into()
+            (*CURRENT_DIRECTORY).into()
         } else {
             self.into()
         }
@@ -77,11 +82,27 @@ impl<'t> FixupPath<'t> for PathBuf {
         Self: 't,
     {
         if self.is_empty() {
-            PathBuf::from(".").into()
+            (*CURRENT_DIRECTORY).into()
         } else {
             self.into()
         }
     }
+}
+
+#[test]
+fn t_fixup() {
+    assert_eq!(CURRENT_DIRECTORY.to_string_lossy(), ".");
+    assert_eq!(&PathBuf::from(".").fixup(), *CURRENT_DIRECTORY);
+    assert_eq!(&PathBuf::from("").fixup(), *CURRENT_DIRECTORY);
+    assert_eq!(
+        PathBuf::from("foo").fixup().as_ref(),
+        AsRef::<Path>::as_ref("foo")
+    );
+    // BTW:
+    assert_eq!(
+        PathBuf::from("foo").fixup().as_ref(),
+        AsRef::<Path>::as_ref("foo/")
+    );
 }
 
 // Add an extension to a path with a filename. Returns false if it
