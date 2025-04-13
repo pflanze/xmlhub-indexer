@@ -214,4 +214,6 @@ v8 - 2025-04-11
 
 - `xmlhub build --daemon`: set resource limits in worker child processes (obviating the need for `ulimit` in shell wrapper files, and avoiding the problem of long-running daemons probably being killed due to CPU limit).
 - `xmlhub build --daemon`: set CPU priority in worker child processes to 10 (be nicer to other users on the server).
+- Add `xmlhub --version-only` option; for `--version`, also show the OS.
 - Add `Changelog.md`, and `xmlhub changelog` subcommand.
+- `xmlhub help-attributes`: add `--open`, for the nicer HTML view.
