@@ -215,3 +215,7 @@ v8 - 2025-04-11
 - Add `Changelog.md`, and `xmlhub changelog` subcommand.
 - `xmlhub help-attributes`: add `--open`, for the nicer HTML view, and make it the default, add `--print` for old behaviour.
 - `xmlhub clone-to`: rename `--experiment` option to `--experiments`
+- `xmlhub build`: make it work when the current working directory is in a *subdirectory* of the repo
+- Rename `make-xmlhub-indexer-release` to `make-release` (now that we don't install it anymore, it's fine to use a generic name)
+- When a version check on a repo detects an outdated executable, instruct the user to run `xmlhub upgrade`
+- `xmlhub upgrade`: verify that the remote version is actually newer, unless --force-* options are given
