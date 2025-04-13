@@ -2854,9 +2854,6 @@ fn build_command(
         (*CURRENT_DIRECTORY).into()
     };
 
-    let git_log_version_checker =
-        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
-
     let xmlhub_checkout = XMLHUB_CHECKOUT
         .replace_working_dir_path(base_path.clone())
         .check1(no_repo_check)?;
@@ -2869,6 +2866,9 @@ fn build_command(
     } else {
         None
     };
+
+    let git_log_version_checker =
+        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
 
     let min_sleep_seconds = daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
