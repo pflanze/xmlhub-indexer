@@ -569,7 +569,7 @@ fn main() -> Result<()> {
     };
 
     if !changelog_has_release {
-        if !ask_yn("Have you updated `Changelog.md`?")? {
+        if !ask_yn("Have you updated `Changelog.md`? (You can do that while I wait.)")? {
             bail!("you need to do that first")
         }
     }
