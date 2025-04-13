@@ -18,8 +18,14 @@ pub enum PriorityWhich {
 // Somehow the type `__priority_which_t` is *not* available on macOS
 // with the same libc version, 0.2.153, thus alias it here (without
 // the leading underscores, OK?) in guest space.
+
+#[cfg(target_os = "linux")]
 #[allow(non_camel_case_types)]
-pub type priority_which_t = libc::c_uint;
+pub type priority_which_t = libc::__priority_which_t;
+
+#[cfg(target_os = "macos")]
+#[allow(non_camel_case_types)]
+pub type priority_which_t = i32;
 
 impl PriorityWhich {
     fn which(self) -> priority_which_t {
