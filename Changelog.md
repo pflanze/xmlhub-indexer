@@ -221,3 +221,6 @@ v8 - 2025-04-11
 - `xmlhub upgrade`: verify that the remote version is actually newer, unless --force-* options are given
 - `make-release`: remind the user to update the `Changelog.md` file
 - `make-release`: update `Changelog.md` (after checking first) with release tag and date
+
+v8.1 - 2025-04-13
+
