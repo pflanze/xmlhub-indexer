@@ -317,9 +317,14 @@ enum Command {
 
 #[derive(clap::Parser, Debug, Clone)]
 struct HelpAttributesOpts {
-    /// Open the attributes description in the browser (disables printing)
+    /// Open the attributes description in the browser (default)
     #[clap(long)]
     open: bool,
+    /// Print the attributes description to the terminal in Markdown
+    /// instead of opening in the browser (although if `--open` is
+    /// given explicitly, still does that, too)
+    #[clap(long)]
+    print: bool,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -3478,9 +3483,14 @@ fn spawn_browser_on_path(document_path: &Path) -> Result<()> {
 }
 
 fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
-    let HelpAttributesOpts { open } = command_opts;
+    let HelpAttributesOpts { open, print } = command_opts;
 
-    if open {
+    let (do_open, do_print) = match (open, print) {
+        (false, false) => (true, false),
+        _ => (open, print),
+    };
+
+    if do_open {
         let html = HTML_ALLOCATOR_POOL.get();
         let spec_html = specifications_to_html(&html)?;
         let output_path = global_app_state_dir()?
@@ -3495,7 +3505,9 @@ fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
             )?)
         })?;
         spawn_browser_on_path(&output_path)?;
-    } else {
+    }
+
+    if do_print {
         let mut out = stdout().lock();
         writeln!(
             &mut out,
