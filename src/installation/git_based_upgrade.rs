@@ -168,7 +168,14 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
         Action::InstallBecause(msg) => {
             println!("Installing because {msg}.");
             let done = install_executable(&binary_path)?;
-            println!("Upgraded executable:\n\n{done}");
+            println!(
+                "{} executable:\n\n{done}",
+                match order {
+                    Ordering::Less => "Downgraded",
+                    Ordering::Equal => "Reinstalled",
+                    Ordering::Greater => "Upgraded",
+                }
+            );
         }
     }
 
