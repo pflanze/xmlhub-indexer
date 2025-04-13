@@ -1,6 +1,6 @@
 // Use from the standard library
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsString,
     fmt::Display,
@@ -2121,7 +2121,6 @@ struct BuildIndexOpts {
 fn build_index(
     global_opts: &GlobalOpts,
     build_index_opts: BuildIndexOpts,
-    base_path: &Path,
     git_log_version_checker: &XmlhubCheckVersion,
     xmlhub_checkout: &CheckedCheckoutContext1<Cow<Path>>,
     maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<Cow<Path>>>,
@@ -2162,7 +2161,7 @@ fn build_index(
         if pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(base_path, &["pull"], global_opts.quiet)? {
+                if !git(xmlhub_checkout.working_dir_path(), &["pull"], global_opts.quiet)? {
                     bail!("git pull failed")
                 }
             }
@@ -2173,8 +2172,11 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git remote update {default_remote:?}"),
-                if !git(base_path, &["remote", "update", default_remote],
-                        global_opts.quiet)? {
+                if !git(
+                    xmlhub_checkout.working_dir_path(),
+                    &["remote", "update", default_remote],
+                    global_opts.quiet
+                )? {
                     bail!("git remote update {default_remote:?} failed")
                 }
             }
@@ -2183,8 +2185,11 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_reference:?}"),
-                if !git(base_path, &["reset", "--hard", &remote_banch_reference],
-                        global_opts.quiet)? {
+                if !git(
+                    xmlhub_checkout.working_dir_path(),
+                    &["reset", "--hard", &remote_banch_reference],
+                    global_opts.quiet
+                )? {
                     bail!("git reset --hard {remote_banch_reference:?} failed")
                 }
             }
@@ -2204,13 +2209,13 @@ fn build_index(
         // end in .xml
         let mut paths = if ignore_untracked {
             // Ask Git for the list of files
-            git_ls_files(base_path)?
+            git_ls_files(xmlhub_checkout.working_dir_path())?
         } else {
             // Ask the filesystem for the list of files, but do not
             // waste time listing paths in the .git nor .xmlhub
             // subdirs
             let ignored_file_names = HashSet::from([".git", &*DAEMON_FOLDER_NAME]);
-            let entries = WalkDir::new(base_path)
+            let entries = WalkDir::new(xmlhub_checkout.working_dir_path())
                 .follow_links(false)
                 .min_depth(1)
                 .into_iter()
@@ -2222,19 +2227,27 @@ fn build_index(
                         true
                     }
                 });
-            let shared_base_path = Arc::new(base_path.to_owned());
+            let shared_base_path = Arc::new(xmlhub_checkout.working_dir_path().to_owned());
             let mut paths: Vec<BaseAndRelPath> = Vec::new();
             for entry in entries {
-                let entry = entry
-                    .with_context(|| anyhow!("listing contents of directory {base_path:?}"))?;
-                let relative_path = entry.path().strip_prefix(base_path).with_context(|| {
-                    // Could happen via folder rename races, right? So don't panic.
+                let entry = entry.with_context(|| {
                     anyhow!(
-                        "listed files of directory {base_path:?} \
-                         should be prefixed with that path, but got {:?}",
-                        entry.path()
+                        "listing contents of directory {:?}",
+                        xmlhub_checkout.working_dir_path()
                     )
                 })?;
+                let relative_path = entry
+                    .path()
+                    .strip_prefix(xmlhub_checkout.working_dir_path())
+                    .with_context(|| {
+                        // Could happen via folder rename races, right? So don't panic.
+                        anyhow!(
+                            "listed files of directory {:?} \
+                             should be prefixed with that path, but got {:?}",
+                            xmlhub_checkout.working_dir_path(),
+                            entry.path()
+                        )
+                    })?;
                 paths.push(BaseAndRelPath::new(
                     Some(Arc::clone(&shared_base_path)),
                     relative_path.to_owned(),
@@ -2676,7 +2689,10 @@ fn build_index(
             // let mut path = base_path.clone();
             // path.push(HTML_FILENAME);
             // path.canonicalize().as_os_str()
-            spawn_browser(base_path, &[HTML_FILE.path_from_repo_top.as_ref()])?;
+            spawn_browser(
+                xmlhub_checkout.working_dir_path(),
+                &[HTML_FILE.path_from_repo_top.as_ref()],
+            )?;
         } else {
             eprintln!(
                 "Note: not opening browser because the files weren't written due \
@@ -2848,15 +2864,13 @@ fn build_command(
 
     let no_repo_check = typed_from_no_repo_check(no_repo_check);
 
-    let base_path: Cow<Path> = if let Some(base_path) = base_path {
-        base_path.into()
+    let xmlhub_checkout: CheckedCheckoutContext1<Cow<Path>> = if let Some(base_path) = base_path {
+        XMLHUB_CHECKOUT
+            .replace_working_dir_path(base_path.into())
+            .check1(no_repo_check)?
     } else {
-        (*CURRENT_DIRECTORY).into()
+        XMLHUB_CHECKOUT.checked_from_subpath(*CURRENT_DIRECTORY, no_repo_check, false)?
     };
-
-    let xmlhub_checkout = XMLHUB_CHECKOUT
-        .replace_working_dir_path(base_path.clone())
-        .check1(no_repo_check)?;
 
     // For pushing, need the `CheckedCheckoutContext` (which has the
     // `default_remote`). Retrieve this early to avoid committing and
@@ -2867,8 +2881,11 @@ fn build_command(
         None
     };
 
-    let git_log_version_checker =
-        git_log_version_checker(program_version, global_opts.no_version_check, &base_path);
+    let git_log_version_checker = git_log_version_checker(
+        program_version,
+        global_opts.no_version_check,
+        &xmlhub_checkout.working_dir_path(),
+    );
 
     let min_sleep_seconds = daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
 
@@ -2888,21 +2905,25 @@ fn build_command(
                 no_branch_check,
                 open,
             },
-            base_path.borrow(),
             &git_log_version_checker,
             &xmlhub_checkout,
             &maybe_checked_xmlhub_checkout,
         )
     };
 
-    let daemon_base_dir = (&base_path).append(&*DAEMON_FOLDER_NAME);
+    let daemon_base_dir = xmlhub_checkout
+        .working_dir_path()
+        .append(&*DAEMON_FOLDER_NAME);
     let _ = create_dir(&daemon_base_dir);
 
     let main_lock_path = (&daemon_base_dir).append("main.lock");
     let get_main_lock = || {
         file_lock_nonblocking(&main_lock_path, true).map_err(|e| match e {
             FileLockError::AlreadyLocked => {
-                anyhow!("xmlhub is already running on this repository, {base_path:?}")
+                anyhow!(
+                    "xmlhub is already running on this repository, {:?}",
+                    xmlhub_checkout.working_dir_path()
+                )
             }
             _ => anyhow!("locking {main_lock_path:?}: {e}"),
         })
@@ -3082,7 +3103,6 @@ fn check_command(
             no_branch_check: true,  // ?
             open,
         },
-        base_path,
         &git_log_version_checker,
         &xmlhub_checkouts[0],
         &maybe_checked_xmlhub_checkout,
