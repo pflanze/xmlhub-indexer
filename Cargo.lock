@@ -34,6 +34,8 @@ dependencies = [
 [[package]]
 name = "ahtml-from-markdown"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11efe1750d1ca1a4ea41689205da943e16d097d6bb1d73a6785db3e413db4f5e"
 dependencies = [
  "ahtml",
  "ahtml_html",
