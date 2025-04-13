@@ -45,9 +45,10 @@ impl<'s> XmlhubCheckVersion<'s> {
                     self.md_file.path_from_repo_top,
                 ],
                 Some(format!(
-                    "you should update your copy of the {program_name} program. \
-                     If you're sure you want to proceed anyway, use the \
-                     global --no-version-check option (it must be given \
+                    "please upgrade your copy of the {program_name} program with:\n  \
+                     `{program_name} upgrade`\n\
+                     If you know what you are doing and are sure that you want to proceed \
+                     anyway, use the global --no-version-check option (it must be given \
                      before the subcommand name)."
                 )),
             )?;
