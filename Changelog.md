@@ -213,4 +213,4 @@ v8 - 2025-04-11
 - `xmlhub build --daemon`: set CPU priority in worker child processes to 10 (be nicer to other users on the server).
 - Add `xmlhub --version-only` option; for `--version`, also show the OS.
 - Add `Changelog.md`, and `xmlhub changelog` subcommand.
-- `xmlhub help-attributes`: add `--open`, for the nicer HTML view.
+- `xmlhub help-attributes`: add `--open`, for the nicer HTML view, and make it the default, add `--print` for old behaviour.
