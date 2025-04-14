@@ -102,24 +102,41 @@ impl<
 /// An effect that provides `P` without doing any work, as stand-in
 /// for places where work is optional. I.e. converts `R` to `P`
 /// without any side effect.
-#[derive(Debug)]
-pub struct NoOp<R, P> {
-    phantom: PhantomData<fn() -> R>,
-    providing: P,
+pub struct NoOp<R, P, F>
+where
+    F: FnOnce(R) -> P,
+{
+    phantom: PhantomData<fn(P) -> R>,
+    converting: F,
     why: Cow<'static, str>,
 }
 
-impl<R, P> NoOp<R, P> {
-    pub fn providing(providing: P, why: Cow<'static, str>) -> Box<Self> {
+impl<R, P, F> Debug for NoOp<R, P, F>
+where
+    F: FnOnce(R) -> P,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Noop {{ _ why: {:?} }}", self.why))
+    }
+}
+
+impl<R, P, F> NoOp<R, P, F>
+where
+    F: FnOnce(R) -> P,
+{
+    pub fn passing(converting: F, why: Cow<'static, str>) -> Box<Self> {
         Box::new(Self {
             phantom: PhantomData,
-            providing,
+            converting,
             why,
         })
     }
 }
 
-impl<R: Debug, P: Debug> Effect for NoOp<R, P> {
+impl<R: Debug, P: Debug, F> Effect for NoOp<R, P, F>
+where
+    F: FnOnce(R) -> P,
+{
     type Requires = R;
     type Provides = P;
 
@@ -127,15 +144,10 @@ impl<R: Debug, P: Debug> Effect for NoOp<R, P> {
         // Show `providing` here even though the type is shown anyway
         // on the arrow, since `providing` is the instance possibly
         // containing runtime data.
-        format!(
-            "NoOp providing {:?}: {}{}",
-            self.providing,
-            self.why,
-            show_arrow::<Self::Provides>()
-        )
+        format!("NoOp: {}{}", self.why, show_arrow::<Self::Provides>())
     }
 
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
-        Ok(self.providing)
+    fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
+        Ok((self.converting)(provided))
     }
 }

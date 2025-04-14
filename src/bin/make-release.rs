@@ -36,6 +36,10 @@ use xmlhub_indexer::{
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
 
+fn get_head_commit_id_from<P: AsRef<Path>>(base_path: P) -> Result<String> {
+    git_stdout_string_trimmed(base_path.as_ref(), &["rev-parse", "HEAD"])
+}
+
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
 /// Produce a new release of the xmlhub-indexer repository, both the
@@ -153,6 +157,7 @@ struct UpdateChangelogWithTag {
 
 #[derive(Debug)]
 struct UpdatedChangelog {
+    source_commit_id: String,
     tag_name: String,
 }
 
@@ -180,10 +185,12 @@ impl Effect for UpdateChangelogWithTag {
             .with_context(|| anyhow!("writing to {changelog_path:?}"))?;
         out.flush()?; // unbuffered anyway? error with context?
 
+        let source_checkout = &SOURCE_CHECKOUT;
+
         // Now also commit it. (Ah, passing around repositories in
         // globals, simply.)
         if !git(
-            SOURCE_CHECKOUT.working_dir_path(),
+            source_checkout.working_dir_path(),
             &[
                 OsString::from("commit"),
                 OsString::from("-m"),
@@ -196,7 +203,10 @@ impl Effect for UpdateChangelogWithTag {
             bail!("git commit for {changelog_path:?} returned false");
         }
 
+        let source_commit_id = get_head_commit_id_from(source_checkout.working_dir_path())?;
+
         Ok(UpdatedChangelog {
+            source_commit_id,
             tag_name: changelog_tag.tag_name,
         })
     }
@@ -205,7 +215,9 @@ impl Effect for UpdateChangelogWithTag {
 // Don't need to store tag_name String in here since it's constant and
 // part of the individual contexts that need it.
 #[derive(Debug)]
-struct SourceReleaseTag;
+struct SourceReleaseTag {
+    source_commit_id: String,
+}
 
 /// Tag name is taken from UpdatedChangelog
 #[derive(Debug)]
@@ -219,9 +231,13 @@ impl Effect for CreateTag {
     type Provides = SourceReleaseTag;
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
+        let UpdatedChangelog {
+            source_commit_id,
+            tag_name,
+        } = provided;
         git_tag(
             SOURCE_CHECKOUT.working_dir_path(),
-            &provided.tag_name,
+            &tag_name,
             None,
             "via make-release.rs",
             self.sign,
@@ -232,13 +248,13 @@ impl Effect for CreateTag {
         {
             let path_str = ".released_version";
             let path = PathBuf::from(path_str);
-            std::fs::write(&path, &provided.tag_name)
+            std::fs::write(&path, &tag_name)
                 .with_context(|| anyhow!("path should be writable: {path:?}"))?;
             // (sleep 1s to avoid the next cargo run being a rebuild
             // again due to it being too close? don't bother.)
         }
 
-        Ok(SourceReleaseTag)
+        Ok(SourceReleaseTag { source_commit_id })
     }
 }
 
@@ -249,20 +265,23 @@ struct PushSourceToRemote {
 }
 
 #[derive(Debug)]
-struct SourcePushed;
+struct SourcePushed {
+    source_commit_id: String,
+}
 
 impl Effect for PushSourceToRemote {
     type Requires = SourceReleaseTag;
     type Provides = SourcePushed;
 
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+    fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
+        let SourceReleaseTag { source_commit_id } = provided;
         git_push(
             SOURCE_CHECKOUT.working_dir_path(),
             &self.remote_name,
             &[SOURCE_CHECKOUT.branch_name, &self.tag_name],
             false,
         )?;
-        Ok(SourcePushed)
+        Ok(SourcePushed { source_commit_id })
     }
 }
 
@@ -325,6 +344,7 @@ struct BuildBinariesGetSha256sums {
 
 #[derive(Debug)]
 struct BinariesWithSha256sum {
+    source_commit_id: String,
     binaries_with_sha256sum: Vec<BinaryWithSha256sum>,
 }
 
@@ -334,7 +354,8 @@ impl Effect for BuildBinariesGetSha256sums {
     type Requires = SourcePushed;
     type Provides = BinariesWithSha256sum;
 
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+    fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
+        let SourcePushed { source_commit_id } = provided;
         let BuildBinariesGetSha256sums { binaries } = *self;
 
         let binaries_with_sha256sum = binaries
@@ -369,6 +390,7 @@ impl Effect for BuildBinariesGetSha256sums {
             })
             .collect::<Result<_>>()?;
         Ok(BinariesWithSha256sum {
+            source_commit_id,
             binaries_with_sha256sum,
         })
     }
@@ -382,11 +404,12 @@ struct ReleaseBinaries<'t> {
     binaries_checkout_working_dir_path: PathBuf,
     source_version_tag: String,
     hostname: String,
-    source_commit: String,
-    partial_commit_message: String,
     rustc_version: String,
     cargo_version: String,
-    os_version: String,
+    // The OS arch it is *built* on, not the arch of the
+    // binary/binaries!
+    build_os_arch: String,
+    build_os_version: String,
     app_signature_private_key: DebugIgnore<&'t AppSignaturePrivateKey>,
     sign: bool,
     local_user: Option<String>,
@@ -401,7 +424,21 @@ impl<'t> Effect for ReleaseBinaries<'t> {
     type Provides = Done;
 
     fn run(self: Box<Self>, required: Self::Requires) -> Result<Self::Provides> {
+        let ReleaseBinaries {
+            binaries_checkout_working_dir_path,
+            source_version_tag,
+            hostname,
+            rustc_version,
+            cargo_version,
+            build_os_arch,
+            build_os_version,
+            app_signature_private_key,
+            sign,
+            local_user,
+            push_binaries_to_remote,
+        } = *self;
         let BinariesWithSha256sum {
+            source_commit_id,
             binaries_with_sha256sum,
         } = required;
 
@@ -409,22 +446,22 @@ impl<'t> Effect for ReleaseBinaries<'t> {
         // are multiple. Use username instead? But would that *ever*
         // happen, multiple users on the same system used for building
         // binaries? No? So, just strip down to tag and hostname.
-        let tag_name_if_signed = format!("{}-{}", self.source_version_tag, self.hostname);
+        let tag_name_if_signed = format!("{}-{}", source_version_tag, hostname);
 
         let creator = get_creator()?;
         let timestamp = get_timestamp();
 
         for binary_with_sha256sum in &binaries_with_sha256sum {
-            let copied_to = binary_with_sha256sum
-                .copy_to_binaries_repo(&self.binaries_checkout_working_dir_path)?;
+            let copied_to =
+                binary_with_sha256sum.copy_to_binaries_repo(&binaries_checkout_working_dir_path)?;
 
             let app_info = AppInfo {
                 sha256: binary_with_sha256sum.sha256sum.clone(),
-                version: self.source_version_tag.clone(),
-                source_commit: self.source_commit.clone(),
-                rustc_version: self.rustc_version.clone(),
-                cargo_version: self.cargo_version.clone(),
-                os_version: self.os_version.clone(),
+                version: source_version_tag.clone(),
+                source_commit: source_commit_id.clone(),
+                rustc_version: rustc_version.clone(),
+                cargo_version: cargo_version.clone(),
+                os_version: build_os_version.clone(),
                 creator: creator.clone(),
                 build_date: timestamp.clone(),
             };
@@ -433,18 +470,34 @@ impl<'t> Effect for ReleaseBinaries<'t> {
             // Sign that file.
             let app_info_contents = std::fs::read(&app_info_path)
                 .with_context(|| anyhow!("reading app info file {app_info_path:?}"))?;
-            let signature = self.app_signature_private_key.sign(&app_info_contents)?;
+            let signature = app_signature_private_key.sign(&app_info_contents)?;
             signature.save_to_base(&app_info_path)?;
         }
 
         git(
-            &self.binaries_checkout_working_dir_path,
+            &binaries_checkout_working_dir_path,
             // No worries about adding "." as check_status() was run
             // earlier, hence there are no other changes that might be
             // committed accidentally.
             &["add", "."],
             false,
         )?;
+
+        let partial_commit_message = format!(
+            "Version {source_version_tag}\n\
+             \n\
+             Source commit id: {source_commit_id}\n\
+             \n\
+             Details about the build host:\n\
+             \n\
+             - hostname: {hostname}\n\
+             - rustc version{rustc_version}\n\
+             - cargo version{cargo_version}\n\
+             - OS / version: {build_os_version}\n\
+             - arch: {build_os_arch}\n\
+             \n\
+             Created by make-release.rs"
+        );
 
         // Commit message, too, in its subject line had the "SHA-256:
         // " part, so that people can see the sum right in the commit
@@ -453,7 +506,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
         // there, OK? -- And now self.partial_commit_message is
         // actually the full commit message, it starts with "Version
         // {}" which is perfect.
-        let binary_commit_message = &self.partial_commit_message;
+        let binary_commit_message = &partial_commit_message;
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
@@ -463,15 +516,15 @@ impl<'t> Effect for ReleaseBinaries<'t> {
 
         if self.sign {
             // Again, leave out the sha256 sum(s). OK?
-            let tag_message_if_signed = format!("{}", self.partial_commit_message);
+            let tag_message_if_signed = format!("{}", partial_commit_message);
 
             if !git_tag(
                 BINARIES_CHECKOUT.working_dir_path(),
                 &tag_name_if_signed,
                 None,
                 &tag_message_if_signed,
-                self.sign,
-                self.local_user.as_deref(),
+                sign,
+                local_user.as_deref(),
             )? {
                 println!(
                     "Note: git tag {tag_name_if_signed:?} already exists, \
@@ -480,7 +533,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
             }
         }
 
-        if let Some(remote_name) = &self.push_binaries_to_remote {
+        if let Some(remote_name) = &push_binaries_to_remote {
             // (Calculate this command beforehand and show as effect?
             // Ah can't, tag_name_if_signed can only be calculated in
             // this effect.)
@@ -638,9 +691,15 @@ fn main() -> Result<()> {
 
     let update_changelog_effect: Box<dyn Effect<Requires = (), Provides = UpdatedChangelog>> =
         if changelog_has_release {
-            NoOp::providing(
-                UpdatedChangelog {
-                    tag_name: changelog_tag.tag_name.clone(),
+            // Need to retrieve the source commit id *now*.
+            let source_commit_id = get_head_commit_id_from(source_checkout.working_dir_path())?;
+            NoOp::passing(
+                {
+                    let tag_name = changelog_tag.tag_name.clone();
+                    move |()| UpdatedChangelog {
+                        tag_name,
+                        source_commit_id,
+                    }
                 },
                 format!(
                     "Changelog file already contains the line {:?}",
@@ -649,6 +708,8 @@ fn main() -> Result<()> {
                 .into(),
             )
         } else {
+            // Will retrieve the source commit id after committing the
+            // changelog change.
             Box::new(UpdateChangelogWithTag {
                 changelog_path,
                 changelog_tag,
@@ -668,8 +729,11 @@ fn main() -> Result<()> {
                 local_user: opts.local_user.clone(),
             })
         } else {
-            NoOp::providing(
-                SourceReleaseTag,
+            NoOp::passing(
+                |UpdatedChangelog {
+                     source_commit_id,
+                     tag_name: _,
+                 }| SourceReleaseTag { source_commit_id },
                 format!("using existing tag {new_version_tag_string:?}").into(),
             )
         };
@@ -681,8 +745,8 @@ fn main() -> Result<()> {
                 remote_name: source_checkout.default_remote.clone(),
             })
         } else {
-            NoOp::providing(
-                SourcePushed,
+            NoOp::passing(
+                |SourceReleaseTag { source_commit_id }| SourcePushed { source_commit_id },
                 "not pushing tag/branch because the --no-push option was given".into(),
             )
         };
@@ -732,8 +796,6 @@ fn main() -> Result<()> {
     };
 
     // Collect build information
-    let commit_id =
-        git_stdout_string_trimmed(source_checkout.working_dir_path(), &["rev-parse", "HEAD"])?;
     let rustc_version = stringify_error(prog_version(source_checkout.working_dir_path(), "rustc"));
     let cargo_version = stringify_error(prog_version(source_checkout.working_dir_path(), "cargo"));
     let hostname = hostname()?;
@@ -761,8 +823,11 @@ fn main() -> Result<()> {
     let release_binary: Box<dyn Effect<Requires = BinariesWithSha256sum, Provides = Done>> = if opts
         .no_publish_binary
     {
-        NoOp::providing(
-            Done,
+        NoOp::passing(
+            |BinariesWithSha256sum {
+                 source_commit_id: _,
+                 binaries_with_sha256sum: _,
+             }| Done,
             "not publishing binary because --no-publish-binary option was given".into(),
         )
     } else {
@@ -851,39 +916,25 @@ fn main() -> Result<()> {
         // from target triple stuff instead now. We still check if
         // the OS is supported in the repository at all, though.
         if let Ok(_repo_section) = BinariesRepoSection::from_local_os_and_arch() {
-            let partial_commit_message = format!(
-                "Version {new_version_tag_string}\n\
-                     \n\
-                     Source commit id: {commit_id}\n\
-                     \n\
-                     Details about the build host:\n\
-                     \n\
-                     - hostname: {hostname}\n\
-                     - rustc version{rustc_version}\n\
-                     - cargo version{cargo_version}\n\
-                     - OS / version: {os_version}\n\
-                     - arch: {os_arch}\n\
-                     \n\
-                     Created by make-release.rs"
-            );
-
             Box::new(ReleaseBinaries {
                 binaries_checkout_working_dir_path: binaries_checkout.working_dir_path().to_owned(),
                 source_version_tag: new_version_tag_string.clone(),
                 hostname: hostname.clone(),
-                partial_commit_message,
                 sign,
                 local_user: opts.local_user.clone(),
                 push_binaries_to_remote,
-                source_commit: commit_id,
                 rustc_version,
                 cargo_version,
-                os_version,
+                build_os_arch: os_arch,
+                build_os_version: os_version,
                 app_signature_private_key: (&app_signature_private_key).into(),
             })
         } else {
-            NoOp::providing(
-                Done,
+            NoOp::passing(
+                |BinariesWithSha256sum {
+                     source_commit_id: _,
+                     binaries_with_sha256sum: _,
+                 }| Done,
                 "binaries are only published on macOS and Linux".into(),
             )
         }
