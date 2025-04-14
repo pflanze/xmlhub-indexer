@@ -58,6 +58,7 @@ pub fn strerror(errno: i32) -> String {
     String::from_utf8_lossy(msg.to_bytes()).to_string()
 }
 
+/// Careful, seems to not be working on macOS, currently.
 pub fn setpriority(which: PriorityWhich, prio: c_int) -> Result<()> {
     let res = unsafe { libc::setpriority(which.which(), which.who(), prio) };
     if res < 0 {
@@ -65,4 +66,18 @@ pub fn setpriority(which: PriorityWhich, prio: c_int) -> Result<()> {
         bail!("setpriority({which:?}, {prio}): {err}")
     }
     Ok(())
+}
+
+/// Wrapper that never fails on macOS, but might just be doing nothing
+/// there. This is a HACK to work around some problem with
+/// `setpriority` now giving a runtime error.
+pub fn possibly_setpriority(which: PriorityWhich, prio: c_int) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    return setpriority(which, prio);
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = setpriority(which, prio);
+        return Ok(());
+    }
 }
