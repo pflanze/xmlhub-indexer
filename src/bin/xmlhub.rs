@@ -904,6 +904,8 @@ fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'static>>
             }
         )
         .into(),
+        "(If you have a suggestion for another metadata field, tell your XML Hub maintainer!)"
+            .into(),
         spec_html.into(),
     ]])))
 }
