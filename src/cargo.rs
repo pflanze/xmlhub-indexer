@@ -1,7 +1,16 @@
-use std::{fmt::Debug, path::Path};
+use std::{
+    ffi::OsStr,
+    fmt::{Debug, Display},
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use toml::Value;
+
+use crate::{
+    command::{run, Capturing},
+    installation::binaries_repo,
+};
 
 pub fn check_cargo_toml_no_path<P: AsRef<Path> + Debug>(cargo_toml_path: P) -> Result<()> {
     (|| -> Result<()> {
@@ -63,4 +72,92 @@ pub fn check_cargo_toml_no_path<P: AsRef<Path> + Debug>(cargo_toml_path: P) -> R
         Ok(())
     })()
     .with_context(|| anyhow!("checking Cargo toml file {cargo_toml_path:?} for `path =` entries"))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CompilationProfile {
+    Debug,
+    Release,
+}
+
+impl Display for CompilationProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            CompilationProfile::Debug => "debug",
+            CompilationProfile::Release => "release",
+        };
+        f.write_str(name)
+    }
+}
+
+impl CompilationProfile {
+    pub fn as_option_str(&self) -> &'static str {
+        match self {
+            CompilationProfile::Debug => "--debug",
+            CompilationProfile::Release => "--release",
+        }
+    }
+}
+
+/// Representation of e.g. "aarch64-apple-darwin"
+#[derive(Debug, Clone)]
+pub struct TargetTriple {
+    pub arch: binaries_repo::Arch,
+    pub os: binaries_repo::Os,
+}
+
+impl Display for TargetTriple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { arch, os } = self;
+        f.write_fmt(format_args!(
+            "{}-{}",
+            arch.as_str_for_target_triple(),
+            os.as_str_for_target_triple()
+        ))
+    }
+}
+
+pub fn run_cargo<P: AsRef<Path>, S: AsRef<OsStr> + Debug>(
+    working_dir: P,
+    args: &[S],
+) -> Result<()> {
+    run(working_dir, "cargo", args, &[], &[0], Capturing::none())?;
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct CompilationTarget {
+    pub target_triple: Option<TargetTriple>,
+    pub profile: CompilationProfile,
+}
+
+impl CompilationTarget {
+    /// The path to the compiled binary of the main program, relative
+    /// from the source repository base.
+    pub fn subpath_to_binary(&self, program_name: &str) -> PathBuf {
+        let Self {
+            target_triple,
+            profile,
+        } = self;
+        if let Some(target_triple) = target_triple {
+            format!("target/{target_triple}/{profile}/{program_name}")
+        } else {
+            format!("target/{profile}/{program_name}")
+        }
+        .into()
+    }
+
+    pub fn run_build_in<P: AsRef<Path>>(&self, working_dir: P, program_name: &str) -> Result<()> {
+        let mut args: Vec<String> = vec![
+            "build".into(),
+            self.profile.as_option_str().into(),
+            "--bin".into(),
+            program_name.into(),
+        ];
+        if let Some(target_triple) = &self.target_triple {
+            args.push("--target".into());
+            args.push(target_triple.to_string());
+        }
+        run_cargo(working_dir, &args)
+    }
 }

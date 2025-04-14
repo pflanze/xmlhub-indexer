@@ -2,9 +2,7 @@
 //! is also covering application upgrades now. (TODO: clean up)
 use crate::checkout_context::CheckoutContext;
 
-/// The relative path from `SOURCE_CHECKOUT.working_dir_path` to the
-/// compiled binary of the main program.
-pub const XMLHUB_INDEXER_BINARY_FILE: &str = "target/release/xmlhub";
+pub const XMLHUB_BINARY_FILE_NAME: &str = "xmlhub";
 
 /// Information on the Git checkout of the xmlhub repo; used
 /// by xmlhub.rs

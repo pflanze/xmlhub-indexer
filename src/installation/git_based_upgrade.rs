@@ -6,12 +6,11 @@ use std::{cmp::Ordering, path::PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
-    const_util::file_name,
     git::git,
     git_version::{GitVersion, SemVersion},
     path_util::AppendToPath,
     sha256::sha256sum,
-    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
+    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
 
 use super::{
@@ -64,7 +63,7 @@ pub fn pull_verified_executable() -> Result<(PathBuf, AppInfo)> {
     let binary_path = binaries_checkout
         .working_dir_path()
         .append(repo_section.installation_subpath())
-        .append(file_name(XMLHUB_INDEXER_BINARY_FILE));
+        .append(XMLHUB_BINARY_FILE_NAME);
     let (app_info, info_path, info_bytes) = AppInfo::load_for_app_path(&binary_path)?;
     let sig = AppSignature::load_from_base(&info_path)?;
     let (is_valid, public_key) = sig.verify(&info_bytes)?;

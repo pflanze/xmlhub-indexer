@@ -1,10 +1,10 @@
 use std::{
     env::current_dir,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fmt::Debug,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -12,15 +12,18 @@ use clap::Parser;
 
 use debug_ignore::DebugIgnore;
 use xmlhub_indexer::{
-    cargo::check_cargo_toml_no_path,
+    cargo::{
+        check_cargo_toml_no_path, run_cargo, CompilationProfile, CompilationTarget, TargetTriple,
+    },
     changelog::CHANGELOG_FILE_NAME,
     checkout_context::CheckExpectedSubpathsExist,
-    command::{run, Capturing},
-    const_util::file_name,
     effect::{bind, Effect, NoOp},
     git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
     git_version::{GitVersion, SemVersion},
-    installation::app_info::AppInfo,
+    installation::{
+        app_info::AppInfo,
+        binaries_repo::{Arch, Os},
+    },
     installation::{
         app_signature::{AppSignaturePrivateKey, SaveLoadKeyFile},
         binaries_repo::BinariesRepoSection,
@@ -30,7 +33,7 @@ use xmlhub_indexer::{
     path_util::AppendToPath,
     sha256::sha256sum_paranoid,
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
-    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_INDEXER_BINARY_FILE},
+    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
 
 #[derive(clap::Parser, Debug)]
@@ -117,12 +120,12 @@ struct Opts {
     /// default remote (presumed to be the upstream repository), for
     /// both the source and binary repositories. This is the default.
     #[clap(long)]
-    push_binary: bool,
+    push_binaries: bool,
 
     /// Do not push the branch and Git tag to the *binary*
     /// repository. The default is to push.
     #[clap(long)]
-    no_push_binary: bool,
+    no_push_binaries: bool,
 }
 
 #[derive(Debug)]
@@ -264,47 +267,119 @@ impl Effect for PushSourceToRemote {
 }
 
 #[derive(Debug)]
-struct BuildBinaryAndSha256sum {}
-
-#[derive(Debug)]
-struct Sha256sumOfBinary {
-    sha256sum: Result<String>,
+struct Binary {
+    target: CompilationTarget,
+    program_name: &'static str,
 }
 
-impl Effect for BuildBinaryAndSha256sum {
-    // (`SourceReleaseTag` would suffice as requirement! But then the
-    // processing chain wouldn't be linear.)
-    type Requires = SourcePushed;
-    type Provides = Sha256sumOfBinary;
+#[derive(Debug)]
+struct BinaryWithSha256sum {
+    binary: Binary,
+    binary_path: PathBuf,
+    sha256sum: String,
+}
 
-    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
-        // Rebuild the binary, so that it picks up on the new Git
-        // tag. We want that both for subsequent usage, but especially
-        // so that it is up to date when copied off via
-        // `ReleaseBinary`.
-        cargo(&[
-            "build",
-            "--release",
-            "--bin",
-            file_name(XMLHUB_INDEXER_BINARY_FILE),
-        ])?;
+impl BinaryWithSha256sum {
+    /// Returns the target path it was copied to.
+    fn copy_to_binaries_repo(&self, binaries_repo_base_dir: &Path) -> Result<PathBuf> {
+        let Self {
+            binary,
+            binary_path,
+            sha256sum: _,
+        } = self;
+        let Binary {
+            target,
+            program_name,
+        } = binary;
+        let CompilationTarget {
+            target_triple,
+            profile: _,
+        } = target;
+        // XX really ignore profile?
+        let repo_section = if let Some(target_triple) = target_triple {
+            BinariesRepoSection::from(target_triple)
+        } else {
+            BinariesRepoSection::from_local_os_and_arch()?
+        };
 
-        // Now that the binary is rebuilt, hash it; store errors,
-        // complain about them later when actually needed (this will
-        // be the case on Windows where the `sha256sum` command may
-        // not be available, but we also don't publish the binary.)
-        let path = SOURCE_CHECKOUT
-            .working_dir_path()
-            .append(XMLHUB_INDEXER_BINARY_FILE);
-        let sha256sum = sha256sum_paranoid(&path).with_context(|| anyhow!("hashing file {path:?}"));
+        let binary_target_path = binaries_repo_base_dir
+            .append(repo_section.installation_subpath())
+            .append(program_name);
 
-        Ok(Sha256sumOfBinary { sha256sum })
+        create_dir_levels_if_necessary(
+            binary_target_path
+                .parent()
+                .expect("file path has parent dir"),
+            2,
+        )?;
+        std::fs::copy(&binary_path, &binary_target_path)
+            .with_context(|| anyhow!("copying {binary_path:?} to {binary_target_path:?}",))?;
+        Ok(binary_target_path)
     }
 }
 
 #[derive(Debug)]
-struct ReleaseBinary<'t> {
-    copy_binary_to: PathBuf,
+struct BuildBinariesGetSha256sums {
+    binaries: Vec<Binary>,
+}
+
+#[derive(Debug)]
+struct BinariesWithSha256sum {
+    binaries_with_sha256sum: Vec<BinaryWithSha256sum>,
+}
+
+impl Effect for BuildBinariesGetSha256sums {
+    // (`SourceReleaseTag` would suffice as requirement! But then the
+    // processing chain wouldn't be linear.)
+    type Requires = SourcePushed;
+    type Provides = BinariesWithSha256sum;
+
+    fn run(self: Box<Self>, _provided: Self::Requires) -> Result<Self::Provides> {
+        let BuildBinariesGetSha256sums { binaries } = *self;
+
+        let binaries_with_sha256sum = binaries
+            .into_iter()
+            .map(|binary| -> Result<_> {
+                let Binary {
+                    target,
+                    program_name,
+                } = &binary;
+                // Rebuild the binary, so that it picks up on the new Git
+                // tag. We want that both for subsequent usage, but especially
+                // so that it is up to date when copied off via
+                // `ReleaseBinary`.
+                target.run_build_in(SOURCE_CHECKOUT.working_dir_path(), program_name)?;
+
+                let binary_path = SOURCE_CHECKOUT
+                    .working_dir_path()
+                    .append(target.subpath_to_binary(program_name));
+
+                // Now that the binary is rebuilt, hash it; store errors,
+                // complain about them later when actually needed (this will
+                // be the case on Windows where the `sha256sum` command may
+                // not be available, but we also don't publish the binary.)
+                let sha256sum = sha256sum_paranoid(&binary_path)
+                    .with_context(|| anyhow!("hashing file {binary_path:?}"))?;
+
+                Ok(BinaryWithSha256sum {
+                    binary,
+                    binary_path,
+                    sha256sum,
+                })
+            })
+            .collect::<Result<_>>()?;
+        Ok(BinariesWithSha256sum {
+            binaries_with_sha256sum,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ReleaseBinaries<'t> {
+    // Include this path since it comes from a *checked*
+    // `BINARIES_CHECKOUT`, and hey, do not tie together variables
+    // past the fact:
+    binaries_checkout_working_dir_path: PathBuf,
     source_version_tag: String,
     hostname: String,
     source_commit: String,
@@ -315,59 +390,55 @@ struct ReleaseBinary<'t> {
     app_signature_private_key: DebugIgnore<&'t AppSignaturePrivateKey>,
     sign: bool,
     local_user: Option<String>,
-    push_binary_to_remote: Option<String>,
+    push_binaries_to_remote: Option<String>,
 }
 
 #[derive(Debug)]
 struct Done;
 
-impl<'t> Effect for ReleaseBinary<'t> {
-    type Requires = Sha256sumOfBinary;
+impl<'t> Effect for ReleaseBinaries<'t> {
+    type Requires = BinariesWithSha256sum;
     type Provides = Done;
 
     fn run(self: Box<Self>, required: Self::Requires) -> Result<Self::Provides> {
-        let sha256sum = required.sha256sum?;
+        let BinariesWithSha256sum {
+            binaries_with_sha256sum,
+        } = required;
 
-        let tag_name_if_signed = format!(
-            "{}-{}-{}",
-            self.source_version_tag, self.hostname, sha256sum
-        );
-
-        create_dir_levels_if_necessary(
-            self.copy_binary_to
-                .parent()
-                .expect("file path has parent dir"),
-            2,
-        )?;
-
-        std::fs::copy(XMLHUB_INDEXER_BINARY_FILE, &self.copy_binary_to).with_context(|| {
-            anyhow!(
-                "copying {XMLHUB_INDEXER_BINARY_FILE:?} to {:?}",
-                self.copy_binary_to
-            )
-        })?;
+        // Had a 3rd entry, the sha256sum of the binary, but now there
+        // are multiple. Use username instead? But would that *ever*
+        // happen, multiple users on the same system used for building
+        // binaries? No? So, just strip down to tag and hostname.
+        let tag_name_if_signed = format!("{}-{}", self.source_version_tag, self.hostname);
 
         let creator = get_creator()?;
-        let app_info = AppInfo {
-            sha256: sha256sum.clone(),
-            version: self.source_version_tag.clone(),
-            source_commit: self.source_commit.clone(),
-            rustc_version: self.rustc_version.clone(),
-            cargo_version: self.cargo_version.clone(),
-            os_version: self.os_version.clone(),
-            creator,
-            build_date: get_timestamp(),
-        };
-        let app_info_path = app_info.save_for_app_path(&self.copy_binary_to)?;
+        let timestamp = get_timestamp();
 
-        // Sign that file.
-        let app_info_contents = std::fs::read(&app_info_path)
-            .with_context(|| anyhow!("reading app info file {app_info_path:?}"))?;
-        let signature = self.app_signature_private_key.sign(&app_info_contents)?;
-        signature.save_to_base(&app_info_path)?;
+        for binary_with_sha256sum in &binaries_with_sha256sum {
+            let copied_to = binary_with_sha256sum
+                .copy_to_binaries_repo(&self.binaries_checkout_working_dir_path)?;
+
+            let app_info = AppInfo {
+                sha256: binary_with_sha256sum.sha256sum.clone(),
+                version: self.source_version_tag.clone(),
+                source_commit: self.source_commit.clone(),
+                rustc_version: self.rustc_version.clone(),
+                cargo_version: self.cargo_version.clone(),
+                os_version: self.os_version.clone(),
+                creator: creator.clone(),
+                build_date: timestamp.clone(),
+            };
+            let app_info_path = app_info.save_for_app_path(&copied_to)?;
+
+            // Sign that file.
+            let app_info_contents = std::fs::read(&app_info_path)
+                .with_context(|| anyhow!("reading app info file {app_info_path:?}"))?;
+            let signature = self.app_signature_private_key.sign(&app_info_contents)?;
+            signature.save_to_base(&app_info_path)?;
+        }
 
         git(
-            BINARIES_CHECKOUT.working_dir_path(),
+            &self.binaries_checkout_working_dir_path,
             // No worries about adding "." as check_status() was run
             // earlier, hence there are no other changes that might be
             // committed accidentally.
@@ -375,22 +446,24 @@ impl<'t> Effect for ReleaseBinary<'t> {
             false,
         )?;
 
-        let binary_commit_message = format!(
-            "{} / SHA-256: {}\n\n{}",
-            self.source_version_tag, sha256sum, self.partial_commit_message
-        );
+        // Commit message, too, in its subject line had the "SHA-256:
+        // " part, so that people can see the sum right in the commit
+        // message. But, how now that we commit multiple
+        // binaries?. And there are now `.info` files, have them look
+        // there, OK? -- And now self.partial_commit_message is
+        // actually the full commit message, it starts with "Version
+        // {}" which is perfect.
+        let binary_commit_message = &self.partial_commit_message;
 
         git(
             BINARIES_CHECKOUT.working_dir_path(),
-            &["commit", "-m", &binary_commit_message],
+            &["commit", "-m", binary_commit_message],
             false,
         )?;
 
         if self.sign {
-            let tag_message_if_signed = format!(
-                "{}\n\nsha256sum: {}",
-                self.partial_commit_message, sha256sum
-            );
+            // Again, leave out the sha256 sum(s). OK?
+            let tag_message_if_signed = format!("{}", self.partial_commit_message);
 
             if !git_tag(
                 BINARIES_CHECKOUT.working_dir_path(),
@@ -407,7 +480,7 @@ impl<'t> Effect for ReleaseBinary<'t> {
             }
         }
 
-        if let Some(remote_name) = &self.push_binary_to_remote {
+        if let Some(remote_name) = &self.push_binaries_to_remote {
             // (Calculate this command beforehand and show as effect?
             // Ah can't, tag_name_if_signed can only be calculated in
             // this effect.)
@@ -426,17 +499,6 @@ impl<'t> Effect for ReleaseBinary<'t> {
     }
 }
 
-fn cargo<S: AsRef<OsStr> + Debug>(args: &[S]) -> Result<bool> {
-    run(
-        SOURCE_CHECKOUT.working_dir_path(),
-        "cargo",
-        args,
-        &[],
-        &[0],
-        Capturing::none(),
-    )
-}
-
 fn main() -> Result<()> {
     let opts: Opts = Opts::from_args();
 
@@ -452,10 +514,10 @@ fn main() -> Result<()> {
         !opts.no_push_source
     };
 
-    let push_binary = if opts.push_binary && opts.no_push_binary {
+    let push_binaries = if opts.push_binaries && opts.no_push_binaries {
         bail!("conflicting push-binary options given")
     } else {
-        !opts.no_push_binary
+        !opts.no_push_binaries
     };
 
     if sign {
@@ -513,8 +575,8 @@ fn main() -> Result<()> {
     // Check everything and run the test suite to make sure we are
     // ready for release.
     {
-        cargo(&["check"])?;
-        cargo(&["test"])?;
+        run_cargo(source_checkout.working_dir_path(), &["check"])?;
+        run_cargo(source_checkout.working_dir_path(), &["test"])?;
     }
 
     // Pass "--tags ..." as in `build.rs`, keeping in sync by sharing the code
@@ -625,7 +687,49 @@ fn main() -> Result<()> {
             )
         };
 
-    let build_binary = Box::new(BuildBinaryAndSha256sum {});
+    let build_binary = {
+        let os = Os::from_local()?;
+        let program_name = XMLHUB_BINARY_FILE_NAME;
+        let profile = CompilationProfile::Release;
+
+        // Currently hard-code compilation to intel + ARM on macOS,
+        // and just the native platform on Linux.
+        let binaries = match os {
+            Os::MacOS => vec![
+                Binary {
+                    target: CompilationTarget {
+                        target_triple: Some(TargetTriple {
+                            arch: Arch::Aarch64,
+                            os,
+                        }),
+                        profile,
+                    },
+                    program_name,
+                },
+                // Is it OK to explicitly target X86_64 even if
+                // running there? Is it wasteful? But is it an
+                // advantage for reproducibility? Let's see:
+                Binary {
+                    target: CompilationTarget {
+                        target_triple: Some(TargetTriple {
+                            arch: Arch::X86_64,
+                            os,
+                        }),
+                        profile,
+                    },
+                    program_name,
+                },
+            ],
+            Os::Linux => vec![Binary {
+                target: CompilationTarget {
+                    target_triple: None,
+                    profile,
+                },
+                program_name,
+            }],
+        };
+        Box::new(BuildBinariesGetSha256sums { binaries })
+    };
 
     // Collect build information
     let commit_id =
@@ -654,102 +758,101 @@ fn main() -> Result<()> {
     let app_signature_private_key;
 
     // Should we publish the binary?
-    let release_binary: Box<dyn Effect<Requires = Sha256sumOfBinary, Provides = Done>> =
-        if opts.no_publish_binary {
-            NoOp::providing(
-                Done,
-                "not publishing binary because --no-publish-binary option was given".into(),
-            )
-        } else {
-            let app_private_key = &opts.app_private_key.ok_or_else(|| {
-                anyhow!("when publishing the binary, `--app-private-key` is required")
-            })?;
-            app_signature_private_key = AppSignaturePrivateKey::load(&app_private_key)
-                .with_context(|| anyhow!("loading private key from {app_private_key:?}"))?;
+    let release_binary: Box<dyn Effect<Requires = BinariesWithSha256sum, Provides = Done>> = if opts
+        .no_publish_binary
+    {
+        NoOp::providing(
+            Done,
+            "not publishing binary because --no-publish-binary option was given".into(),
+        )
+    } else {
+        let app_private_key = &opts.app_private_key.ok_or_else(|| {
+            anyhow!("when publishing the binary, `--app-private-key` is required")
+        })?;
+        app_signature_private_key = AppSignaturePrivateKey::load(&app_private_key)
+            .with_context(|| anyhow!("loading private key from {app_private_key:?}"))?;
 
-            // XX Bug: this check is too 'early', I mean it fetches
-            // the remote even if !push. Not very important in
-            // practise since we'll always have a remote, OK?
-            let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
-            binaries_checkout.check_status()?;
+        // XX Bug: this check is too 'early', I mean it fetches
+        // the remote even if !push. Not very important in
+        // practise since we'll always have a remote, OK?
+        let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
+        binaries_checkout.check_status()?;
 
-            let push_binary_to_remote = if push_binary {
-                // *Not* doing a git "pull" because that can lead to
-                // merges, also it's unclear how security should be
-                // treated: merging without requiring a tag signature
-                // check could lead to unsafe contents merged and
-                // subsequently signed.
+        let push_binaries_to_remote = if push_binaries {
+            // *Not* doing a git "pull" because that can lead to
+            // merges, also it's unclear how security should be
+            // treated: merging without requiring a tag signature
+            // check could lead to unsafe contents merged and
+            // subsequently signed.
 
-                // But, we can do a "remote update" and complain about the
-                // situation.
-                {
-                    // FUTURE: proper abstraction for running git
-                    // directly on checkout contexts, also,
-                    // abstraction for making error checks with
-                    // dry_run easier? `unless_dry_run` from above
-                    // does not transfer values, and wouldn't make
-                    // sense. and the macro from xmlhub.rs doesn't
-                    // apply here because we still want to run the
-                    // commands.
-                    match git(
-                        binaries_checkout.working_dir_path(),
-                        &["remote", "update", &binaries_checkout.default_remote],
-                        false,
-                    ) {
-                        Ok(did_it) => {
-                            if !did_it {
-                                if opts.dry_run {
-                                    eprintln!(
-                                        "dry-run: would stop because git remote update \
-                                         on the binaries repository was not successful"
-                                    );
-                                } else {
-                                    bail!(
-                                        "git remote update on the binaries repository \
-                                         was not successful"
-                                    )
-                                }
-                            }
-                        }
-                        Err(e) => {
+            // But, we can do a "remote update" and complain about the
+            // situation.
+            {
+                // FUTURE: proper abstraction for running git
+                // directly on checkout contexts, also,
+                // abstraction for making error checks with
+                // dry_run easier? `unless_dry_run` from above
+                // does not transfer values, and wouldn't make
+                // sense. and the macro from xmlhub.rs doesn't
+                // apply here because we still want to run the
+                // commands.
+                match git(
+                    binaries_checkout.working_dir_path(),
+                    &["remote", "update", &binaries_checkout.default_remote],
+                    false,
+                ) {
+                    Ok(did_it) => {
+                        if !did_it {
                             if opts.dry_run {
-                                eprintln!("dry-run: would stop because of {e:#}");
+                                eprintln!(
+                                    "dry-run: would stop because git remote update \
+                                         on the binaries repository was not successful"
+                                );
                             } else {
-                                Err(e)?
+                                bail!(
+                                    "git remote update on the binaries repository \
+                                         was not successful"
+                                )
                             }
                         }
                     }
-
-                    let branch = binaries_checkout.branch_name;
-                    let remote_branch = format!("{}/{}", binaries_checkout.default_remote, branch);
-                    let remote_branch_is_ancestor = git(
-                        binaries_checkout.working_dir_path(),
-                        &["merge-base", "--is-ancestor", "--", &remote_branch, branch],
-                        false,
-                    )?;
-                    if !remote_branch_is_ancestor {
-                        bail!(
-                            "the remote branch {remote_branch:?} is not an ancestor of \
-                             (or the same as the) the local branch {branch:?} in \
-                             the working directory {:?}",
-                            binaries_checkout.working_dir_path(),
-                        )
+                    Err(e) => {
+                        if opts.dry_run {
+                            eprintln!("dry-run: would stop because of {e:#}");
+                        } else {
+                            Err(e)?
+                        }
                     }
                 }
 
-                Some(binaries_checkout.default_remote.clone())
-            } else {
-                None
-            };
+                let branch = binaries_checkout.branch_name;
+                let remote_branch = format!("{}/{}", binaries_checkout.default_remote, branch);
+                let remote_branch_is_ancestor = git(
+                    binaries_checkout.working_dir_path(),
+                    &["merge-base", "--is-ancestor", "--", &remote_branch, branch],
+                    false,
+                )?;
+                if !remote_branch_is_ancestor {
+                    bail!(
+                        "the remote branch {remote_branch:?} is not an ancestor of \
+                             (or the same as the) the local branch {branch:?} in \
+                             the working directory {:?}",
+                        binaries_checkout.working_dir_path(),
+                    )
+                }
+            }
 
-            if let Ok(repo_section) = BinariesRepoSection::from_local_os_and_arch() {
-                let binary_target_path = binaries_checkout
-                    .working_dir_path()
-                    .append(repo_section.installation_subpath())
-                    .append(file_name(XMLHUB_INDEXER_BINARY_FILE));
+            Some(binaries_checkout.default_remote.clone())
+        } else {
+            None
+        };
 
-                let partial_commit_message = format!(
-                    "Version {new_version_tag_string}\n\
+        // _repo_section is now unused, since we get the paths
+        // from target triple stuff instead now. We still check if
+        // the OS is supported in the repository at all, though.
+        if let Ok(_repo_section) = BinariesRepoSection::from_local_os_and_arch() {
+            let partial_commit_message = format!(
+                "Version {new_version_tag_string}\n\
                      \n\
                      Source commit id: {commit_id}\n\
                      \n\
@@ -762,29 +865,29 @@ fn main() -> Result<()> {
                      - arch: {os_arch}\n\
                      \n\
                      Created by make-release.rs"
-                );
+            );
 
-                Box::new(ReleaseBinary {
-                    copy_binary_to: binary_target_path,
-                    source_version_tag: new_version_tag_string.clone(),
-                    hostname: hostname.clone(),
-                    partial_commit_message,
-                    sign,
-                    local_user: opts.local_user.clone(),
-                    push_binary_to_remote,
-                    source_commit: commit_id,
-                    rustc_version,
-                    cargo_version,
-                    os_version,
-                    app_signature_private_key: (&app_signature_private_key).into(),
-                })
-            } else {
-                NoOp::providing(
-                    Done,
-                    "binaries are only published on macOS and Linux".into(),
-                )
-            }
-        };
+            Box::new(ReleaseBinaries {
+                binaries_checkout_working_dir_path: binaries_checkout.working_dir_path().to_owned(),
+                source_version_tag: new_version_tag_string.clone(),
+                hostname: hostname.clone(),
+                partial_commit_message,
+                sign,
+                local_user: opts.local_user.clone(),
+                push_binaries_to_remote,
+                source_commit: commit_id,
+                rustc_version,
+                cargo_version,
+                os_version,
+                app_signature_private_key: (&app_signature_private_key).into(),
+            })
+        } else {
+            NoOp::providing(
+                Done,
+                "binaries are only published on macOS and Linux".into(),
+            )
+        }
+    };
 
     let effect = bind(
         update_changelog_effect,

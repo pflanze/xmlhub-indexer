@@ -6,6 +6,8 @@ use std::{path::PathBuf, str::FromStr};
 
 use anyhow::{bail, Result};
 
+use crate::cargo::TargetTriple;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
     MacOS,
@@ -27,6 +29,13 @@ impl FromStr for Os {
 impl Os {
     pub fn from_local() -> Result<Self> {
         std::env::consts::OS.parse()
+    }
+
+    pub fn as_str_for_target_triple(self) -> &'static str {
+        match self {
+            Os::MacOS => "apple-darwin",
+            Os::Linux => "XXX", // ?? not in uname -a ?
+        }
     }
 
     pub fn as_str_for_folder_names(self) -> &'static str {
@@ -60,17 +69,33 @@ impl Arch {
         std::env::consts::ARCH.parse()
     }
 
-    pub fn as_str_for_folder_names(self) -> &'static str {
+    /// As used in the ~standard "target triple"
+    pub fn as_str_for_target_triple(self) -> &'static str {
         match self {
             Arch::X86_64 => "x86_64",
             Arch::Aarch64 => "aarch64",
         }
+    }
+
+    /// So far this is just an alias for `as_str`
+    pub fn as_str_for_folder_names(self) -> &'static str {
+        self.as_str_for_target_triple()
     }
 }
 
 pub struct BinariesRepoSection {
     pub os: Os,
     pub arch: Arch,
+}
+
+// XX heh, these are just *the same*
+impl From<&TargetTriple> for BinariesRepoSection {
+    fn from(TargetTriple { arch, os }: &TargetTriple) -> Self {
+        Self {
+            os: *os,
+            arch: *arch,
+        }
+    }
 }
 
 impl BinariesRepoSection {

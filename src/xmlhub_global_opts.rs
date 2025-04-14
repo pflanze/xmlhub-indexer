@@ -1,10 +1,9 @@
 use std::path::Path;
 
 use crate::{
-    const_util::file_name,
     git_version::{GitVersion, SemVersion},
     xmlhub_check_version::XmlhubCheckVersion,
-    xmlhub_indexer_defaults::XMLHUB_INDEXER_BINARY_FILE,
+    xmlhub_indexer_defaults::XMLHUB_BINARY_FILE_NAME,
     xmlhub_types::OutputFile,
 };
 
@@ -20,7 +19,7 @@ pub const MD_FILE: OutputFile = OutputFile {
 };
 
 /// The name of the command line program.
-pub const PROGRAM_NAME: &str = file_name(XMLHUB_INDEXER_BINARY_FILE);
+pub const PROGRAM_NAME: &str = XMLHUB_BINARY_FILE_NAME;
 
 #[derive(clap::Args, Debug)]
 pub struct GlobalOpts {
