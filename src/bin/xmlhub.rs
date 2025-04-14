@@ -874,7 +874,7 @@ fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {
 }
 
 /// Build the contents for the ATTRIBUTES_FILE
-fn make_attributes_md() -> Result<StringTree<'static>> {
+fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'static>> {
     let html = HTML_ALLOCATOR_POOL.get();
 
     let spec_html = specifications_to_html(&html)?.to_html_fragment_string(&html)?;
@@ -894,10 +894,14 @@ fn make_attributes_md() -> Result<StringTree<'static>> {
         .into(),
         format!("# Metainfo attributes").into(),
         format!(
-            "This describes how each attribute from the XML file headers \
-             (as described by {link_to_contribute_file}) is interpreted. \
+            "This describes how each attribute from the XML file headers {} is interpreted. \
              `required` means that an actual non-empty value is required, just the \
              presence of the attribute is not enough.",
+            if link_contribute_file {
+                format!("(as described by {link_to_contribute_file})")
+            } else {
+                "".into()
+            }
         )
         .into(),
         spec_html.into(),
@@ -2586,7 +2590,7 @@ fn build_index(
             || -> Result<_> {
                 let mut path = xmlhub_checkout.working_dir_path().to_owned();
                 path.push(ATTRIBUTES_FILE.path_from_repo_top);
-                make_attributes_md()?
+                make_attributes_md(true)?
                     .write_to_file(&path)
                     .with_context(|| anyhow!("writing to file {path:?}"))?;
                 Ok(())
@@ -3539,7 +3543,7 @@ fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
 
     if do_open {
         let html = HTML_ALLOCATOR_POOL.get();
-        let spec_html = markdown_to_html(&make_attributes_md()?.to_string(), &html)?;
+        let spec_html = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
         let output_path = global_app_state_dir()?
             .upgrades_log_base()?
             .append("attributes.html");
