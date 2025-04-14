@@ -895,12 +895,9 @@ fn make_attributes_md() -> Result<StringTree<'static>> {
         format!("# Metainfo attributes").into(),
         format!(
             "This describes how each attribute from the XML file headers \
-                 (as described by {link_to_contribute_file}) is interpreted. \
-                 These are defined by the constant `METADATA_SPECIFICATION` \
-                 in {:?} and can easily be changed there. `required` means that \
-                 an actual non-empty value is required, just the presence of \
-                 the attribute is not enough.",
-            file!()
+             (as described by {link_to_contribute_file}) is interpreted. \
+             `required` means that an actual non-empty value is required, just the \
+             presence of the attribute is not enough.",
         )
         .into(),
         spec_html.into(),
