@@ -280,13 +280,9 @@ struct Opts {
 #[derive(clap::Subcommand, Debug)]
 enum Command {
     /// ** Start with this if you're contributing to XML Hub for the
-    /// first time or have forgotten how things work! ** (If this
-    /// doesn't open the browser, see the notes for the `--open`
-    /// option of the `build` subcommand.)
+    /// first time or have forgotten how things work! **
     Docs,
-    /// Open the CONTRIBUTING documentation in the web browser. (If
-    /// this doesn't open the browser, see the notes for the `--open`
-    /// option of the `build` subcommand.)
+    /// Open the CONTRIBUTING documentation in the web browser.
     HelpContributing,
     /// Show all metadata attributes and describe their possible
     /// values. Use `--open` to open in browser.
