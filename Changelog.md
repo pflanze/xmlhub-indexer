@@ -224,3 +224,7 @@ v8 - 2025-04-11
 
 v8.1 - 2025-04-13
 
+- `xmlhub help-attributes`: actually use the larger Markdown variant with additional text (reformat as HTML) for the browser view
+- attributes: add suggestion to talk to the maintainer with ideas
+- `make-release`: build both intel and ARM binaries on the mac
+- fix `make-release`: when adding a release to the Changelog, in messaging including .info files refer to the commitid *after* that happened
