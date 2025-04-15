@@ -228,3 +228,6 @@ v8.1 - 2025-04-13
 - attributes: add suggestion to talk to the maintainer with ideas
 - `make-release`: build both intel and ARM binaries on the mac
 - fix `make-release`: when adding a release to the Changelog, in messaging including .info files refer to the commitid *after* that happened
+
+v9 - 2025-04-15
+
