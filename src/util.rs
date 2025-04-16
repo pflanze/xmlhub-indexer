@@ -2,9 +2,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
-    fs::{create_dir, OpenOptions},
-    io::BufReader,
+    fs::{create_dir, File, OpenOptions},
     io::{BufRead, Write},
+    io::{BufReader, BufWriter},
     path::Path,
 };
 
@@ -159,6 +159,21 @@ pub fn create_dir_levels_if_necessary(dir_path: &Path, levels: u32) -> Result<()
             },
         }
     }
+}
+
+/// Create a file and write to it via the given function, with
+/// buffering. Flush the file once finished successfully.
+pub fn with_output_to_file(
+    output_path: &Path,
+    writer: impl FnOnce(&mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    (|| -> Result<()> {
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        writer(&mut output)?;
+        output.flush()?;
+        Ok(())
+    })()
+    .with_context(|| anyhow!("writing to file {output_path:?}"))
 }
 
 /// Does the same for bytes that `haystack.contains(needle)` does for

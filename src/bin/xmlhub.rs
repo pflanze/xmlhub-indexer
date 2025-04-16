@@ -55,13 +55,14 @@ use xmlhub_indexer::{
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util::{self, format_anchor_name, format_string_list},
-    util::{append, list_get_by_key, InsertValue},
+    util::{append, list_get_by_key, with_output_to_file, InsertValue},
     utillib::setpriority::{possibly_setpriority, PriorityWhich},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
+    xmlhub_help::{print_basic_standalone_html_page, save_basic_standalone_html_page},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
     xmlhub_types::OutputFile,
 };
@@ -2797,67 +2798,6 @@ fn upgrade_command(
     Ok(())
 }
 
-const STANDALONE_HTML_STYLES: &str = r#"
-    body {
-      font-family: sans;
-      margin: 0 auto;
-      padding-left: 50px;
-      padding-right: 50px;
-      padding-top: 50px;
-      padding-bottom: 50px;
-      hyphens: auto;
-      overflow-wrap: break-word;
-      text-rendering: optimizeLegibility;
-      font-kerning: normal;
-    }
-    h1 {
-      font-family: serif;
-    }
-    h2, h3, h4, h5, h6 {
-      font-family: serif;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      color: #104060;
-      margin-top: 1.4em;
-    }
-    blockquote {
-      margin: 1em 0 1em 1.7em;
-      padding-left: 1em;
-      border-left: 2px solid #e6e6e6;
-      color: #606060;
-    }
-    code {
-      font-family: Menlo, Monaco, "Lucida Console", Consolas, monospace;
-      font-size: 85%;
-      margin: 1px;
-      padding: 1px;
-      background-color: #f2f0e6;
-    }
-"#;
-
-fn print_basic_standalone_html_page(
-    title: &str,
-    body: AId<Node>,
-    html: &HtmlAllocator,
-    mut output: &mut dyn Write,
-) -> Result<()> {
-    let doc = html.html(
-        [],
-        [
-            html.head(
-                [],
-                [
-                    html.title([], html.text(title)?)?,
-                    html.style([], html.text(STANDALONE_HTML_STYLES)?)?,
-                ],
-            )?,
-            html.body([], body)?,
-        ],
-    )?;
-    html.print_html_document(doc, &mut output)?;
-    Ok(())
-}
-
 /// Execute a `changelog` command
 fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
     let ChangelogOpts {
@@ -3580,32 +3520,6 @@ fn help_contributing_command() -> Result<()> {
         )],
     )?;
     Ok(())
-}
-
-fn with_output_to_file(
-    output_path: &Path,
-    writer: impl FnOnce(&mut dyn Write) -> Result<()>,
-) -> Result<()> {
-    (|| -> Result<()> {
-        let mut output = BufWriter::new(File::create(&output_path)?);
-        writer(&mut output)?;
-        output.flush()?;
-        Ok(())
-    })()
-    .with_context(|| anyhow!("writing to file {output_path:?}"))
-}
-
-fn save_basic_standalone_html_page(
-    output_path: &Path,
-    title: &str,
-    body: AId<Node>,
-    html: &HtmlAllocator,
-) -> Result<()> {
-    with_output_to_file(output_path, |output| -> Result<()> {
-        Ok(print_basic_standalone_html_page(
-            title, body, &html, output,
-        )?)
-    })
 }
 
 fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
