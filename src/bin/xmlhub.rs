@@ -3492,20 +3492,101 @@ fn add_to_command(
     Ok(())
 }
 
-fn docs_command() -> Result<()> {
+/// Choice of a particular page from the set of help pages.
+#[derive(Clone, Copy, PartialEq)]
+enum WhichPage {
+    Start,
+    Attributes,
+}
+
+struct HelpPageInfo {
+    which_page: WhichPage,
+    file_name: &'static str,
+    title: &'static str,
+    body: AId<Node>,
+}
+
+fn create_start_page(html: &HtmlAllocator) -> Result<HelpPageInfo> {
     const DOCS_START: &str = include_str!("../../docs/start.md");
+    let processed = markdown_to_html(DOCS_START, &html)?;
+    Ok(HelpPageInfo {
+        which_page: WhichPage::Start,
+        file_name: "start.html",
+        title: "start",
+        body: processed.html(),
+    })
+}
+
+fn create_attributes_page(html: &HtmlAllocator) -> Result<HelpPageInfo> {
+    let processed = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
+    Ok(HelpPageInfo {
+        which_page: WhichPage::Attributes,
+        file_name: "attributes.html",
+        title: "attributes list",
+        body: processed.html(),
+    })
+}
+
+// Create multiple/all help pages, so that they can link to each
+// other! Returns the path to the page for which you passed the
+// `WhichPage`.
+fn create_help_pages(give_which_page: WhichPage) -> Result<PathBuf> {
     let html = HTML_ALLOCATOR_POOL.get();
-    let processed_docs_start = markdown_to_html(DOCS_START, &html)?;
-    let output_path = global_app_state_dir()?
-        .docs_base(PROGRAM_VERSION)?
-        .append("start.html");
-    save_basic_standalone_html_page(
-        &output_path,
-        "Contributing to XML Hub with the `xmlhub` tool",
-        processed_docs_start.html(),
-        &html,
-    )?;
+
+    let output_path_base = global_app_state_dir()?.docs_base(PROGRAM_VERSION)?;
+
+    let mut page_infos: Vec<HelpPageInfo> = Vec::new();
+    page_infos.push(create_start_page(&html)?);
+    page_infos.push(create_attributes_page(&html)?);
+
+    let nav_for_page = |this_page: &HelpPageInfo| -> Result<AId<Node>> {
+        let mut items = html.new_vec();
+        let mut is_first = true;
+        for pi in &page_infos {
+            if is_first {
+                is_first = false;
+            } else {
+                items.push(html.text(" | ")?)?;
+            }
+            let item_text = html.text(pi.title)?;
+            let item = if pi.which_page == this_page.which_page {
+                item_text
+            } else {
+                html.a([att("href", pi.file_name)], item_text)?
+            };
+            items.push(item)?;
+        }
+        html.div([att("class", "nav")], items)
+    };
+
+    let pages: Vec<(WhichPage, PathBuf)> = page_infos
+        .iter()
+        .map(|page_info| {
+            let output_path = (&output_path_base).append(page_info.file_name);
+
+            let nav = nav_for_page(page_info)?;
+            let body = html.div([], [nav, page_info.body])?;
+
+            save_basic_standalone_html_page(&output_path, page_info.title, body, &html)?;
+
+            Ok((page_info.which_page, output_path))
+        })
+        .collect::<Result<_>>()?;
+
+    Ok(pages
+        .into_iter()
+        .find(|(k, _)| *k == give_which_page)
+        .expect("all possible pages created above")
+        .1)
+}
+
+fn open_help_page(which_page: WhichPage) -> Result<()> {
+    let output_path = create_help_pages(which_page)?;
     spawn_browser_on_path(&output_path)
+}
+
+fn docs_command() -> Result<()> {
+    open_help_page(WhichPage::Start)
 }
 
 fn help_contributing_command() -> Result<()> {
@@ -3531,18 +3612,7 @@ fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
     };
 
     if do_open {
-        let html = HTML_ALLOCATOR_POOL.get();
-        let spec_html = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
-        let output_path = global_app_state_dir()?
-            .docs_base(PROGRAM_VERSION)?
-            .append("attributes.html");
-        save_basic_standalone_html_page(
-            &output_path,
-            "xmlhub attributes list",
-            spec_html.html(),
-            &html,
-        )?;
-        spawn_browser_on_path(&output_path)?;
+        open_help_page(WhichPage::Attributes)?;
     }
 
     if do_print {
