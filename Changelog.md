@@ -233,3 +233,6 @@ v9 - 2025-04-15
 
 - Add `xmlhub docs` subcommand, and designate it as the primary entry point for all new users, or when forgetting how things work. This also reaches the page with the attributes list, and all existing and  future pages share a navigation bar.
 - Remove the hints about how to set the browser, to reduce clutter in the `--help` view--it appears the browser setup works fine on macOS, thus should be fine. Should add this info somewhere else in the future.
+
+v9.1 - 2025-04-17
+
