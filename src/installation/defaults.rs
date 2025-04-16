@@ -80,6 +80,15 @@ impl GlobalAppStateDir {
     pub fn upgrades_log_base(&self) -> Result<PathBuf> {
         self.subdir("upgrades-log")
     }
+
+    /// Dir for storing doc files for showing to the user. Use subdir
+    /// by program version, to keep old versions of the docs, for
+    /// potentially the user's benefit.
+    pub fn docs_base(&self, program_version: &str) -> Result<PathBuf> {
+        let dir = self.subdir("docs")?.append(program_version);
+        create_dir_all_with_context(&dir)?;
+        Ok(dir)
+    }
 }
 
 lazy_static! {

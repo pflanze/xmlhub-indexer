@@ -253,9 +253,8 @@ fn get_beast_version(document: &Document) -> Result<BeastVersion> {
 /// Build an index of the files in the XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
 ///
-/// To add a new file, want to use the `add-to`, `check`, then `build`
-/// subcommands in sequence. See the help about them via e.g. `xmlhub
-/// help add-to`.
+/// ** Start with the "docs" subcommand, it will tell you how to use
+/// this program. **
 struct Opts {
     /// Show the program version (it was copied from `git describe
     /// --tags ..` at compile time) as well as some other information
@@ -280,9 +279,14 @@ struct Opts {
 
 #[derive(clap::Subcommand, Debug)]
 enum Command {
-    /// Open the CONTRIBUTING documentation in the web browser. If it
+    /// ** Start with this if you're contributing to XML Hub for the
+    /// first time or have forgotten how things work! ** (If this
     /// doesn't open the browser, see the notes for the `--open`
-    /// option of the `build` subcommand.
+    /// option of the `build` subcommand.)
+    Docs,
+    /// Open the CONTRIBUTING documentation in the web browser. (If
+    /// this doesn't open the browser, see the notes for the `--open`
+    /// option of the `build` subcommand.)
     HelpContributing,
     /// Show all metadata attributes and describe their possible
     /// values. Use `--open` to open in browser.
@@ -2858,7 +2862,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
     };
 
     if open {
-        let base = global_app_state_dir()?.upgrades_log_base()?;
+        let base = global_app_state_dir()?.docs_base(PROGRAM_VERSION)?;
         let output_path = base.append("changes.html");
         with_output_to_file(&output_path, |output| -> Result<()> {
             Ok(print_html_to(output)?)
@@ -3508,6 +3512,22 @@ fn add_to_command(
     Ok(())
 }
 
+fn docs_command() -> Result<()> {
+    const DOCS_START: &str = include_str!("../../docs/start.md");
+    let html = HTML_ALLOCATOR_POOL.get();
+    let processed_docs_start = markdown_to_html(DOCS_START, &html)?;
+    let output_path = global_app_state_dir()?
+        .docs_base(PROGRAM_VERSION)?
+        .append("start.html");
+    save_basic_standalone_html_page(
+        &output_path,
+        "Contributing to XML Hub with the `xmlhub` tool",
+        processed_docs_start.html(),
+        &html,
+    )?;
+    spawn_browser_on_path(&output_path)
+}
+
 fn help_contributing_command() -> Result<()> {
     // XX sigh, spawn_browser is badly prepared for external urls,
     // (1) should not need a directory, (2) should not require
@@ -3535,6 +3555,19 @@ fn with_output_to_file(
     .with_context(|| anyhow!("writing to file {output_path:?}"))
 }
 
+fn save_basic_standalone_html_page(
+    output_path: &Path,
+    title: &str,
+    body: AId<Node>,
+    html: &HtmlAllocator,
+) -> Result<()> {
+    with_output_to_file(output_path, |output| -> Result<()> {
+        Ok(print_basic_standalone_html_page(
+            title, body, &html, output,
+        )?)
+    })
+}
+
 fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
     let HelpAttributesOpts { open, print } = command_opts;
 
@@ -3547,16 +3580,14 @@ fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
         let html = HTML_ALLOCATOR_POOL.get();
         let spec_html = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
         let output_path = global_app_state_dir()?
-            .upgrades_log_base()?
+            .docs_base(PROGRAM_VERSION)?
             .append("attributes.html");
-        with_output_to_file(&output_path, |output| -> Result<()> {
-            Ok(print_basic_standalone_html_page(
-                "xmlhub attributes list",
-                spec_html.html(),
-                &html,
-                output,
-            )?)
-        })?;
+        save_basic_standalone_html_page(
+            &output_path,
+            "xmlhub attributes list",
+            spec_html.html(),
+            &html,
+        )?;
         spawn_browser_on_path(&output_path)?;
     }
 
@@ -3835,7 +3866,7 @@ fn main() -> Result<()> {
                         ignore_version,
                     })),
                 },
-                Command::HelpContributing | Command::HelpAttributes(_) => Opts {
+                Command::Docs | Command::HelpContributing | Command::HelpAttributes(_) => Opts {
                     v,
                     version_only,
                     global: GlobalOpts {
@@ -3912,6 +3943,7 @@ fn main() -> Result<()> {
         .as_ref()
         .expect("`None` is dispatched above already")
     {
+        Command::Docs => docs_command(),
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes(command_opts) => help_attributes_command(command_opts.clone()),
         Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
