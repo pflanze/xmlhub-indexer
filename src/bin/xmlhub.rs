@@ -2797,6 +2797,44 @@ fn upgrade_command(
     Ok(())
 }
 
+const STANDALONE_HTML_STYLES: &str = r#"
+    body {
+      font-family: sans;
+      margin: 0 auto;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    h1 {
+      font-family: serif;
+    }
+    h2, h3, h4, h5, h6 {
+      font-family: serif;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #104060;
+      margin-top: 1.4em;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, "Lucida Console", Consolas, monospace;
+      font-size: 85%;
+      margin: 1px;
+      padding: 1px;
+      background-color: #f2f0e6;
+    }
+"#;
+
 fn print_basic_standalone_html_page(
     title: &str,
     body: AId<Node>,
@@ -2806,7 +2844,13 @@ fn print_basic_standalone_html_page(
     let doc = html.html(
         [],
         [
-            html.head([], [html.title([], html.text(title)?)?])?,
+            html.head(
+                [],
+                [
+                    html.title([], html.text(title)?)?,
+                    html.style([], html.text(STANDALONE_HTML_STYLES)?)?,
+                ],
+            )?,
             html.body([], body)?,
         ],
     )?;
