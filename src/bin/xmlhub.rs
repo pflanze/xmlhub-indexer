@@ -350,6 +350,9 @@ struct UpgradeOpts {
     /// problem-free for others!).
     #[clap(long)]
     force_downgrade: bool,
+    /// Show what is going to be done and ask for confirmation
+    #[clap(long)]
+    confirm: bool,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -2751,6 +2754,7 @@ fn upgrade_command(
     let UpgradeOpts {
         force_reinstall,
         force_downgrade,
+        confirm,
     } = command_opts;
 
     if global_opts.dry_run {
@@ -2766,6 +2770,7 @@ fn upgrade_command(
         current_version: program_version,
         force_downgrade,
         force_reinstall,
+        confirm,
     })?;
 
     Ok(())

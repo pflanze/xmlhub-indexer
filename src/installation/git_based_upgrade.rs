@@ -11,6 +11,7 @@ use crate::{
     installation::shell::AppendToShellFileDone,
     path_util::AppendToPath,
     sha256::sha256sum,
+    util::ask_yn,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
 
@@ -107,6 +108,8 @@ pub struct UpgradeRules {
     pub force_downgrade: bool,
     /// Applies when the exact same version is encountered
     pub force_reinstall: bool,
+    /// Ask for confirmation
+    pub confirm: bool,
 }
 
 /// Get the repository with the binaries or refresh it, choose the
@@ -122,6 +125,7 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
         current_version,
         force_downgrade,
         force_reinstall,
+        confirm,
     } = rules;
 
     let order = downloaded_version
@@ -169,15 +173,24 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
             println!("Installing because {msg}.");
             let action = install_executable(&binary_path)?;
             let action_bullet_points = action.show_bullet_points();
+            if confirm {
+                println!("Will do:\n{action_bullet_points}");
+                if !ask_yn("Carry out the above actions?")? {
+                    bail!("action aborted by user")
+                }
+            }
             let AppendToShellFileDone { .. } = action.run(())?;
             println!(
-                "{} executable:\n\n{action_bullet_points}",
+                "{} executable.",
                 match order {
                     Ordering::Less => "Downgraded",
                     Ordering::Equal => "Reinstalled",
                     Ordering::Greater => "Upgraded",
                 }
             );
+            if !confirm {
+                println!("Did:\n\n{action_bullet_points}");
+            }
         }
     }
 
