@@ -18,21 +18,15 @@ impl Display for TrustedKey {
 }
 
 /// The keys that are trusted to sign binaries safe to install:
-/// `[(public_key, creator, owner)]`
-const TRUSTED_KEYS: &[(&str, &str, &str)] = &[(
-    "d66e4b948019efb4e96bac79e90ec4234f2831777ae5bcf5a7e306519796b30e",
-    "cjaege@bs-mbpas-0130",
-    "Christian Jaeger (Mac) <ch@christianjaeger.ch>",
-)];
+const TRUSTED_KEYS: &[TrustedKey] = &[TrustedKey {
+    public_key: "d66e4b948019efb4e96bac79e90ec4234f2831777ae5bcf5a7e306519796b30e",
+    creator: "cjaege@bs-mbpas-0130",
+    owner: "Christian Jaeger (Mac) <ch@christianjaeger.ch>",
+}];
 
 /// Return the full trusted info on a key if trusted
-pub fn get_trusted_key(public_key: &str) -> Option<TrustedKey> {
-    let (public_key, creator, owner) = TRUSTED_KEYS
+pub fn get_trusted_key(public_key: &str) -> Option<&'static TrustedKey> {
+    TRUSTED_KEYS
         .into_iter()
-        .find(|(key, _, _)| *key == public_key)?;
-    Some(TrustedKey {
-        public_key,
-        creator,
-        owner,
-    })
+        .find(|trusted| trusted.public_key == public_key)
 }
