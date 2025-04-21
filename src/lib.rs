@@ -36,4 +36,5 @@ pub mod xmlhub_clone_to;
 pub mod xmlhub_global_opts;
 pub mod xmlhub_help;
 pub mod xmlhub_indexer_defaults;
+pub mod xmlhub_install;
 pub mod xmlhub_types;

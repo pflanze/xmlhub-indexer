@@ -47,7 +47,6 @@ use xmlhub_indexer::{
     installation::{
         defaults::global_app_state_dir,
         git_based_upgrade::{git_based_upgrade, UpgradeRules},
-        install::install_executable,
     },
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, CURRENT_DIRECTORY},
@@ -64,6 +63,7 @@ use xmlhub_indexer::{
     xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
     xmlhub_help::{print_basic_standalone_html_page, save_basic_standalone_html_page},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
+    xmlhub_install::{install_command, InstallOpts},
     xmlhub_types::OutputFile,
 };
 
@@ -335,9 +335,6 @@ struct HelpAttributesOpts {
     #[clap(long)]
     print: bool,
 }
-
-#[derive(clap::Parser, Debug, Clone)]
-struct InstallOpts {}
 
 #[derive(clap::Parser, Debug, Clone)]
 struct UpgradeOpts {
@@ -2745,27 +2742,6 @@ fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
     }
 }
 
-/// Execute an `install` command
-fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> Result<()> {
-    let InstallOpts {} = command_opts;
-
-    if global_opts.dry_run {
-        // XX todo?
-        bail!("--dry-run is not currently supported for `install`")
-    }
-    if global_opts.verbose {
-        // XX todo?
-        bail!("--verbose is not currently supported for `install`")
-    }
-
-    let own_path = std::env::current_exe()
-        .with_context(|| anyhow!("getting the path to the running executable"))?;
-    let done = install_executable(&own_path)?;
-    println!("Successfully installed the executable:\n\n{done}");
-
-    Ok(())
-}
-
 /// Execute an `upgrade` command
 fn upgrade_command(
     program_version: GitVersion<SemVersion>,
@@ -3689,7 +3665,7 @@ fn main() -> Result<()> {
 
         match command {
             Some(command) => match command {
-                Command::Install(InstallOpts {}) => Opts {
+                Command::Install(opts) => Opts {
                     v,
                     version_only,
                     global: GlobalOpts {
@@ -3701,7 +3677,7 @@ fn main() -> Result<()> {
                         dry_run,
                         no_version_check,
                     },
-                    command: Some(Command::Install(InstallOpts {})),
+                    command: Some(Command::Install(opts)),
                 },
                 Command::Upgrade(upgrade_opts) => Opts {
                     v,
