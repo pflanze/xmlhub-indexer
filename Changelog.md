@@ -236,3 +236,7 @@ v9 - 2025-04-15
 
 v9.1 - 2025-04-17
 
+- `make-release`: show a shorter, more human-readable, description of what it will do.
+- `xmlhub install`: add `--confirm` option, so you can review what the install action is doing before it is being carried out. Also show more detail (both with and without `--confirm`).
+- `xmlhub upgrade`: add `--confirm` option similar to the one for `xmlhub install`.
+- `make-release`/`xmlhub upgrade`: copy the changelog into the xmlhub-indexer-binaries repository, and show it when upgrading.
