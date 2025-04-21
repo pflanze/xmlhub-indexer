@@ -2762,9 +2762,6 @@ fn upgrade_command(
         bail!("--verbose is not currently supported for `upgrade`")
     }
 
-    // XX change to use Done approach? It only does so partially
-    // now. (Is it better or worse to not print steps that were
-    // already successful?)
     git_based_upgrade(UpgradeRules {
         current_version: program_version,
         force_downgrade,
