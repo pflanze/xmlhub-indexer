@@ -1,3 +1,6 @@
+//! `copy` but provided as `Effect`, also removing the old target if
+//! present and informing about it.
+
 use std::{
     fmt::Debug,
     fs::{copy, remove_file},
@@ -22,6 +25,8 @@ pub struct CopyFile<R> {
 #[derive(Debug)]
 pub struct CopiedFile<R> {
     pub provided: R,
+    /// Todo: get rid of `Done`, just rely on the `show_bullet_points`
+    /// view of `Effect`, right?
     pub done: Done,
 }
 
@@ -29,6 +34,21 @@ impl<R: Debug> Effect for CopyFile<R> {
     type Requires = R;
 
     type Provides = CopiedFile<R>;
+
+    fn show_bullet_points(&self) -> String {
+        let Self {
+            phantom: _,
+            remove_existing_target,
+            source_path,
+            target_path,
+        } = self;
+        let replacing = if *remove_existing_target {
+            ", replacing the latter"
+        } else {
+            ""
+        };
+        format!("  * copy the file from {source_path:?} to {target_path:?}{replacing}")
+    }
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let Self {

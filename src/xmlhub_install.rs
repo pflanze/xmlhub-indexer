@@ -31,7 +31,7 @@ pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> R
     let action = install_executable(&own_path)?;
 
     if confirm {
-        println!("{}", action.show());
+        println!("Will:\n{}", action.show_bullet_points());
         if !ask_yn("Do you want to run the above effects?")? {
             bail!("action aborted by user")
         }

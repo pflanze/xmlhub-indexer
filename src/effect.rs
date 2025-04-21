@@ -34,6 +34,14 @@ pub trait Effect: Debug {
         format!("{:#?}{}", self, show_arrow::<Self::Provides>())
     }
 
+    /// Show in a nicer way for users, as bullet points in markdown
+    /// format. You should really override this method, the default
+    /// does not achieve this goal! Put 2 spaces left of the `*`. `-`
+    /// is used for the `NoOp` action.
+    fn show_bullet_points(&self) -> String {
+        format!("  * {:#?}", self)
+    }
+
     /// Carry out the effect of this `Effect`. Using Box to allow for
     /// dyn (an alternative might be to use the `auto_enums` crate
     /// instead?)
@@ -93,6 +101,14 @@ impl<
         format!("{}\n{}", self.0.show(), self.1.show())
     }
 
+    fn show_bullet_points(&self) -> String {
+        format!(
+            "{}\n{}",
+            self.0.show_bullet_points(),
+            self.1.show_bullet_points()
+        )
+    }
+
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let pi = self.0.run(provided)?;
         self.1.run(pi)
@@ -145,6 +161,10 @@ where
         // on the arrow, since `providing` is the instance possibly
         // containing runtime data.
         format!("NoOp: {}{}", self.why, show_arrow::<Self::Provides>())
+    }
+
+    fn show_bullet_points(&self) -> String {
+        format!("  - {}", self.why)
     }
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
