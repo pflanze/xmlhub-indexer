@@ -41,6 +41,12 @@ to adapt them in case you need to do things a bit differently.
    <path-to-xmlhub-clone>` then `git pull` to update it. Having it up
    to date before starting your changes avoids potential merge
    conflicts when you want to push those.
+   
+   If you're new, and you would like to first experiment with
+   contributing to XML Hub, you can instead run `xmlhub clone-to
+   <path-to-a-directory> --experiments`. This clones the
+   [xmlhub-experiments](https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments)
+   repository instead that is not used for the real exchange of files.
 
 1. Create a subdirectory for the project if there is none yet: `mkdir <Your subdirectory name>`, `cd <Your subdirectory name>`. (You can use the tabulator key to have the shell complete a path for you, especially if it contains spaces or other special characters!)
 
