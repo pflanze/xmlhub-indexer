@@ -6,6 +6,7 @@ use std::{cmp::Ordering, path::PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
+    changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle, CHANGELOG_FILE_NAME},
     git::git,
     git_version::{GitVersion, SemVersion},
     installation::shell::AppendToShellFileDone,
@@ -24,9 +25,15 @@ use super::{
     trusted_keys::get_trusted_key,
 };
 
+pub struct VerifiedExecutable {
+    pub binary_path: PathBuf,
+    pub app_info: AppInfo,
+    pub changelog_path: PathBuf,
+}
+
 // Todo: change to git remote update and reset, so that trimming the
 // upstream repository every now and then would be possible?
-pub fn pull_verified_executable() -> Result<(PathBuf, AppInfo)> {
+pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
     let binaries_repo_name = "xmlhub-indexer-binaries";
 
     let binaries_checkout = BINARIES_CHECKOUT.replace_working_dir_path(
@@ -78,7 +85,14 @@ pub fn pull_verified_executable() -> Result<(PathBuf, AppInfo)> {
             let actual_hash = sha256sum(&binary_path).with_context(|| anyhow!(""))?;
             if actual_hash == app_info.sha256 {
                 println!("App file hash is valid.");
-                Ok((binary_path, app_info))
+                let changelog_path = binaries_checkout
+                    .working_dir_path()
+                    .append(CHANGELOG_FILE_NAME);
+                Ok(VerifiedExecutable {
+                    binary_path,
+                    app_info,
+                    changelog_path,
+                })
             } else {
                 bail!(
                     "invalid file hash: the file {binary_path:?} hashes to {actual_hash:?}, \
@@ -117,7 +131,11 @@ pub struct UpgradeRules {
 /// checking its app info against the version requirement given in
 /// `rules`.
 pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
-    let (binary_path, app_info) = pull_verified_executable()?;
+    let VerifiedExecutable {
+        binary_path,
+        app_info,
+        changelog_path,
+    } = pull_verified_executable()?;
 
     let downloaded_version: GitVersion<SemVersion> = app_info.version.parse()?;
 
@@ -173,7 +191,41 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
             println!("Installing because {msg}.");
             let action = install_executable(&binary_path)?;
             let action_bullet_points = action.show_bullet_points();
+
+            let changelog_part = {
+                let changelog_string = std::fs::read_to_string(&changelog_path)
+                    .with_context(|| anyhow!("can't read file {changelog_path:?}"))?;
+
+                let changelog = Changelog::from_str(&changelog_string)?;
+                let part =
+                    changelog.get_between_versions(true, false, Some(&current_version), None)?;
+                let mut out = Vec::new();
+                // XX should share the settings with `changelog_command`
+                part.display(
+                    &ChangelogDisplay {
+                        generate_title: true,
+                        style: ChangelogDisplayStyle::ReleasesAsSections {
+                            print_colon_after_release: true,
+                            newest_section_first: false,
+                            newest_item_first: false,
+                        },
+                    },
+                    &mut out,
+                )?;
+                String::from_utf8(out).expect("no utf-8 problems possible")
+            };
+
+            let print_changelog = || {
+                println!(
+                    "====Changes coming with the installed version================================"
+                );
+                println!("{changelog_part}");
+                println!(
+                    "============================================================================="
+                );
+            };
             if confirm {
+                print_changelog();
                 println!("Will do:\n{action_bullet_points}");
                 if !ask_yn("Carry out the above actions?")? {
                     bail!("action aborted by user")
@@ -189,6 +241,7 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
                 }
             );
             if !confirm {
+                print_changelog();
                 println!("Did:\n\n{action_bullet_points}");
             }
         }
