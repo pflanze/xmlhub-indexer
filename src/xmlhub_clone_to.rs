@@ -33,8 +33,6 @@ pub struct CloneToOpts {
     pub target_path: Option<PathBuf>,
 }
 
-const CHECKOUT: CheckoutContext<&str> = XMLHUB_CHECKOUT;
-
 #[derive(Debug)]
 struct Target {
     checkout: CheckoutContext<'static, PathBuf>,
@@ -69,7 +67,7 @@ impl Target {
         } else {
             // User gave path to parent directory to put the target inside
             Self {
-                checkout: CHECKOUT.replace_working_dir_path(
+                checkout: checkout.replace_working_dir_path(
                     checkout
                         .working_dir_path()
                         .append(checkout.supposed_upstream_repo_name())
@@ -100,7 +98,8 @@ pub fn clone_to_command(
         // (Interestingly, rustc 1.82.0 allows this, even though
         // CheckoutContext is not Copy. It allso allows it for
         // `const`, where it makes sense, but not for `static`.)
-        let mut checkout = CHECKOUT;
+        let mut checkout = XMLHUB_CHECKOUT;
+
         if experiments {
             checkout.supposed_upstream_git_url =
                 "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git";
