@@ -30,16 +30,16 @@ pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> R
         .with_context(|| anyhow!("getting the path to the running executable"))?;
     let action = install_executable(&own_path)?;
 
+    let action_bullet_points = action.show_bullet_points();
     if confirm {
-        println!("Will:\n{}", action.show_bullet_points());
+        println!("Will:\n{action_bullet_points}");
         if !ask_yn("Do you want to run the above effects?")? {
             bail!("action aborted by user")
         }
     }
 
-    let AppendToShellFileDone { provided, done } = action.run(())?;
-    let done = done.with_previously(provided.done);
-    println!("Successfully installed the executable:\n\n{done}");
+    let AppendToShellFileDone { provided: _ } = action.run(())?;
+    println!("Successfully installed the executable. Did:\n\n{action_bullet_points}");
 
     Ok(())
 }

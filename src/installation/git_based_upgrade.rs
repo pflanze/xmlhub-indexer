@@ -168,9 +168,10 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
         Action::InstallBecause(msg) => {
             println!("Installing because {msg}.");
             let action = install_executable(&binary_path)?;
-            let AppendToShellFileDone { done, .. } = action.run(())?;
+            let action_bullet_points = action.show_bullet_points();
+            let AppendToShellFileDone { .. } = action.run(())?;
             println!(
-                "{} executable:\n\n{done}",
+                "{} executable:\n\n{action_bullet_points}",
                 match order {
                     Ordering::Less => "Downgraded",
                     Ordering::Equal => "Reinstalled",

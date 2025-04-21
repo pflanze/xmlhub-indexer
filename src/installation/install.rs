@@ -14,7 +14,6 @@ use crate::{
 
 use super::{
     copy_file::{copy_file, CopiedFile, CopyFile},
-    done::Done,
     shell::{AppendToShellFileDone, ShellType},
 };
 
@@ -68,10 +67,7 @@ pub fn install_executable(
         if parts.contains(&cargo_bin_dir) {
             NoOp::passing(
                 |provided: CopiedFile<()>| -> AppendToShellFileDone<CopiedFile<()>> {
-                    AppendToShellFileDone {
-                        provided,
-                        done: Done::nothing(),
-                    }
+                    AppendToShellFileDone { provided }
                 },
                 format!(
                     "not changing your shell config file because \

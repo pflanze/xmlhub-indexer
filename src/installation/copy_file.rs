@@ -12,8 +12,6 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::effect::Effect;
 
-use super::done::Done;
-
 #[derive(Debug)]
 pub struct CopyFile<R> {
     phantom: PhantomData<fn() -> R>,
@@ -25,9 +23,8 @@ pub struct CopyFile<R> {
 #[derive(Debug)]
 pub struct CopiedFile<R> {
     pub provided: R,
-    /// Todo: get rid of `Done`, just rely on the `show_bullet_points`
-    /// view of `Effect`, right?
-    pub done: Done,
+    /// Whether the target file already existed
+    pub replaced: bool,
 }
 
 impl<R: Debug> Effect for CopyFile<R> {
@@ -57,21 +54,18 @@ impl<R: Debug> Effect for CopyFile<R> {
             source_path,
             target_path,
         } = *self;
-        let replacing = if remove_existing_target && target_path.exists() {
+        let replaced = if remove_existing_target && target_path.exists() {
             remove_file(&target_path)
                 .with_context(|| anyhow!("removing existing file {target_path:?}"))?;
-            ", replacing the latter"
+            true
         } else {
-            ""
+            false
         };
 
         copy(&source_path, &target_path)
             .with_context(|| anyhow!("copying file from {source_path:?} to {target_path:?}"))?;
 
-        Ok(CopiedFile {
-            provided,
-            done: format!("copy file from {source_path:?} to {target_path:?}{replacing}").into(),
-        })
+        Ok(CopiedFile { provided, replaced })
     }
 }
 

@@ -10,8 +10,6 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{effect::Effect, path_util::AppendToPath, utillib::home::home_dir};
 
-use super::done::Done;
-
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ShellType {
     Bash,
@@ -70,10 +68,10 @@ impl ShellType {
 
         let file_path = self.init_file_path()?;
         let code_to_append = format!("\nPATH=\"{}:$PATH\"", dir_path_string);
-        let to_be_done = Done::from(format!(
+        let to_be_done = format!(
             "add code to {file_path:?} to add the path {dir_path_string:?} to \
              the PATH environment variable"
-        ));
+        );
         Ok(AppendToShellFile {
             phantom: Default::default(),
             file_path,
@@ -88,13 +86,12 @@ pub struct AppendToShellFile<R> {
     phantom: PhantomData<fn() -> R>,
     pub file_path: PathBuf,
     pub code_to_append: String,
-    pub to_be_done: Done,
+    pub to_be_done: String,
 }
 
 #[derive(Debug)]
 pub struct AppendToShellFileDone<R> {
     pub provided: R,
-    pub done: Done,
 }
 
 impl<R: Debug> Effect for AppendToShellFile<R> {
@@ -106,7 +103,7 @@ impl<R: Debug> Effect for AppendToShellFile<R> {
         let Self {
             file_path,
             code_to_append,
-            to_be_done,
+            to_be_done: _,
             phantom: _,
         } = *self;
         (|| -> Result<()> {
@@ -116,9 +113,6 @@ impl<R: Debug> Effect for AppendToShellFile<R> {
             Ok(())
         })()
         .with_context(|| anyhow!("writing to file: {file_path:?}"))?;
-        Ok(AppendToShellFileDone {
-            provided,
-            done: to_be_done,
-        })
+        Ok(AppendToShellFileDone { provided })
     }
 }
