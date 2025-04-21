@@ -8,6 +8,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
+    installation::shell::AppendToShellFileDone,
     path_util::AppendToPath,
     sha256::sha256sum,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
@@ -166,7 +167,8 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
         }
         Action::InstallBecause(msg) => {
             println!("Installing because {msg}.");
-            let done = install_executable(&binary_path)?;
+            let action = install_executable(&binary_path)?;
+            let AppendToShellFileDone { done, .. } = action.run(())?;
             println!(
                 "{} executable:\n\n{done}",
                 match order {

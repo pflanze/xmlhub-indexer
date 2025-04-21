@@ -1,13 +1,21 @@
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::{installation::install::install_executable, xmlhub_global_opts::GlobalOpts};
+use crate::{
+    installation::{install::install_executable, shell::AppendToShellFileDone},
+    util::ask_yn,
+    xmlhub_global_opts::GlobalOpts,
+};
 
 #[derive(clap::Parser, Debug, Clone)]
-pub struct InstallOpts {}
+pub struct InstallOpts {
+    /// Show what is going to be done and ask for confirmation
+    #[clap(long)]
+    confirm: bool,
+}
 
 /// Execute an `install` command
 pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> Result<()> {
-    let InstallOpts {} = command_opts;
+    let InstallOpts { confirm } = command_opts;
 
     if global_opts.dry_run {
         // XX todo?
@@ -20,7 +28,17 @@ pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> R
 
     let own_path = std::env::current_exe()
         .with_context(|| anyhow!("getting the path to the running executable"))?;
-    let done = install_executable(&own_path)?;
+    let action = install_executable(&own_path)?;
+
+    if confirm {
+        println!("{}", action.show());
+        if !ask_yn("Do you want to run the above effects?")? {
+            bail!("action aborted by user")
+        }
+    }
+
+    let AppendToShellFileDone { provided, done } = action.run(())?;
+    let done = done.with_previously(provided.done);
     println!("Successfully installed the executable:\n\n{done}");
 
     Ok(())

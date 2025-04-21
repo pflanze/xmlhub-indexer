@@ -1,6 +1,7 @@
 pub mod app_info;
 pub mod app_signature;
 pub mod binaries_repo;
+pub mod copy_file;
 pub mod defaults;
 pub mod done;
 pub mod git_based_upgrade;
