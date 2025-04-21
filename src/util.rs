@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use itertools::Itertools;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
@@ -239,4 +240,28 @@ pub fn bool_to_yes_no(val: bool) -> &'static str {
     } else {
         "no"
     }
+}
+
+pub fn prefix_lines(lines: &str, prefix: &str) -> String {
+    let (lines_no_ending_newline, suffix) = if let Some(s) = lines.strip_suffix("\n") {
+        (s, "\n")
+    } else {
+        (lines, "")
+    };
+    let mut new = lines_no_ending_newline
+        .split("\n")
+        .map(|line| format!("{prefix}{line}"))
+        .join("\n");
+    new.push_str(suffix);
+    new
+}
+
+#[test]
+fn t_prefix_lines() {
+    let t = prefix_lines;
+    assert_eq!(t("hi", "  "), "  hi");
+    assert_eq!(t("hi\n", "  "), "  hi\n");
+    assert_eq!(t("hi\nthere", "  "), "  hi\n  there");
+    assert_eq!(t("hi\nthere\n", "  "), "  hi\n  there\n");
+    assert_eq!(t("\n\n", "  "), "  \n  \n");
 }

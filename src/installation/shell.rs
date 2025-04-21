@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::{effect::Effect, path_util::AppendToPath, utillib::home::home_dir};
+use crate::{effect::Effect, path_util::AppendToPath, util::prefix_lines, utillib::home::home_dir};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ShellType {
@@ -68,9 +68,10 @@ impl ShellType {
 
         let file_path = self.init_file_path()?;
         let code_to_append = format!("\nPATH=\"{}:$PATH\"", dir_path_string);
+        let indented_code = prefix_lines(&code_to_append, "        ");
         let to_be_done = format!(
             "add code to {file_path:?} to add the path {dir_path_string:?} to \
-             the PATH environment variable"
+             the PATH environment variable:\n{indented_code}"
         );
         Ok(AppendToShellFile {
             phantom: Default::default(),
