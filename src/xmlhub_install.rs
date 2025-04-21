@@ -39,7 +39,9 @@ pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> R
     }
 
     let AppendToShellFileDone { provided: _ } = action.run(())?;
-    println!("Successfully installed the executable. Did:\n\n{action_bullet_points}");
-
+    println!("Successfully installed the executable.");
+    if !confirm {
+        println!("Did:\n\n{action_bullet_points}");
+    }
     Ok(())
 }
