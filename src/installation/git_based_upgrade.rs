@@ -242,7 +242,7 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
             );
             if !confirm {
                 print_changelog();
-                println!("Did:\n\n{action_bullet_points}");
+                println!("Did:\n{action_bullet_points}");
             }
         }
     }
