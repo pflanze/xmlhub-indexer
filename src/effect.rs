@@ -35,12 +35,9 @@ pub trait Effect: Debug {
     }
 
     /// Show in a nicer way for users, as bullet points in markdown
-    /// format. You should really override this method, the default
-    /// does not achieve this goal! Put 2 spaces left of the `*`. `-`
-    /// is used for the `NoOp` action.
-    fn show_bullet_points(&self) -> String {
-        format!("  * {:#?}", self)
-    }
+    /// format. Put 2 spaces left of the `*`. `-` is used for the
+    /// `NoOp` action.
+    fn show_bullet_points(&self) -> String;
 
     /// Carry out the effect of this `Effect`. Using Box to allow for
     /// dyn (an alternative might be to use the `auto_enums` crate

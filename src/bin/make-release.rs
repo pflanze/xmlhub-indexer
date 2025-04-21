@@ -52,6 +52,11 @@ struct Opts {
     #[clap(long)]
     dry_run: bool,
 
+    /// Show the actions to be carried out in debug format instead of
+    /// a bullet list.
+    #[clap(long)]
+    verbose: bool,
+
     /// Carry out the actions without asking for confirmation
     /// (basically the opposite of --dry-run).
     #[clap(long)]
@@ -166,6 +171,17 @@ impl Effect for UpdateChangelogWithTag {
 
     type Provides = UpdatedChangelog;
 
+    fn show_bullet_points(&self) -> String {
+        let Self {
+            changelog_path,
+            changelog_tag,
+        } = self;
+        format!(
+            "  * add the line {:?} to {changelog_path:?} and commit",
+            changelog_tag.release_line()
+        )
+    }
+
     fn run(self: Box<Self>, (): Self::Requires) -> Result<Self::Provides> {
         let UpdateChangelogWithTag {
             changelog_path,
@@ -230,6 +246,20 @@ impl Effect for CreateTag {
     type Requires = UpdatedChangelog;
     type Provides = SourceReleaseTag;
 
+    fn show_bullet_points(&self) -> String {
+        let Self { sign, local_user } = self;
+        if *sign {
+            format!(
+                "  * create a tag for the given version, signed with key {}",
+                local_user
+                    .as_ref()
+                    .expect("user is now required when signing")
+            )
+        } else {
+            format!("  * create an unsigned tag for the given version")
+        }
+    }
+
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let UpdatedChangelog {
             source_commit_id,
@@ -272,6 +302,17 @@ struct SourcePushed {
 impl Effect for PushSourceToRemote {
     type Requires = SourceReleaseTag;
     type Provides = SourcePushed;
+
+    fn show_bullet_points(&self) -> String {
+        let Self {
+            tag_name,
+            remote_name,
+        } = self;
+        format!(
+            "  * in source repo: `git push {remote_name:?} {:?} {tag_name:?}`",
+            SOURCE_CHECKOUT.branch_name
+        )
+    }
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let SourceReleaseTag { source_commit_id } = provided;
@@ -354,6 +395,21 @@ impl Effect for BuildBinariesGetSha256sums {
     type Requires = SourcePushed;
     type Provides = BinariesWithSha256sum;
 
+    fn show_bullet_points(&self) -> String {
+        let Self { binaries } = self;
+        let binaries_string: String = binaries
+            .into_iter()
+            .map(
+                |Binary {
+                     target,
+                     program_name,
+                 }| { format!("      * {program_name:?} for {target}") },
+            )
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("  * build the following binaries and get their sha256sum:\n{binaries_string}")
+    }
+
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let SourcePushed { source_commit_id } = provided;
         let BuildBinariesGetSha256sums { binaries } = *self;
@@ -410,6 +466,7 @@ struct ReleaseBinaries<'t> {
     // binary/binaries!
     build_os_arch: String,
     build_os_version: String,
+    app_signature_private_key_path: PathBuf,
     app_signature_private_key: DebugIgnore<&'t AppSignaturePrivateKey>,
     sign: bool,
     local_user: Option<String>,
@@ -423,6 +480,45 @@ impl<'t> Effect for ReleaseBinaries<'t> {
     type Requires = BinariesWithSha256sum;
     type Provides = Done;
 
+    fn show_bullet_points(&self) -> String {
+        let Self {
+            binaries_checkout_working_dir_path,
+            source_version_tag,
+            hostname: _,
+            rustc_version: _,
+            cargo_version: _,
+            build_os_arch: _,
+            build_os_version: _,
+            app_signature_private_key_path,
+            app_signature_private_key: _,
+            sign,
+            local_user,
+            push_binaries_to_remote,
+        } = self;
+        let signing = if *sign {
+            let key = local_user
+                .as_ref()
+                .expect("user is now required when signing");
+            format!("* git tag the binaries repository with the PGP key {key}")
+        } else {
+            format!("- do *not* sign the binaries repository with a PGP key")
+        };
+        let push_remote = if let Some(remote) = push_binaries_to_remote {
+            format!("* in binaries repository: `git push {remote:?}`")
+        } else {
+            format!("- do *not* git push binaries repository to upstream")
+        };
+        format!(
+            "  \
+                 * copy the binaries into the right places below \
+                 {binaries_checkout_working_dir_path:?}, create .info files, \
+                 sign those with the private key from {app_signature_private_key_path:?}\n  \
+                 * commit with a message mentioning source tag {source_version_tag:?}\n  \
+                 {signing}\n  \
+                 {push_remote}"
+        )
+    }
+
     fn run(self: Box<Self>, required: Self::Requires) -> Result<Self::Provides> {
         let ReleaseBinaries {
             binaries_checkout_working_dir_path,
@@ -432,6 +528,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
             cargo_version,
             build_os_arch,
             build_os_version,
+            app_signature_private_key_path: _,
             app_signature_private_key,
             sign,
             local_user,
@@ -747,7 +844,9 @@ fn main() -> Result<()> {
         } else {
             NoOp::passing(
                 |SourceReleaseTag { source_commit_id }| SourcePushed { source_commit_id },
-                "not pushing tag/branch because the --no-push option was given".into(),
+                "do *not* push the source repository tag/branch \
+                 because the --no-push-source option was given"
+                    .into(),
             )
         };
 
@@ -831,11 +930,13 @@ fn main() -> Result<()> {
             "not publishing binary because --no-publish-binary option was given".into(),
         )
     } else {
-        let app_private_key = &opts.app_private_key.ok_or_else(|| {
+        let app_signature_private_key_path = opts.app_private_key.ok_or_else(|| {
             anyhow!("when publishing the binary, `--app-private-key` is required")
         })?;
-        app_signature_private_key = AppSignaturePrivateKey::load(&app_private_key)
-            .with_context(|| anyhow!("loading private key from {app_private_key:?}"))?;
+        app_signature_private_key = AppSignaturePrivateKey::load(&app_signature_private_key_path)
+            .with_context(|| {
+            anyhow!("loading private key from {app_signature_private_key_path:?}")
+        })?;
 
         // XX Bug: this check is too 'early', I mean it fetches
         // the remote even if !push. Not very important in
@@ -927,6 +1028,7 @@ fn main() -> Result<()> {
                 cargo_version,
                 build_os_arch: os_arch,
                 build_os_version: os_version,
+                app_signature_private_key_path,
                 app_signature_private_key: (&app_signature_private_key).into(),
             })
         } else {
@@ -953,7 +1055,14 @@ fn main() -> Result<()> {
 
     println!("\n====Effects:=================================================================\n");
 
-    println!("{}", effect.show());
+    println!(
+        "{}\n",
+        if opts.verbose {
+            effect.show()
+        } else {
+            effect.show_bullet_points()
+        }
+    );
 
     if opts.unchanged_output {
         println!(

@@ -99,6 +99,10 @@ impl<R: Debug> Effect for AppendToShellFile<R> {
 
     type Provides = AppendToShellFileDone<R>;
 
+    fn show_bullet_points(&self) -> String {
+        format!("  * {}", self.to_be_done)
+    }
+
     fn run(self: Box<Self>, provided: R) -> Result<Self::Provides> {
         let Self {
             file_path,

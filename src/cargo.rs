@@ -131,6 +131,20 @@ pub struct CompilationTarget {
     pub profile: CompilationProfile,
 }
 
+impl Display for CompilationTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            target_triple,
+            profile,
+        } = self;
+        let target = target_triple
+            .as_ref()
+            .map(|v| format!("architecture/OS {v}"))
+            .unwrap_or_else(|| String::from("host architecture/OS"));
+        write!(f, "the {target} in {profile} mode")
+    }
+}
+
 impl CompilationTarget {
     /// The path to the compiled binary of the main program, relative
     /// from the source repository base.
