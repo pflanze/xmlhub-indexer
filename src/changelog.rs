@@ -17,13 +17,13 @@ pub struct Release<'t> {
 }
 
 #[derive(Clone, Debug)]
-pub enum ChangelogEntry<'t> {
+pub enum ChangelogEntry<'s, 't> {
     Release(Release<'t>),
-    PointEntry(&'static str),
+    PointEntry(&'s str),
 }
 
 #[derive(Clone, Debug)]
-pub struct Changelog<'t, 't0: 't> {
+pub struct Changelog<'s: 't, 't, 't0: 't> {
     /// When a subset was taken, what the range was
     pub include_from: bool,
     pub from: Option<RefOrOwned<'t, GitVersion<SemVersion>>>,
@@ -31,11 +31,11 @@ pub struct Changelog<'t, 't0: 't> {
     pub is_downgrade: bool,
 
     /// The title from the Changelog.md, not used.
-    pub title: Option<&'static str>,
+    pub title: Option<&'s str>,
     /// The "Newest" sentence from the Changelog.md, used in
     /// innovative output style.
-    pub newest: Option<&'static str>,
-    pub entries: Cow<'t, [ChangelogEntry<'t0>]>,
+    pub newest: Option<&'s str>,
+    pub entries: Cow<'t, [ChangelogEntry<'s, 't0>]>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -81,9 +81,9 @@ pub struct ChangelogDisplay {
 }
 
 #[derive(Clone, Debug)]
-pub struct ChangelogSection<'t0> {
+pub struct ChangelogSection<'s, 't0> {
     pub release: Option<Release<'t0>>,
-    pub entries: Vec<&'static str>,
+    pub entries: Vec<&'s str>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -97,12 +97,18 @@ pub enum ChangelogGetError {
     ChangelogFileHasWronglyOrderedReleases(String, String),
 }
 
+impl<'t, 't0> Changelog<'static, 't, 't0> {
+    pub fn new_builtin() -> Result<Self> {
+        Changelog::from_str(CHANGELOG)
+    }
+}
+
 // Do not impl `Display` as we want the `ChangelogDisplay` options,
 // and don't want to make that part of `Changelog`.
-impl<'t, 't0> Changelog<'t, 't0> {
-    pub fn sections(&'t self) -> Vec<ChangelogSection<'t>> {
+impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
+    pub fn sections(&'t self) -> Vec<ChangelogSection<'s, 't>> {
         let mut sections = Vec::new();
-        let mut entries: Vec<&str> = Vec::new();
+        let mut entries: Vec<&'s str> = Vec::new();
         for entry in &*self.entries {
             match entry {
                 ChangelogEntry::Release(Release { version, date }) => {
@@ -206,12 +212,12 @@ impl<'t, 't0> Changelog<'t, 't0> {
         }
     }
 
-    pub fn new() -> Result<Self> {
+    pub fn from_str(changelog: &'s str) -> Result<Self> {
         let mut title = None;
         let mut newest = None;
         let mut entries = Vec::new();
         let mut lineno = 0;
-        for line in CHANGELOG.split('\n') {
+        for line in changelog.split('\n') {
             lineno += 1;
             match line.chars().next() {
                 None => (),
@@ -268,16 +274,16 @@ impl<'t, 't0> Changelog<'t, 't0> {
     /// release line should be included (but without its items!) or
     /// not. If `allow_downgrades` is false, gives an error if `from`
     /// > `to`.
-    pub fn get_between_versions<'s>(
-        &'s self,
+    pub fn get_between_versions<'slf>(
+        &'slf self,
         allow_downgrades: bool,
         include_from: bool,
-        // evil to use 's here?
-        from: Option<&'s GitVersion<SemVersion>>,
-        to: Option<&'s GitVersion<SemVersion>>,
+        // evil to use 'slf here?
+        from: Option<&'slf GitVersion<SemVersion>>,
+        to: Option<&'slf GitVersion<SemVersion>>,
     ) -> Result<Self, ChangelogGetError>
     where
-        's: 't, // ah, because Cow may own the storage, then referncing it is 's not 't
+        'slf: 't, // ah, because Cow may own the storage, then referncing it is 'slf not 't
     {
         let is_downgrade = {
             let mut is_downgrade = false;
@@ -368,7 +374,7 @@ impl<'t, 't0> Changelog<'t, 't0> {
 #[test]
 fn t_changelog() -> Result<()> {
     use std::str::FromStr;
-    let changelog = Changelog::new()?;
+    let changelog = Changelog::new_builtin()?;
     let from = GitVersion::from_str("v1.2")?;
     let to = GitVersion::from_str("v6")?;
     let sublog = changelog.get_between_versions(false, true, Some(&from), Some(&to))?;

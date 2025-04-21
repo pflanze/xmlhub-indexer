@@ -2786,7 +2786,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         open,
     } = command_opts;
 
-    let changelog = Changelog::new()?;
+    let changelog = Changelog::new_builtin()?;
     let part =
         changelog.get_between_versions(allow_downgrades, false, from.as_ref(), to.as_ref())?;
 

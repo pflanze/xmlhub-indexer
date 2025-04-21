@@ -31,7 +31,7 @@ struct Opts {
 
 fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let changelog = Changelog::new()?;
+    let changelog = Changelog::new_builtin()?;
     let part = changelog.get_between_versions(
         opts.allow_downgrades,
         opts.include_from,
