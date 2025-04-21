@@ -240,3 +240,6 @@ v9.1 - 2025-04-17
 - `xmlhub install`: add `--confirm` option, so you can review what the install action is doing before it is being carried out. Also show more detail (both with and without `--confirm`).
 - `xmlhub upgrade`: add `--confirm` option similar to the one for `xmlhub install`.
 - `make-release`/`xmlhub upgrade`: copy the changelog into the xmlhub-indexer-binaries repository, and show it when upgrading.
+
+v9.2 - 2025-04-21
+
