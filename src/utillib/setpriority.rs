@@ -20,8 +20,14 @@ pub enum PriorityWhich {
 // the leading underscores, OK?) in guest space.
 
 #[cfg(target_os = "linux")]
+#[cfg(target_env = "gnu")]
 #[allow(non_camel_case_types)]
 pub type priority_which_t = libc::__priority_which_t;
+
+#[cfg(target_os = "linux")]
+#[cfg(target_env = "musl")]
+#[allow(non_camel_case_types)]
+pub type priority_which_t = i32;
 
 #[cfg(target_os = "macos")]
 #[allow(non_camel_case_types)]
