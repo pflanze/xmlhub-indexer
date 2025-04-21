@@ -23,6 +23,7 @@ use xmlhub_indexer::{
     installation::{
         app_info::AppInfo,
         binaries_repo::{Arch, Os},
+        copy_file::copy_file,
     },
     installation::{
         app_signature::{AppSignaturePrivateKey, SaveLoadKeyFile},
@@ -513,6 +514,8 @@ impl<'t> Effect for ReleaseBinaries<'t> {
                  * copy the binaries into the right places below \
                  {binaries_checkout_working_dir_path:?}, create .info files, \
                  sign those with the private key from {app_signature_private_key_path:?}\n  \
+                 * copy the `CHANGELOG_FILE_NAME` file from the source to the binaries repository\n  \
+                 * run `git add .` in the binaries repository\n  \
                  * commit with a message mentioning source tag {source_version_tag:?}\n  \
                  {signing}\n  \
                  {push_remote}"
@@ -569,6 +572,18 @@ impl<'t> Effect for ReleaseBinaries<'t> {
                 .with_context(|| anyhow!("reading app info file {app_info_path:?}"))?;
             let signature = app_signature_private_key.sign(&app_info_contents)?;
             signature.save_to_base(&app_info_path)?;
+        }
+
+        {
+            let action = copy_file::<()>(
+                &SOURCE_CHECKOUT
+                    .working_dir_path()
+                    .append(CHANGELOG_FILE_NAME),
+                &BINARIES_CHECKOUT
+                    .working_dir_path()
+                    .append(CHANGELOG_FILE_NAME),
+            );
+            action.run(())?;
         }
 
         git(

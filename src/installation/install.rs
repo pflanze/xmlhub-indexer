@@ -23,7 +23,7 @@ pub fn cargo_bin_dir() -> Result<PathBuf, &'static HomeError> {
 
 /// Returns action to copy `path` to `~/.cargo/bin/`, and the path to
 /// that latter directory.
-pub fn copy_to_cargo_bin_dir<R: Debug>(path: &Path) -> Result<(CopyFile<R>, PathBuf)> {
+pub fn copy_to_cargo_bin_dir<R: Debug>(path: &Path) -> Result<(Box<CopyFile<R>>, PathBuf)> {
     let file_name = path
         .file_name()
         .ok_or_else(|| anyhow!("missing file name in path {path:?}"))?;
@@ -76,9 +76,9 @@ pub fn install_executable(
                 .into(),
             )
         } else {
-            Box::new(shell_type.add_to_path_in_init_file(&cargo_bin_dir)?)
+            shell_type.add_to_path_in_init_file(&cargo_bin_dir)?
         }
     };
 
-    Ok(bind(Box::new(action1), action2))
+    Ok(bind(action1, action2))
 }

@@ -54,7 +54,7 @@ impl ShellType {
     pub fn add_to_path_in_init_file<R: Debug>(
         self,
         dir_path: &Path,
-    ) -> Result<AppendToShellFile<R>> {
+    ) -> Result<Box<AppendToShellFile<R>>> {
         if !dir_path.is_dir() {
             bail!("path does not point to a directory: {dir_path:?}")
         }
@@ -73,12 +73,12 @@ impl ShellType {
             "add code to {file_path:?} to add the path {dir_path_string:?} to \
              the PATH environment variable:\n{indented_code}"
         );
-        Ok(AppendToShellFile {
+        Ok(Box::new(AppendToShellFile {
             phantom: Default::default(),
             file_path,
             code_to_append,
             to_be_done,
-        })
+        }))
     }
 }
 

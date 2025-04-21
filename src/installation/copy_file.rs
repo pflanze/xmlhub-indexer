@@ -70,11 +70,12 @@ impl<R: Debug> Effect for CopyFile<R> {
 }
 
 /// Return the action to copy a file.
-pub fn copy_file<R: Debug>(source_path: &Path, target_path: &Path) -> CopyFile<R> {
+pub fn copy_file<R: Debug>(source_path: &Path, target_path: &Path) -> Box<CopyFile<R>> {
     CopyFile {
         phantom: PhantomData,
         remove_existing_target: target_path.exists(),
         source_path: source_path.to_owned(),
         target_path: target_path.to_owned(),
     }
+    .into()
 }
