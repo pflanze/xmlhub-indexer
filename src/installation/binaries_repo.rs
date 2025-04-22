@@ -34,7 +34,7 @@ impl Os {
     pub fn as_str_for_target_triple(self) -> &'static str {
         match self {
             Os::MacOS => "apple-darwin",
-            Os::Linux => "XXX", // ?? not in uname -a ?
+            Os::Linux => "unknown-linux",
         }
     }
 
