@@ -249,3 +249,4 @@ v9.2 - 2025-04-21
 
 v9.3 - 2025-04-22
 
+- fix scanning for version messages in git log output: handle Merge commits
