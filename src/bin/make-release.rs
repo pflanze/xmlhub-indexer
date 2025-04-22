@@ -515,7 +515,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
                  * copy the binaries into the right places below \
                  {binaries_checkout_working_dir_path:?}, create .info files, \
                  sign those with the private key from {app_signature_private_key_path:?}\n  \
-                 * copy the `CHANGELOG_FILE_NAME` file from the source to the binaries repository\n  \
+                 * copy the `{CHANGELOG_FILE_NAME}` file from the source to the binaries repository\n  \
                  * run `git add .` in the binaries repository\n  \
                  * commit with a message mentioning source tag {source_version_tag:?}\n  \
                  {signing}\n  \
