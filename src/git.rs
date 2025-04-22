@@ -2,10 +2,10 @@ use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
     fmt::{Debug, Display},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
-    process::{Child, ChildStdout},
+    process::{Child, ChildStdout, ExitStatus},
     sync::Arc,
 };
 
@@ -274,42 +274,57 @@ pub fn git_status(base_path: &Path) -> Result<Vec<GitStatusItem>> {
 #[non_exhaustive]
 pub struct GitLogEntry {
     pub commit: String, // [u8; 20] ?,
+    pub merge: Option<String>,
     pub author: String,
     pub date: String,
     pub message: String,
     // files? Ignore for now
 }
 
-pub struct GitLogIterator {
-    child: Child,
-    stdout: BufReader<ChildStdout>,
+pub trait ChildWaiter {
+    fn child_wait(&mut self) -> anyhow::Result<ExitStatus>;
+}
+
+impl ChildWaiter for Child {
+    fn child_wait(&mut self) -> anyhow::Result<ExitStatus> {
+        Ok(self.wait()?)
+    }
+}
+
+pub struct GitLogIterator<R: Read, C: ChildWaiter> {
+    child: C,
+    stdout: BufReader<R>,
     // The "commit " line if it was read in the previous iteration
     left_over: Option<String>,
 }
 
-impl Iterator for GitLogIterator {
+impl<R: Read, C: ChildWaiter> Iterator for GitLogIterator<R, C> {
     type Item = Result<GitLogEntry>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut line = String::new();
-        const NUM_PARTS: usize = 4; // one for each field
+        const NUM_PARTS: usize = 5; // one for each field
         let mut parts: [Option<String>; NUM_PARTS] = Default::default();
         let parts_to_entry = |mut parts: [Option<String>; NUM_PARTS]| {
             Some(Ok(GitLogEntry {
                 commit: parts[0].take().unwrap(),
-                author: parts[1].take().unwrap(),
-                date: parts[2].take().unwrap(),
-                message: parts[3].take().unwrap(),
+                merge: parts[1].take(),
+                author: parts[2].take().unwrap(),
+                date: parts[3].take().unwrap(),
+                message: parts[4].take().unwrap(),
             }))
         };
+        // Index for the part == field.
         let mut parts_i = 0;
         let try_finish = |parts_i: usize, parts: [Option<String>; NUM_PARTS]| {
-            if parts_i == NUM_PARTS {
+            if parts_i == NUM_PARTS || parts_i == NUM_PARTS - 1 {
                 parts_to_entry(parts)
             } else if parts_i == 0 {
                 None
             } else {
-                Some(Err(anyhow!("unfinished entry reading from git log")))
+                Some(Err(anyhow!(
+                    "unfinished entry reading from git log, parts_i = {parts_i}"
+                )))
             }
         };
         loop {
@@ -324,7 +339,7 @@ impl Iterator for GitLogIterator {
             };
             if is_eof {
                 match (|| {
-                    let status = self.child.wait()?;
+                    let status = self.child.child_wait()?;
                     if !status.success() {
                         bail!("exited with non-success status {status:?}")
                     }
@@ -345,12 +360,17 @@ impl Iterator for GitLogIterator {
             } else {
                 match parts_i {
                     0 => unreachable!(),
-                    1 | 2 => {
-                        // Author and Date
+                    1 | 2 | 3 => {
+                        // Merge, Author and Date
+                        if parts_i == 1 && !line.starts_with("Merge") {
+                            // There is no Merge, just Author and Date
+                            parts_i += 1;
+                        }
                         if let Some((key, val)) = line.split_once(':') {
                             let (expected_key, valref) = match parts_i {
-                                1 => ("Author", &mut parts[parts_i]),
-                                2 => ("Date", &mut parts[parts_i]),
+                                1 => ("Merge", &mut parts[parts_i]),
+                                2 => ("Author", &mut parts[parts_i]),
+                                3 => ("Date", &mut parts[parts_i]),
                                 _ => unreachable!(),
                             };
                             if key != expected_key {
@@ -368,7 +388,7 @@ impl Iterator for GitLogIterator {
                         }
                         parts_i += 1;
                     }
-                    3 => {
+                    4 => {
                         // Commit message
                         if line == "\n" {
                             // ignore; sigh
@@ -388,7 +408,7 @@ impl Iterator for GitLogIterator {
                             )));
                         }
                     }
-                    4 => {
+                    5 => {
                         // in ":" file part, ignore
                     }
                     _ => unreachable!(),
@@ -404,7 +424,7 @@ impl Iterator for GitLogIterator {
 pub fn git_log<S: AsRef<OsStr> + Debug>(
     base_path: &Path,
     arguments: &[S],
-) -> Result<GitLogIterator> {
+) -> Result<GitLogIterator<ChildStdout, Child>> {
     let mut all_arguments: Vec<&OsStr> = vec![
         OsStr::from_bytes("log".as_bytes()),
         OsStr::from_bytes("--raw".as_bytes()),
@@ -576,4 +596,89 @@ pub fn git_push<S: AsRef<OsStr> + Debug>(
         bail!("git {args:?} in {base_path:?} failed")
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct NopWaiter;
+    impl ChildWaiter for NopWaiter {
+        fn child_wait(&mut self) -> anyhow::Result<ExitStatus> {
+            bail!("no wait")
+        }
+    }
+
+    fn gitlog_iterator_from_str<'s>(s: &'s str) -> impl Iterator<Item = Result<GitLogEntry>> + 's {
+        GitLogIterator {
+            child: NopWaiter,
+            stdout: BufReader::new(s.as_bytes()),
+            left_over: None,
+        }
+    }
+
+    fn t_gitlog_iterator(s: &str) -> Result<()> {
+        let mut it = gitlog_iterator_from_str(s);
+        let _r = it.next().unwrap()?;
+        Ok(())
+    }
+
+    #[test]
+    fn t0() -> Result<()> {
+        t_gitlog_iterator(
+            "commit afb6184585974a96688ec42c7f024118fcbc8d86
+Author: Christian Jaeger (Mac) <ch@christianjaeger.ch>
+Date:   Sun Apr 13 21:26:17 2025 +0200
+
+    regenerate index files via xmlhub
+    
+    version: 8.1
+
+commit 49a0c5ceed749fc4ec7a7798af56f19447977c56
+Author: Marcus Overwater <moverwater@ethz.ch>
+Date:   Thu Apr 3 14:59:34 2025 +0200
+
+    Added ReMASTER simulation xml
+
+commit 7ed02856897a8d2a8e9c8887ebf99e6e3c0c1cf7
+Author: Louis <louis.duplessis@bsse.ethz.ch>
+Date:   Thu Jun 6 11:41:55 2024 +0200
+
+    Initial commit
+",
+        )
+    }
+
+    #[test]
+    fn t1() -> Result<()> {
+        t_gitlog_iterator(
+            "commit 2a1e2fd51372cb1dba8d0b9ed076afa10ea53183
+Merge: 49a0c5c b995c14
+Author: Marcus Overwater <moverwater@ethz.ch>
+Date:   Thu Apr 17 11:25:21 2025 +0200
+
+    Merge branch 'master' of /Users/moverwater/xmlhub
+
+commit afb6184585974a96688ec42c7f024118fcbc8d86
+Author: Christian Jaeger (Mac) <ch@christianjaeger.ch>
+Date:   Sun Apr 13 21:26:17 2025 +0200
+
+    regenerate index files via xmlhub
+    
+    version: 8.1
+
+commit 49a0c5ceed749fc4ec7a7798af56f19447977c56
+Author: Marcus Overwater <moverwater@ethz.ch>
+Date:   Thu Apr 3 14:59:34 2025 +0200
+
+    Added ReMASTER simulation xml
+
+commit 7ed02856897a8d2a8e9c8887ebf99e6e3c0c1cf7
+Author: Louis <louis.duplessis@bsse.ethz.ch>
+Date:   Thu Jun 6 11:41:55 2024 +0200
+
+    Initial commit
+",
+        )
+    }
 }
