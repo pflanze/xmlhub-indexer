@@ -245,3 +245,4 @@ v9.2 - 2025-04-21
 
 - Fix `xmlhub clone-to --experiments` to actually clone the xmlhub-experiments repository again.
 - docs: mention the `--experiments` option.
+- `make-release`: add cross compilation from macOS to Linux (with musl)
