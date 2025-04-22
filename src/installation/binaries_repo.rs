@@ -88,9 +88,9 @@ pub struct BinariesRepoSection {
     pub arch: Arch,
 }
 
-// XX heh, these are just *the same*
+// XX heh, these are just *the same* -- now there's also env, though.
 impl From<&TargetTriple> for BinariesRepoSection {
-    fn from(TargetTriple { arch, os }: &TargetTriple) -> Self {
+    fn from(TargetTriple { arch, os, env: _ }: &TargetTriple) -> Self {
         Self {
             os: *os,
             arch: *arch,

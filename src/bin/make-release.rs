@@ -13,7 +13,8 @@ use clap::Parser;
 use debug_ignore::DebugIgnore;
 use xmlhub_indexer::{
     cargo::{
-        check_cargo_toml_no_path, run_cargo, CompilationProfile, CompilationTarget, TargetTriple,
+        check_cargo_toml_no_path, run_cargo, CompilationProfile, CompilationTarget, Env,
+        TargetTriple,
     },
     changelog::CHANGELOG_FILE_NAME,
     checkout_context::CheckExpectedSubpathsExist,
@@ -879,6 +880,7 @@ fn main() -> Result<()> {
                         target_triple: Some(TargetTriple {
                             arch: Arch::Aarch64,
                             os,
+                            env: Env::None,
                         }),
                         profile,
                     },
@@ -892,6 +894,22 @@ fn main() -> Result<()> {
                         target_triple: Some(TargetTriple {
                             arch: Arch::X86_64,
                             os,
+                            env: Env::None,
+                        }),
+                        profile,
+                    },
+                    program_name,
+                },
+                // Cross-compile to Linux: besides rustup
+                // --target=... requires `brew install lld`,
+                // ~/.cargo/config.toml with `[target.$target] \n
+                // linker = "lld"` (and perhaps TARGET_CC? no?)
+                Binary {
+                    target: CompilationTarget {
+                        target_triple: Some(TargetTriple {
+                            arch: Arch::X86_64,
+                            os: Os::Linux,
+                            env: Env::Musl,
                         }),
                         profile,
                     },

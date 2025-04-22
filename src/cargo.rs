@@ -99,20 +99,41 @@ impl CompilationProfile {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Env {
+    None,
+    Gnu,
+    Musl,
+    // Msvc,
+    // Sgx
+}
+
+impl Env {
+    pub fn as_str_for_target_triple(self) -> &'static str {
+        match self {
+            Env::None => "",
+            Env::Gnu => "-gnu",
+            Env::Musl => "-musl",
+        }
+    }
+}
+
 /// Representation of e.g. "aarch64-apple-darwin"
 #[derive(Debug, Clone)]
 pub struct TargetTriple {
     pub arch: binaries_repo::Arch,
     pub os: binaries_repo::Os,
+    pub env: Env,
 }
 
 impl Display for TargetTriple {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { arch, os } = self;
+        let Self { arch, os, env } = self;
         f.write_fmt(format_args!(
-            "{}-{}",
+            "{}-{}{}",
             arch.as_str_for_target_triple(),
-            os.as_str_for_target_triple()
+            os.as_str_for_target_triple(),
+            env.as_str_for_target_triple(),
         ))
     }
 }
