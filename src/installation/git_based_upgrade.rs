@@ -16,6 +16,7 @@ use crate::{
     path_util::AppendToPath,
     sha256::sha256sum,
     util::ask_yn,
+    xmlhub_global_opts::PROGRAM_NAME,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
 
@@ -123,6 +124,7 @@ pub fn carry_out_install_action(
     changelog_output: &str,
     confirm: bool,
     action_verb_in_past_tense: &str,
+    program_name: &str,
 ) -> Result<()> {
     let action = install_executable(&binary_path)?;
     let action_bullet_points = action.show_bullet_points();
@@ -139,7 +141,7 @@ pub fn carry_out_install_action(
         println!("There was nothing to do.");
     } else {
         let AppendToShellFileDone { .. } = action.run(())?;
-        println!("Successfully {action_verb_in_past_tense} executable.");
+        println!("Successfully {action_verb_in_past_tense} the {program_name} executable.");
     }
     Ok(())
 }
@@ -260,6 +262,7 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
                     Ordering::Equal => "reinstalled",
                     Ordering::Greater => "upgraded",
                 },
+                PROGRAM_NAME,
             )?;
         }
     }
