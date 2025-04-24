@@ -60,7 +60,10 @@ use xmlhub_indexer::{
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
-    xmlhub_global_opts::{git_log_version_checker, GlobalOpts, HTML_FILE, MD_FILE, PROGRAM_NAME},
+    xmlhub_global_opts::{
+        git_log_version_checker, Dryness, Quiet, Verbosity, VersionCheck, HTML_FILE, MD_FILE,
+        PROGRAM_NAME,
+    },
     xmlhub_help::{print_basic_standalone_html_page, save_basic_standalone_html_page},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
     xmlhub_install::{install_command, InstallOpts},
@@ -269,9 +272,6 @@ struct Opts {
     #[clap(long)]
     version_only: bool,
 
-    #[clap(flatten)]
-    global: GlobalOpts,
-
     /// The subcommand to run. Use `--help` after the sub-command to
     /// get a list of the allowed options there.
     #[clap(subcommand)]
@@ -324,7 +324,7 @@ enum Command {
     AddTo(AddToOpts),
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct HelpAttributesOpts {
     /// Open the attributes description in the browser (default)
     #[clap(long)]
@@ -336,7 +336,7 @@ struct HelpAttributesOpts {
     print: bool,
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct UpgradeOpts {
     /// Even if the local executable is already up to date, re-install
     /// it anyway (rarely useful, except for re-running the
@@ -355,7 +355,7 @@ struct UpgradeOpts {
     confirm: bool,
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct ChangelogOpts {
     /// Which version to start from (exclusive)
     #[clap(long)]
@@ -374,8 +374,37 @@ struct ChangelogOpts {
     open: bool,
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct BuildOpts {
+    #[clap(flatten)]
+    dryness: Dryness,
+    #[clap(flatten)]
+    verbosity: Verbosity,
+    #[clap(flatten)]
+    versioncheck: VersionCheck,
+    #[clap(flatten)]
+    quietness: Quiet,
+
+    /// When running in `--daemon start` mode, for the log messages,
+    /// use time stamps in the local time zone. The default is to use
+    /// UTC.
+    #[clap(long)]
+    pub localtime: bool,
+
+    /// When running in `--daemon start` mode, the maximum size of a
+    /// log file in bytes before the current file is renamed and a new
+    /// one is created instead. Default: 1000000.
+    #[clap(long)]
+    pub max_log_file_size: Option<u64>,
+
+    /// When running in `--daemon start` mode, the number of numbered
+    /// log files before the oldest files are automatically
+    /// deleted. Careful: will delete as many files as needed to get
+    /// their count down to the given number (if you give 0 it will
+    /// delete them all.) Default: 100.
+    #[clap(long)]
+    pub max_log_files: Option<usize>,
+
     /// Write the index files (and commit them if requested) even if
     /// some files had errors and thus won't be indexed; the errors
     /// are written in a section at the top of the index files,
@@ -458,13 +487,14 @@ struct BuildOpts {
     batch: bool,
 
     /// Run as a daemon, i.e. do not exit, but run batch conversion
-    /// repeatedly. The given string must be one of "run",
-    /// "start", "stop", "restart", "status". "run" does not put the
-    /// process into the background, "start" (and "restart") does.
-    /// Implies `--batch`. You may want to use `--quiet` at the same
+    /// repeatedly. The given string must be one of "run", "start",
+    /// "stop", "restart", "status". "run" does not put the process
+    /// into the background, "start" (and "restart") does.  Implies
+    /// `--batch`. You may want to use `--quiet` at the same
     /// time. Also see `--daemon-sleep-time`. When using "start" mode,
-    /// writes logs to the directory `.xmlhub/logs/`
-    /// under the given `BASE_PATH`.
+    /// writes logs to the directory `.xmlhub/logs/` under the given
+    /// `BASE_PATH`. You probably want to also give `--quiet` to
+    /// reduce the amount of log space required.
     #[clap(long)]
     daemon: Option<DaemonMode>,
 
@@ -499,8 +529,17 @@ struct BuildOpts {
     base_path: Option<PathBuf>,
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct CheckOpts {
+    #[clap(flatten)]
+    versioncheck: VersionCheck,
+    #[clap(flatten)]
+    dryness: Dryness,
+    #[clap(flatten)]
+    verbosity: Verbosity,
+    #[clap(flatten)]
+    quietness: Quiet,
+
     /// Open the generated `README.html` file in a web browser.
     /// Tries the browsers specified in the `BROWSER` environment
     /// variable (split on ':' into program names or paths (on macOS
@@ -532,8 +571,11 @@ struct CheckOpts {
     file_paths: Vec<PathBuf>,
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct PrepareOpts {
+    #[clap(flatten)]
+    quietness: Quiet,
+
     /// The path(s) to the XML file(s) which should be
     /// modified. Careful: they are modified in place (although the
     /// original is kept in the system trash bin)! Use the `add-to`
@@ -563,8 +605,13 @@ struct PrepareOpts {
     // XX FUTURE idea: --set "header: value"
 }
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 struct AddToOpts {
+    #[clap(flatten)]
+    versioncheck: VersionCheck,
+    #[clap(flatten)]
+    quietness: Quiet,
+
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
     target_directory: Option<PathBuf>,
@@ -2166,6 +2213,10 @@ fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileError
 
 /// The subset of the options of `BuildOpts` used by `build_index`
 struct BuildIndexOpts {
+    dryness: Dryness,
+    verbosity: Verbosity,
+    quietness: Quiet,
+
     pull: bool,
     batch: bool,
     ignore_untracked: bool,
@@ -2182,13 +2233,15 @@ struct BuildIndexOpts {
 /// Run one conversion from the XML files to the index files. Returns
 /// the exit code to exit the program with.
 fn build_index(
-    global_opts: &GlobalOpts,
     build_index_opts: BuildIndexOpts,
     git_log_version_checker: &XmlhubCheckVersion,
     xmlhub_checkout: &CheckedCheckoutContext1<Cow<Path>>,
     maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<Cow<Path>>>,
 ) -> Result<i32> {
     let BuildIndexOpts {
+        dryness: Dryness { dry_run },
+        verbosity: Verbosity { verbose },
+        quietness: Quiet { quiet },
         pull,
         batch,
         ignore_untracked,
@@ -2208,10 +2261,10 @@ fn build_index(
     macro_rules! check_dry_run {
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
-            if global_opts.dry_run {
+            if dry_run {
                 xmlhub_indexer::dry_run::eprintln_dry_run(s());
             } else {
-                if global_opts.verbose {
+                if verbose {
                     xmlhub_indexer::dry_run::eprintln_running(s());
                 }
                 $body;
@@ -2224,7 +2277,7 @@ fn build_index(
         if pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(xmlhub_checkout.working_dir_path(), &["pull"], global_opts.quiet)? {
+                if !git(xmlhub_checkout.working_dir_path(), &["pull"], quiet)? {
                     bail!("git pull failed")
                 }
             }
@@ -2238,7 +2291,7 @@ fn build_index(
                 if !git(
                     xmlhub_checkout.working_dir_path(),
                     &["remote", "update", default_remote],
-                    global_opts.quiet
+                    quiet
                 )? {
                     bail!("git remote update {default_remote:?} failed")
                 }
@@ -2251,7 +2304,7 @@ fn build_index(
                 if !git(
                     xmlhub_checkout.working_dir_path(),
                     &["reset", "--hard", &remote_banch_reference],
-                    global_opts.quiet
+                    quiet
                 )? {
                     bail!("git reset --hard {remote_banch_reference:?} failed")
                 }
@@ -2662,7 +2715,7 @@ fn build_index(
                 git(
                     xmlhub_checkout.working_dir_path(),
                     &append(&["add", "-f", "--"], &written_files),
-                    global_opts.quiet
+                    quiet
                 )?
             }
 
@@ -2684,7 +2737,7 @@ fn build_index(
                         ],
                         &written_files,
                     ),
-                    global_opts.quiet
+                    quiet
                 )?
             }
 
@@ -2697,11 +2750,11 @@ fn build_index(
                             xmlhub_checkout.working_dir_path(),
                             default_remote_for_push,
                             &[],
-                            global_opts.quiet
+                            quiet
                         )?
                     }
                 } else {
-                    if !global_opts.quiet {
+                    if !quiet {
                         println!("There were no changes to commit, thus not pushing.")
                     }
                 }
@@ -2748,7 +2801,6 @@ fn typed_from_no_repo_check(no_repo_check: bool) -> CheckExpectedSubpathsExist {
 /// Execute an `upgrade` command
 fn upgrade_command(
     program_version: GitVersion<SemVersion>,
-    global_opts: &GlobalOpts,
     command_opts: UpgradeOpts,
 ) -> Result<()> {
     let UpgradeOpts {
@@ -2756,15 +2808,6 @@ fn upgrade_command(
         force_downgrade,
         confirm,
     } = command_opts;
-
-    if global_opts.dry_run {
-        // XX todo?
-        bail!("--dry-run is not currently supported for `upgrade`")
-    }
-    if global_opts.verbose {
-        // XX todo?
-        bail!("--verbose is not currently supported for `upgrade`")
-    }
 
     git_based_upgrade(
         UpgradeRules {
@@ -2845,12 +2888,12 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon). (Never returns `Ok`
 /// but exits directly in the non-`Err` case. `!` is not stable yet.)
-fn build_command(
-    program_version: GitVersion<SemVersion>,
-    global_opts: &GlobalOpts,
-    build_opts: BuildOpts,
-) -> Result<()> {
+fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts) -> Result<()> {
     let BuildOpts {
+        dryness,
+        verbosity,
+        versioncheck: VersionCheck { no_version_check },
+        quietness: Quiet { quiet },
         write_errors,
         no_commit_errors,
         ok_on_written_errors,
@@ -2867,6 +2910,9 @@ fn build_command(
         no_repo_check,
         ignore_untracked,
         base_path,
+        localtime,
+        max_log_file_size,
+        max_log_files,
     } = build_opts;
 
     let no_repo_check = typed_from_no_repo_check(no_repo_check);
@@ -2890,7 +2936,7 @@ fn build_command(
 
     let git_log_version_checker = git_log_version_checker(
         program_version,
-        global_opts.no_version_check,
+        no_version_check,
         &xmlhub_checkout.working_dir_path(),
     );
 
@@ -2898,8 +2944,10 @@ fn build_command(
 
     let build_index_once = || {
         build_index(
-            &global_opts,
             BuildIndexOpts {
+                dryness: dryness.clone(),
+                verbosity: verbosity.clone(),
+                quietness: Quiet { quiet },
                 pull,
                 batch,
                 ignore_untracked,
@@ -2939,11 +2987,9 @@ fn build_command(
     if let Some(daemon_mode) = daemon {
         let daemon = Daemon {
             base_dir: daemon_base_dir,
-            use_local_time: global_opts.localtime,
-            max_log_file_size: global_opts
-                .max_log_file_size
-                .unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
-            max_log_files: global_opts.max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
+            use_local_time: localtime,
+            max_log_file_size: max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
+            max_log_files: max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
             run: move || {
                 let _main_lock = get_main_lock()?;
 
@@ -2955,7 +3001,7 @@ fn build_command(
                     LoopWithBackoff {
                         min_sleep_seconds,
                         max_sleep_seconds: MAX_SLEEP_SECONDS,
-                        verbosity: if global_opts.quiet {
+                        verbosity: if quiet {
                             LoopVerbosity::LogActivityInterval {
                                 every_n_seconds: DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS,
                             }
@@ -3005,12 +3051,12 @@ fn build_command(
 /// Execute a `check` command: prepare and run `build_index` in
 /// interactive mode, do not commit. (Never returns `Ok` but exits
 /// directly in the non-`Err` case. `!` is not stable yet.)
-fn check_command(
-    program_version: GitVersion<SemVersion>,
-    global_opts: &GlobalOpts,
-    check_opts: CheckOpts,
-) -> Result<()> {
+fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts) -> Result<()> {
     let CheckOpts {
+        versioncheck: VersionCheck { no_version_check },
+        dryness: Dryness { dry_run },
+        verbosity: Verbosity { verbose },
+        quietness: Quiet { quiet },
         file_paths,
         open,
         open_if_changed,
@@ -3046,7 +3092,7 @@ fn check_command(
         maybe_base_path.ok_or_else(|| anyhow!("`check` needs at least one FILE_PATHS argument"))?;
 
     let git_log_version_checker =
-        git_log_version_checker(program_version, global_opts.no_version_check, base_path);
+        git_log_version_checker(program_version, no_version_check, base_path);
 
     let maybe_checked_xmlhub_checkout = None;
 
@@ -3096,8 +3142,10 @@ fn check_command(
     // exactly. And XXX using `ok_on_written_errors`, but is that
     // doing all the errors? Relying on that.
     build_index(
-        &global_opts,
         BuildIndexOpts {
+            dryness: Dryness { dry_run },
+            verbosity: Verbosity { verbose },
+            quietness: Quiet { quiet },
             pull: false,
             batch: false,
             ignore_untracked: false,
@@ -3273,8 +3321,9 @@ fn overwrite_file_moving_to_trash_if_exists(
 }
 
 /// Execute a `prepare` command.
-fn prepare_command(global_opts: &GlobalOpts, command_opts: PrepareOpts) -> Result<()> {
+fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
+        quietness: Quiet { quiet },
         files_to_prepare,
         no_blind,
         blind_comment,
@@ -3295,7 +3344,7 @@ fn prepare_command(global_opts: &GlobalOpts, command_opts: PrepareOpts) -> Resul
                     no_blind,
                     blind_comment: &blind_comment,
                     ignore_version,
-                    quiet: global_opts.quiet,
+                    quiet,
                 })?,
             ))
         })
@@ -3305,13 +3354,9 @@ fn prepare_command(global_opts: &GlobalOpts, command_opts: PrepareOpts) -> Resul
     // them out. With regards to IO, only writing happens here.
     for (target_path, prepared_file) in converted {
         if prepared_file.content_has_changed {
-            overwrite_file_moving_to_trash_if_exists(
-                &target_path,
-                &prepared_file.content,
-                global_opts.quiet,
-            )?;
+            overwrite_file_moving_to_trash_if_exists(&target_path, &prepared_file.content, quiet)?;
         } else {
-            if !global_opts.quiet {
+            if !quiet {
                 println!("File is unchanged (already prepared): {target_path:?}");
             }
         }
@@ -3320,12 +3365,10 @@ fn prepare_command(global_opts: &GlobalOpts, command_opts: PrepareOpts) -> Resul
 }
 
 /// Execute an `add-to` command.
-fn add_to_command(
-    program_version: GitVersion<SemVersion>,
-    global_opts: &GlobalOpts,
-    command_opts: AddToOpts,
-) -> Result<()> {
+fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOpts) -> Result<()> {
     let AddToOpts {
+        versioncheck: VersionCheck { no_version_check },
+        quietness: Quiet { quiet },
         target_directory,
         files_to_add,
         mkdir,
@@ -3366,18 +3409,18 @@ fn add_to_command(
     // otherwise it might add the wrong fields.
     let git_log_version_checker = git_log_version_checker(
         program_version,
-        global_opts.no_version_check,
+        no_version_check,
         &xmlhub_checkout.working_dir_path,
     );
     git_log_version_checker.check_git_log()?;
 
     if files_to_add.is_empty() {
-        if !global_opts.quiet {
+        if !quiet {
             println!("No files given, thus nothing to do.");
         }
     } else {
         pluralized! { files_to_add.len() => files }
-        if !global_opts.quiet {
+        if !quiet {
             println!("Reading the {files}...");
         }
 
@@ -3395,7 +3438,7 @@ fn add_to_command(
                         no_blind,
                         blind_comment: &blind_comment,
                         ignore_version,
-                        quiet: global_opts.quiet,
+                        quiet,
                     })?,
                 ))
             })
@@ -3433,7 +3476,7 @@ fn add_to_command(
             }
         }
 
-        if !global_opts.quiet {
+        if !quiet {
             println!("Writing the {files}...");
         }
 
@@ -3447,14 +3490,10 @@ fn add_to_command(
             // time!
 
             // Keep existing files in trash, even with --force?
-            overwrite_file_moving_to_trash_if_exists(
-                target_path,
-                &prepared_file.content,
-                global_opts.quiet,
-            )?;
+            overwrite_file_moving_to_trash_if_exists(target_path, &prepared_file.content, quiet)?;
         }
 
-        if !global_opts.quiet {
+        if !quiet {
             println!(
                 "Done.\n\
                  Now edit the new {files} in {target_directory:?} to complete \
@@ -3633,16 +3672,6 @@ fn main() -> Result<()> {
         let Opts {
             v,
             version_only,
-            global:
-                GlobalOpts {
-                    verbose,
-                    quiet,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
-                    dry_run,
-                    no_version_check,
-                },
             command,
         } = Opts::parse();
 
@@ -3673,32 +3702,18 @@ fn main() -> Result<()> {
                 Command::Install(opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
                     command: Some(Command::Install(opts)),
                 },
                 Command::Upgrade(upgrade_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
                     command: Some(Command::Upgrade(upgrade_opts)),
                 },
                 Command::Build(BuildOpts {
+                    dryness,
+                    verbosity,
+                    versioncheck: VersionCheck { no_version_check },
+                    quietness: Quiet { quiet },
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
                     ok_on_written_errors,
@@ -3715,6 +3730,9 @@ fn main() -> Result<()> {
                     base_path,
                     ignore_untracked,
                     no_repo_check: no_repo_check_,
+                    localtime,
+                    max_log_file_size,
+                    max_log_files,
                 }) => {
                     // Create uninitialized variables without the underscores,
                     // then initialize them differently depending on some of the
@@ -3764,16 +3782,11 @@ fn main() -> Result<()> {
                     Opts {
                         v,
                         version_only,
-                        global: GlobalOpts {
-                            verbose,
-                            quiet,
-                            localtime,
-                            max_log_file_size,
-                            max_log_files,
-                            dry_run,
-                            no_version_check,
-                        },
                         command: Some(Command::Build(BuildOpts {
+                            dryness,
+                            verbosity,
+                            versioncheck: VersionCheck { no_version_check },
+                            quietness: Quiet { quiet },
                             write_errors,
                             no_commit_errors,
                             ok_on_written_errors,
@@ -3790,150 +3803,41 @@ fn main() -> Result<()> {
                             ignore_untracked,
                             base_path,
                             no_repo_check,
+                            localtime,
+                            max_log_file_size,
+                            max_log_files,
                         })),
                     }
                 }
-                Command::CloneTo(CloneToOpts {
-                    no_verbose,
-                    target_path: base_path,
-                    experiments,
-                }) => Opts {
+                Command::CloneTo(command_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
-                    command: Some(Command::CloneTo(CloneToOpts {
-                        no_verbose,
-                        target_path: base_path,
-                        experiments,
-                    })),
+                    command: Some(Command::CloneTo(command_opts)),
                 },
-                Command::Prepare(PrepareOpts {
-                    files_to_prepare,
-                    no_blind,
-                    blind_comment,
-                    ignore_version,
-                }) => Opts {
+                Command::Prepare(command_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
-                    command: Some(Command::Prepare(PrepareOpts {
-                        files_to_prepare,
-                        no_blind,
-                        blind_comment,
-                        ignore_version,
-                    })),
+                    command: Some(Command::Prepare(command_opts)),
                 },
-                Command::AddTo(AddToOpts {
-                    target_directory,
-                    files_to_add,
-                    mkdir,
-                    no_blind,
-                    blind_comment,
-                    force,
-                    no_repo_check,
-                    ignore_version,
-                }) => Opts {
+                Command::AddTo(command_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
-                    command: Some(Command::AddTo(AddToOpts {
-                        target_directory,
-                        files_to_add,
-                        mkdir,
-                        no_blind,
-                        blind_comment,
-                        force,
-                        no_repo_check,
-                        ignore_version,
-                    })),
+                    command: Some(Command::AddTo(command_opts)),
                 },
                 Command::Docs | Command::HelpContributing | Command::HelpAttributes(_) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
                     command: Some(command),
                 },
-                Command::Check(CheckOpts {
-                    file_paths,
-                    open,
-                    open_if_changed,
-                    no_repo_check,
-                }) => Opts {
+                Command::Check(command_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
-                    command: Some(Command::Check(CheckOpts {
-                        file_paths,
-                        open,
-                        open_if_changed,
-                        no_repo_check,
-                    })),
+                    command: Some(Command::Check(command_opts)),
                 },
-                Command::Changelog(ChangelogOpts {
-                    from,
-                    to,
-                    allow_downgrades,
-                    print_html,
-                    open,
-                }) => Opts {
+                Command::Changelog(command_opts) => Opts {
                     v,
                     version_only,
-                    global: GlobalOpts {
-                        verbose,
-                        quiet,
-                        localtime,
-                        max_log_file_size,
-                        max_log_files,
-                        dry_run,
-                        no_version_check,
-                    },
-                    command: Some(Command::Changelog(ChangelogOpts {
-                        from,
-                        to,
-                        allow_downgrades,
-                        print_html,
-                        open,
-                    })),
+                    command: Some(Command::Changelog(command_opts)),
                 },
             },
             None => {
@@ -3943,38 +3847,24 @@ fn main() -> Result<()> {
     };
 
     // Run the requested command
-    match opts
-        .command
-        .as_ref()
-        .expect("`None` is dispatched above already")
-    {
+    match opts.command.expect("`None` is dispatched above already") {
         Command::Docs => docs_command(),
         Command::HelpContributing => help_contributing_command(),
-        Command::HelpAttributes(command_opts) => help_attributes_command(command_opts.clone()),
-        Command::Changelog(command_opts) => changelog_command(command_opts.clone()),
+        Command::HelpAttributes(command_opts) => help_attributes_command(command_opts),
+        Command::Changelog(command_opts) => changelog_command(command_opts),
 
-        Command::Install(command_opts) => install_command(&opts.global, command_opts.clone()),
-        Command::Upgrade(command_opts) => {
-            upgrade_command(program_version, &opts.global, command_opts.clone())
-        }
+        Command::Install(command_opts) => install_command(command_opts),
+        Command::Upgrade(command_opts) => upgrade_command(program_version, command_opts),
 
-        Command::CloneTo(command_opts) => {
-            clone_to_command(program_version, &opts.global, command_opts.clone())
-        }
+        Command::CloneTo(command_opts) => clone_to_command(program_version, command_opts),
 
         Command::Prepare(command_opts) => {
             // `prepare` can't check `program_version` as it is not
             // given the path to the repository
-            prepare_command(&opts.global, command_opts.clone())
+            prepare_command(command_opts)
         }
-        Command::AddTo(command_opts) => {
-            add_to_command(program_version, &opts.global, command_opts.clone())
-        }
-        Command::Check(command_opts) => {
-            check_command(program_version, &opts.global, command_opts.clone())
-        }
-        Command::Build(command_opts) => {
-            build_command(program_version, &opts.global, command_opts.clone())
-        }
+        Command::AddTo(command_opts) => add_to_command(program_version, command_opts),
+        Command::Check(command_opts) => check_command(program_version, command_opts),
+        Command::Build(command_opts) => build_command(program_version, command_opts),
     }
 }

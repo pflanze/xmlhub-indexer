@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 
 use crate::{
     installation::{
@@ -7,7 +7,7 @@ use crate::{
             carry_out_install_action_with_log, InstallAction, InstallActionWithLog,
         },
     },
-    xmlhub_global_opts::{GlobalOpts, PROGRAM_NAME},
+    xmlhub_global_opts::PROGRAM_NAME,
 };
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -18,17 +18,8 @@ pub struct InstallOpts {
 }
 
 /// Execute an `install` command
-pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> Result<()> {
+pub fn install_command(command_opts: InstallOpts) -> Result<()> {
     let InstallOpts { confirm } = command_opts;
-
-    if global_opts.dry_run {
-        // XX todo?
-        bail!("--dry-run is not currently supported for `install`")
-    }
-    if global_opts.verbose {
-        // XX todo?
-        bail!("--verbose is not currently supported for `install`")
-    }
 
     let own_path = std::env::current_exe()
         .with_context(|| anyhow!("getting the path to the running executable"))?;

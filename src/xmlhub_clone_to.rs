@@ -7,12 +7,17 @@ use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
     path_util::{AppendToPath, FixupPath},
-    xmlhub_global_opts::{git_log_version_checker, GlobalOpts},
+    xmlhub_global_opts::{git_log_version_checker, Dryness, VersionCheck},
     xmlhub_indexer_defaults::XMLHUB_CHECKOUT,
 };
 
-#[derive(clap::Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug)]
 pub struct CloneToOpts {
+    #[clap(flatten)]
+    pub dryness: Dryness,
+    #[clap(flatten)]
+    pub versioncheck: VersionCheck,
+
     /// Do not show the Git commands that are run (by default, they
     /// are shown even if the global `--verbose` option was not given)
     #[clap(long)]
@@ -82,10 +87,11 @@ impl Target {
 /// Execute a `clone-to` command.
 pub fn clone_to_command(
     program_version: GitVersion<SemVersion>,
-    global_opts: &GlobalOpts,
     command_opts: CloneToOpts,
 ) -> Result<()> {
     let CloneToOpts {
+        dryness: Dryness { dry_run },
+        versioncheck: VersionCheck { no_version_check },
         no_verbose,
         target_path,
         experiments,
@@ -119,7 +125,7 @@ pub fn clone_to_command(
     macro_rules! check_dry_run {
         { message: $message:expr, $body:expr } => {
             let s = || -> String { $message.into() };
-            if global_opts.dry_run {
+            if dry_run {
                 crate::dry_run::eprintln_dry_run(s());
             } else {
                 if ! no_verbose {
@@ -177,7 +183,7 @@ pub fn clone_to_command(
         }
     }
 
-    if !global_opts.dry_run {
+    if !dry_run {
         let check = if !target.needs_cloning {
             CheckExpectedSubpathsExist::Yes
         } else {
@@ -204,7 +210,7 @@ pub fn clone_to_command(
     // Check that we are up to dealing with this repository, OK?
     let git_log_version_checker = git_log_version_checker(
         program_version,
-        global_opts.no_version_check,
+        no_version_check,
         target.checkout.working_dir_path(),
     );
 

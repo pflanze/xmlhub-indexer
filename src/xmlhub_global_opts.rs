@@ -1,3 +1,6 @@
+//! Not actually global options, but options that are used across
+//! multiple subcommands.
+
 use std::path::Path;
 
 use crate::{
@@ -21,46 +24,34 @@ pub const MD_FILE: OutputFile = OutputFile {
 /// The name of the command line program.
 pub const PROGRAM_NAME: &str = XMLHUB_BINARY_FILE_NAME;
 
-#[derive(clap::Args, Debug)]
-pub struct GlobalOpts {
-    /// Show external modifying commands that are run. Note that this
-    /// does not disable `--quiet`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct Verbosity {
+    /// Show external modifying commands that are run. (Note that this
+    /// does not disable `--quiet` if that option is allowed.)
     #[clap(short, long)]
     pub verbose: bool,
+}
 
-    /// Suppress some unimportant output; useful with `--daemon` to
-    /// reduce the amount of log space required. Note that this does
-    /// not disable `--verbose`.
+#[derive(clap::Args, Debug)]
+pub struct Quiet {
+    /// Suppress some unimportant output. (Note that this does
+    /// not disable `--verbose` if that option is allowed.)
     #[clap(short, long)]
     pub quiet: bool,
+}
 
-    /// When running in `--daemon start` mode, for the log messages,
-    /// use time stamps in the local time zone. The default is to use
-    /// UTC.
-    #[clap(long)]
-    pub localtime: bool,
-
-    /// When running in `--daemon start` mode, the maximum size of a
-    /// log file in bytes before the current file is renamed and a new
-    /// one is created instead. Default: 1000000.
-    #[clap(long)]
-    pub max_log_file_size: Option<u64>,
-
-    /// When running in `--daemon start` mode, the number of numbered
-    /// log files before the oldest files are automatically
-    /// deleted. Careful: will delete as many files as needed to get
-    /// their count down to the given number (if you give 0 it will
-    /// delete them all.) Default: 100.
-    #[clap(long)]
-    pub max_log_files: Option<usize>,
-
+#[derive(clap::Args, Debug, Clone)]
+pub struct Dryness {
     /// Do not run external processes like git or browsers,
     /// i.e. ignore all the options asking to do so. Instead just say
     /// on stderr what would be done. Still writes to the output
     /// files, though.
     #[clap(long)]
     pub dry_run: bool,
+}
 
+#[derive(clap::Args, Debug)]
+pub struct VersionCheck {
     /// Do not check the program version against versions specified in
     /// the automatic commit messages in the xmlhub repo. Only use if
     /// you know what you're doing.
