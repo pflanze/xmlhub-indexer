@@ -65,6 +65,10 @@ pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
             &parent_dir,
             &[
                 "clone".into(),
+                // Save on volume; do not expect to need history, and
+                // Git now allows to retrieve it later, right?
+                "--depth".into(),
+                "1".into(),
                 (&binaries_checkout.supposed_upstream_git_url).into(),
                 subdir.to_owned(),
             ],
