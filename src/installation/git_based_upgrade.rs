@@ -140,8 +140,14 @@ pub fn carry_out_install_action(
     if action.is_noop() {
         println!("There was nothing to do.");
     } else {
-        let AppendToShellFileDone { .. } = action.run(())?;
+        let AppendToShellFileDone {
+            provided: _,
+            did_change_shell_file,
+        } = action.run(())?;
         println!("Successfully {action_verb_in_past_tense} the {program_name} executable.");
+        if did_change_shell_file {
+            println!("Please open a new shell so that it will find the {program_name} executable.");
+        }
     }
     Ok(())
 }

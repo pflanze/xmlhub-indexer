@@ -99,7 +99,10 @@ pub fn install_executable(
         if parts.contains(&cargo_bin_dir) {
             NoOp::passing(
                 |provided: CopiedFile<()>| -> AppendToShellFileDone<CopiedFile<()>> {
-                    AppendToShellFileDone { provided }
+                    AppendToShellFileDone {
+                        provided,
+                        did_change_shell_file: false,
+                    }
                 },
                 format!(
                     "not changing your shell config file because \

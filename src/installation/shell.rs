@@ -93,6 +93,9 @@ pub struct AppendToShellFile<R> {
 #[derive(Debug)]
 pub struct AppendToShellFileDone<R> {
     pub provided: R,
+    /// This is set to true by AppendToShellFile::run, but is to be
+    /// set to false by NoOp actions.
+    pub did_change_shell_file: bool,
 }
 
 impl<R: Debug> Effect for AppendToShellFile<R> {
@@ -118,6 +121,9 @@ impl<R: Debug> Effect for AppendToShellFile<R> {
             Ok(())
         })()
         .with_context(|| anyhow!("writing to file: {file_path:?}"))?;
-        Ok(AppendToShellFileDone { provided })
+        Ok(AppendToShellFileDone {
+            provided,
+            did_change_shell_file: true,
+        })
     }
 }
