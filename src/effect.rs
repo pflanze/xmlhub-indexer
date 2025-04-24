@@ -39,6 +39,11 @@ pub trait Effect: Debug {
     /// `NoOp` action.
     fn show_bullet_points(&self) -> String;
 
+    /// Whether this effect actually does anything.
+    fn is_noop(&self) -> bool {
+        false
+    }
+
     /// Carry out the effect of this `Effect`. Using Box to allow for
     /// dyn (an alternative might be to use the `auto_enums` crate
     /// instead?)
@@ -106,6 +111,10 @@ impl<
         )
     }
 
+    fn is_noop(&self) -> bool {
+        self.0.is_noop() && self.1.is_noop()
+    }
+
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let pi = self.0.run(provided)?;
         self.1.run(pi)
@@ -162,6 +171,10 @@ where
 
     fn show_bullet_points(&self) -> String {
         format!("  - {}", self.why)
+    }
+
+    fn is_noop(&self) -> bool {
+        true
     }
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
