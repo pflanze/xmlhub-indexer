@@ -2766,12 +2766,15 @@ fn upgrade_command(
         bail!("--verbose is not currently supported for `upgrade`")
     }
 
-    git_based_upgrade(UpgradeRules {
-        current_version: program_version,
-        force_downgrade,
-        force_reinstall,
-        confirm,
-    })?;
+    git_based_upgrade(
+        UpgradeRules {
+            current_version: program_version,
+            force_downgrade,
+            force_reinstall,
+            confirm,
+        },
+        &global_app_state_dir()?.upgrades_log_base()?,
+    )?;
 
     Ok(())
 }

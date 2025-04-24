@@ -1,7 +1,12 @@
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
-    installation::git_based_upgrade::carry_out_install_action,
+    installation::{
+        defaults::global_app_state_dir,
+        git_based_upgrade::{
+            carry_out_install_action_with_log, InstallAction, InstallActionWithLog,
+        },
+    },
     xmlhub_global_opts::{GlobalOpts, PROGRAM_NAME},
 };
 
@@ -28,5 +33,15 @@ pub fn install_command(global_opts: &GlobalOpts, command_opts: InstallOpts) -> R
     let own_path = std::env::current_exe()
         .with_context(|| anyhow!("getting the path to the running executable"))?;
 
-    carry_out_install_action(&own_path, "", confirm, "installed", PROGRAM_NAME)
+    carry_out_install_action_with_log(InstallActionWithLog {
+        install_action: InstallAction {
+            binary_path: &own_path,
+            changelog_output: "",
+            confirm,
+            action_verb_in_past_tense: "installed",
+            program_name: PROGRAM_NAME,
+        },
+        upgrades_log_base: &global_app_state_dir()?.upgrades_log_base()?,
+        app_info: None,
+    })
 }

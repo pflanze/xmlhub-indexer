@@ -3,10 +3,12 @@
 
 use std::{
     cmp::Ordering,
+    fs::create_dir_all,
     path::{Path, PathBuf},
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::Local;
 
 use crate::{
     changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle, CHANGELOG_FILE_NAME},
@@ -121,15 +123,25 @@ pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
     }
 }
 
+pub struct InstallAction<'t> {
+    pub binary_path: &'t Path,
+    pub changelog_output: &'t str,
+    pub confirm: bool,
+    pub action_verb_in_past_tense: &'t str,
+    pub program_name: &'t str,
+}
+
 /// Carry out the install step of an "install" or "upgrade". For the
 /// former, `changelog_output` will be left empty.
-pub fn carry_out_install_action(
-    binary_path: &Path,
-    changelog_output: &str,
-    confirm: bool,
-    action_verb_in_past_tense: &str,
-    program_name: &str,
-) -> Result<()> {
+pub fn carry_out_install_action(args: InstallAction) -> Result<()> {
+    let InstallAction {
+        binary_path,
+        changelog_output,
+        confirm,
+        action_verb_in_past_tense,
+        program_name,
+    } = args;
+
     let action = install_executable(&binary_path)?;
     let action_bullet_points = action.show_bullet_points();
     print!("{changelog_output}");
@@ -156,6 +168,52 @@ pub fn carry_out_install_action(
     Ok(())
 }
 
+pub struct InstallActionWithLog<'t> {
+    pub install_action: InstallAction<'t>,
+    pub upgrades_log_base: &'t Path,
+    pub app_info: Option<&'t AppInfo>,
+}
+
+pub fn carry_out_install_action_with_log(args: InstallActionWithLog) -> Result<()> {
+    let InstallActionWithLog {
+        install_action,
+        upgrades_log_base,
+        app_info,
+    } = args;
+    // Keep info about the upgrade.
+    let now = Local::now().to_rfc2822();
+    let upgrades_log_dir = upgrades_log_base.append(now);
+    create_dir_all(&upgrades_log_dir)
+        .with_context(|| anyhow!("creating dir {upgrades_log_dir:?} or parents of it"))?;
+    {
+        let pseudo_binary_path = (&upgrades_log_dir).append(install_action.program_name);
+        if let Some(app_info) = app_info {
+            app_info.save_for_app_path(&pseudo_binary_path)?;
+            // No need to save the .sig? Don't currently have it here.
+        } else {
+            std::fs::write(
+                &pseudo_binary_path,
+                "direct 'install' action, not via upgrade",
+            )
+            .with_context(|| anyhow!("writing to {pseudo_binary_path:?}"))?;
+        }
+    }
+
+    match carry_out_install_action(install_action) {
+        Ok(()) => {
+            let path = upgrades_log_dir.append("success.txt");
+            std::fs::write(&path, format!("Ok")).with_context(|| anyhow!("writing to {path:?}"))?;
+        }
+        Err(e) => {
+            let path = upgrades_log_dir.append("error.txt");
+            std::fs::write(&path, format!("{e}"))
+                .with_context(|| anyhow!("writing to {path:?}"))?;
+            Err(e)?
+        }
+    }
+    Ok(())
+}
+
 /// Currently always upgrades when the remote version is newer. In the
 /// FUTURE might want to give explicit version requests, which can be
 /// satisfied from the Git history of the binaries repository.
@@ -173,7 +231,7 @@ pub struct UpgradeRules {
 /// right binary, verify signature on it, install it after possibly
 /// checking its app info against the version requirement given in
 /// `rules`.
-pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
+pub fn git_based_upgrade(rules: UpgradeRules, upgrades_log_base: &Path) -> Result<()> {
     let VerifiedExecutable {
         binary_path,
         app_info,
@@ -263,17 +321,21 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
                 "=============================================================================\n"
             );
 
-            carry_out_install_action(
-                &binary_path,
-                &changelog_output,
-                confirm,
-                match order {
-                    Ordering::Less => "downgraded",
-                    Ordering::Equal => "reinstalled",
-                    Ordering::Greater => "upgraded",
+            carry_out_install_action_with_log(InstallActionWithLog {
+                install_action: InstallAction {
+                    binary_path: &binary_path,
+                    changelog_output: &changelog_output,
+                    confirm,
+                    action_verb_in_past_tense: match order {
+                        Ordering::Less => "downgraded",
+                        Ordering::Equal => "reinstalled",
+                        Ordering::Greater => "upgraded",
+                    },
+                    program_name: PROGRAM_NAME,
                 },
-                PROGRAM_NAME,
-            )?;
+                upgrades_log_base,
+                app_info: Some(&app_info),
+            })?;
         }
     }
 
