@@ -1,7 +1,10 @@
 //! Upgrading an executable by (cloning and) pulling from a Git
 //! repository containing signed binaries.
 
-use std::{cmp::Ordering, path::PathBuf};
+use std::{
+    cmp::Ordering,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -113,6 +116,34 @@ pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
     }
 }
 
+/// Carry out the install step of an "install" or "upgrade". For the
+/// former, `changelog_output` will be left empty.
+pub fn carry_out_install_action(
+    binary_path: &Path,
+    changelog_output: &str,
+    confirm: bool,
+    action_verb_in_past_tense: &str,
+) -> Result<()> {
+    let action = install_executable(&binary_path)?;
+    let action_bullet_points = action.show_bullet_points();
+    print!("{changelog_output}");
+    println!("Will:\n{action_bullet_points}");
+    if confirm {
+        if !action.is_noop() {
+            if !ask_yn("Carry out the above actions?")? {
+                bail!("action aborted by user")
+            }
+        }
+    }
+    if action.is_noop() {
+        println!("There was nothing to do.");
+    } else {
+        let AppendToShellFileDone { .. } = action.run(())?;
+        println!("Successfully {action_verb_in_past_tense} executable.");
+    }
+    Ok(())
+}
+
 /// Currently always upgrades when the remote version is newer. In the
 /// FUTURE might want to give explicit version requests, which can be
 /// satisfied from the Git history of the binaries repository.
@@ -189,8 +220,6 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
         }
         Action::InstallBecause(msg) => {
             println!("Installing because {msg}.");
-            let action = install_executable(&binary_path)?;
-            let action_bullet_points = action.show_bullet_points();
 
             let changelog_part = {
                 let changelog_string = std::fs::read_to_string(&changelog_path)
@@ -215,35 +244,23 @@ pub fn git_based_upgrade(rules: UpgradeRules) -> Result<()> {
                 String::from_utf8(out).expect("no utf-8 problems possible")
             };
 
-            let print_changelog = || {
-                println!(
-                    "====Changes coming with the installed version================================"
-                );
-                println!("{changelog_part}");
-                println!(
-                    "============================================================================="
-                );
-            };
-            if confirm {
-                print_changelog();
-                println!("Will do:\n{action_bullet_points}");
-                if !ask_yn("Carry out the above actions?")? {
-                    bail!("action aborted by user")
-                }
-            }
-            let AppendToShellFileDone { .. } = action.run(())?;
-            println!(
-                "{} executable.",
-                match order {
-                    Ordering::Less => "Downgraded",
-                    Ordering::Equal => "Reinstalled",
-                    Ordering::Greater => "Upgraded",
-                }
+            let changelog_output = format!(
+                "{}{}{}",
+                "====Changes coming with the installed version================================\n",
+                changelog_part,
+                "=============================================================================\n"
             );
-            if !confirm {
-                print_changelog();
-                println!("Did:\n{action_bullet_points}");
-            }
+
+            carry_out_install_action(
+                &binary_path,
+                &changelog_output,
+                confirm,
+                match order {
+                    Ordering::Less => "downgraded",
+                    Ordering::Equal => "reinstalled",
+                    Ordering::Greater => "upgraded",
+                },
+            )?;
         }
     }
 
