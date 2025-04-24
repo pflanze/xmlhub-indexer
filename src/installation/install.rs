@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    copy_file::{copy_file, CopiedFile, CopyFile},
+    copy_file::{copy_file, CopiedFile},
     shell::{AppendToShellFileDone, ShellType},
 };
 
@@ -23,11 +23,43 @@ pub fn cargo_bin_dir() -> Result<PathBuf, &'static HomeError> {
 
 /// Returns action to copy `path` to `~/.cargo/bin/`, and the path to
 /// that latter directory.
-pub fn copy_to_cargo_bin_dir<R: Debug>(path: &Path) -> Result<(Box<CopyFile<R>>, PathBuf)> {
+pub fn copy_to_cargo_bin_dir<R: Debug + 'static>(
+    path: &Path,
+) -> Result<(
+    Box<dyn Effect<Requires = R, Provides = CopiedFile<R>>>,
+    PathBuf,
+)> {
     let file_name = path
         .file_name()
         .ok_or_else(|| anyhow!("missing file name in path {path:?}"))?;
+
     let cargo_bin_dir = cargo_bin_dir()?;
+
+    {
+        let path_parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("missing parent dir in executable path {path:?}"))?;
+        let path_parent = path_parent
+            .canonicalize()
+            .with_context(|| anyhow!("canonicalizing executable path {path_parent:?}"))?;
+
+        let cargo_bin_dir = cargo_bin_dir
+            .canonicalize()
+            .with_context(|| anyhow!("canonicalizing cargo bin dir {cargo_bin_dir:?}"))?;
+
+        if path_parent == cargo_bin_dir {
+            return Ok((
+                NoOp::passing(
+                    |provided: R| CopiedFile {
+                        provided,
+                        replaced: false,
+                    },
+                    "this executable is already in the installed location".into(),
+                ),
+                cargo_bin_dir,
+            ));
+        }
+    }
     create_dir_all(&cargo_bin_dir).with_context(|| {
         anyhow!("creating directory {cargo_bin_dir:?} or if necessary parent directories")
     })?;
