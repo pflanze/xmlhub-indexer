@@ -71,7 +71,7 @@ impl ShellType {
         let indented_code = prefix_lines(&code_to_append, "        ");
         let to_be_done = format!(
             "add code to {file_path:?} to add the path {dir_path_string:?} to \
-             the PATH environment variable:\n{indented_code}"
+             the PATH environment variable:\n{indented_code}\n"
         );
         Ok(Box::new(AppendToShellFile {
             phantom: Default::default(),
