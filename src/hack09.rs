@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::{
     path_util::{canonicalize, AppendToPath},
-    unix_passwd::{getpwuid_home, getuid},
+    unix_passwd::getpwuid_home,
     utillib::home::home_dir,
 };
 
@@ -21,7 +21,7 @@ use crate::{
 /// treatment.
 pub fn hack09() -> Result<()> {
     let home_from_env_var = canonicalize(home_dir()?)?;
-    let home_from_user_database = canonicalize(&getpwuid_home(getuid())?)?;
+    let home_from_user_database = canonicalize(&getpwuid_home(nix::unistd::getuid())?)?;
     if home_from_env_var == home_from_user_database {
         return Ok(());
     }
