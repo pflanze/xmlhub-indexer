@@ -259,3 +259,6 @@ v9.4 - 2025-04-22
 - `xmlhub install/upgrade`: log information about the installations in `~/.xmlhub/upgrades-log/`
 - `xmlhub`: move all options to the individual subcommands: the only global options are now `--version` and `--version-only` (and the help options)
 - `xmlhub build --daemon`: add hack to allow running with the `HOME` env var set to another dir than the user's home, adding symlink for `.ssh` to the original home if nothing is there, to allow to use ssh while the home dir mount is gone and the bare underlying filesystem shows through.
+
+v9.5 - 2025-04-25
+
