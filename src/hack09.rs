@@ -21,7 +21,9 @@ use crate::{
 /// treatment.
 pub fn hack09() -> Result<()> {
     let home_from_env_var = canonicalize(home_dir()?)?;
-    let home_from_user_database = canonicalize(&getpwuid_home(nix::unistd::getuid())?)?;
+    let uid = nix::unistd::getuid();
+    let home_from_user_database =
+        canonicalize(&getpwuid_home(uid)?.ok_or_else(|| anyhow!("can't get user for uid {uid}"))?)?;
     if home_from_env_var == home_from_user_database {
         return Ok(());
     }
