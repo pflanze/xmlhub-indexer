@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::{anyhow, Context, Result};
 use lazy_static::lazy_static;
 use nix::NixPath;
 
@@ -157,4 +158,10 @@ fn t_add_extension() {
     assert_eq!(t("hello", ".foo"), "hello..foo");
     assert_eq!(t("/", ".foo"), "\"/\" -- unchanged");
     assert_eq!(t("hello/", ".foo"), "hello..foo"); // XX oh, buggy. todo fix
+}
+
+/// Just adds error wrapper that mentions the path.
+pub fn canonicalize(path: &Path) -> Result<PathBuf> {
+    path.canonicalize()
+        .with_context(|| anyhow!("canonicalizing {path:?}"))
 }
