@@ -268,3 +268,6 @@ v9.6 - 2025-04-25
 
 - fix the fix of the fix: the problem was *not* musl, but stadler09
 - `xmlhub build --daemon`: remove hack again, use HTTPS and gitlab tokens instead
+
+v9.7 - 2025-04-25
+
