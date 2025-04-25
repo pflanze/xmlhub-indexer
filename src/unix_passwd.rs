@@ -31,6 +31,7 @@ pub fn getpwuid(uid: uid_t) -> Result<Passwd> {
     const BUFLEN: usize = 8000;
     let mut buffer: [i8; BUFLEN] = [0; BUFLEN];
     // `passwd` does not impl Default, nor do pointers.
+    #[cfg(target_os = "linux")]
     let mut passwd = nix::libc::passwd {
         pw_name: null_mut(),
         pw_passwd: null_mut(),
@@ -39,6 +40,19 @@ pub fn getpwuid(uid: uid_t) -> Result<Passwd> {
         pw_gecos: null_mut(),
         pw_dir: null_mut(),
         pw_shell: null_mut(),
+    };
+    #[cfg(target_os = "macos")]
+    let mut passwd = nix::libc::passwd {
+        pw_name: null_mut(),
+        pw_passwd: null_mut(),
+        pw_uid: Default::default(),
+        pw_gid: Default::default(),
+        pw_gecos: null_mut(),
+        pw_dir: null_mut(),
+        pw_shell: null_mut(),
+        pw_change: Default::default(),
+        pw_class: null_mut(),
+        pw_expire: Default::default(),
     };
     let mut passwd_ptr_ptr: *mut nix::libc::passwd = &mut passwd;
     let res = unsafe {
