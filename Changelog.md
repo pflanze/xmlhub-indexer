@@ -253,3 +253,9 @@ v9.3 - 2025-04-22
 
 v9.4 - 2025-04-22
 
+- `xmlhub install`: do not try to install if this is the installed binary (do not delete the target and then fail copying the source)
+- `xmlhub install/upgrade`: better message, say when nothing was done, and mention when a new shell is required
+- `xmlhub upgrade`: do a shallow clone (--depth 1) of the binaries repository to reduce download size
+- `xmlhub install/upgrade`: log information about the installations in `~/.xmlhub/upgrades-log/`
+- `xmlhub`: move all options to the individual subcommands: the only global options are now `--version` and `--version-only` (and the help options)
+- `xmlhub build --daemon`: add hack to allow running with the `HOME` env var set to another dir than the user's home, adding symlink for `.ssh` to the original home if nothing is there, to allow to use ssh while the home dir mount is gone and the bare underlying filesystem shows through.
