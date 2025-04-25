@@ -15,7 +15,7 @@ use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
     installation::shell::AppendToShellFileDone,
-    path_util::AppendToPath,
+    path_util::{add_extension, AppendToPath},
     sha256::sha256sum,
     util::ask_yn,
     xmlhub_global_opts::PROGRAM_NAME,
@@ -186,11 +186,12 @@ pub fn carry_out_install_action_with_log(args: InstallActionWithLog) -> Result<(
     create_dir_all(&upgrades_log_dir)
         .with_context(|| anyhow!("creating dir {upgrades_log_dir:?} or parents of it"))?;
     {
-        let pseudo_binary_path = (&upgrades_log_dir).append(install_action.program_name);
+        let mut pseudo_binary_path = (&upgrades_log_dir).append(install_action.program_name);
         if let Some(app_info) = app_info {
             app_info.save_for_app_path(&pseudo_binary_path)?;
             // No need to save the .sig? Don't currently have it here.
         } else {
+            add_extension(&mut pseudo_binary_path, "direct-install");
             std::fs::write(
                 &pseudo_binary_path,
                 "direct 'install' action, not via upgrade",
