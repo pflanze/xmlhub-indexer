@@ -262,3 +262,4 @@ v9.4 - 2025-04-22
 
 v9.5 - 2025-04-25
 
+- `xmlhub build --daemon`: fix hack for Linux musl binaries
