@@ -44,7 +44,6 @@ use xmlhub_indexer::{
     get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
-    hack09::hack09,
     installation::{
         defaults::global_app_state_dir,
         git_based_upgrade::{git_based_upgrade, UpgradeRules},
@@ -3029,7 +3028,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                         // Set nicety (scheduling priority):
                         possibly_setpriority(PriorityWhich::Process(0), 10)?;
 
-                        hack09()?;
+                        // hack09()?;
 
                         // Build the index once, throwing away the Ok
                         // return value (replacing it with `()`, since
