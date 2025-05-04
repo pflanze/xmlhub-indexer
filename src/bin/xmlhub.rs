@@ -45,6 +45,7 @@ use xmlhub_indexer::{
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
     installation::{
+        binaries_repo::Os,
         defaults::global_app_state_dir,
         git_based_upgrade::{changelog_display, git_based_upgrade, UpgradeRules},
     },
@@ -520,7 +521,9 @@ struct BuildOpts {
     base_path: Option<PathBuf>,
 
     /// The virtual address space limit for the child process carrying
-    /// out a build when in daemon mode, in bytes (default: 3 GiB)
+    /// out a build when in daemon mode, in bytes (default: 3
+    /// GiB). Only works on Linux, ignored on macOS as address space
+    /// limiting is broken there.
     #[clap(long)]
     limit_as: Option<u64>,
 }
@@ -2994,11 +2997,25 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                     },
                     // The action run in the child process
                     || {
-                        // Set resource limits in case there are issues that
-                        // lead to overuse of CPU or memory
-                        let limit_as = limit_as.unwrap_or(AS_BYTES_LIMIT_IN_WORKER_CHILD);
-                        setrlimit(Resource::RLIMIT_AS, limit_as, limit_as)
-                            .with_context(|| anyhow!("setting RLIMIT_AS to {limit_as}"))?;
+                        let os = Os::from_local()?;
+
+                        match os {
+                            Os::MacOS => {
+                                // Apparently
+                                // setrlimit(Resource::RLIMIT_AS, ) is
+                                // broken on macOS (always returns
+                                // `EINVAL`, and the internet seems to
+                                // indicate that it just doesn't work), thus ignore.
+                            }
+                            Os::Linux => {
+                                // Set resource limits in case there are issues that
+                                // lead to overuse of CPU or memory
+                                let limit_as = limit_as.unwrap_or(AS_BYTES_LIMIT_IN_WORKER_CHILD);
+                                setrlimit(Resource::RLIMIT_AS, limit_as, limit_as)
+                                    .with_context(|| anyhow!("setting RLIMIT_AS to {limit_as}"))?;
+                            }
+                        }
+
                         setrlimit(
                             Resource::RLIMIT_CPU,
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
