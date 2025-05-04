@@ -135,6 +135,28 @@ impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
         sections
     }
 
+    pub fn display_title(&self) -> String {
+        let from_or_since = if self.include_from { "from" } else { "since" };
+        let from_or_since_from = self
+            .from
+            .as_ref()
+            .map(|v| format!("{from_or_since} version {v}"))
+            .unwrap_or("".into());
+        let until_to = self
+            .to
+            .as_ref()
+            .map(|v| format!("until version {v}"))
+            .unwrap_or("".into());
+        format!(
+            "# Changes {from_or_since_from} {until_to}{}",
+            if self.is_downgrade {
+                " (for downgrade)"
+            } else {
+                ""
+            }
+        )
+    }
+
     pub fn display<W: Write>(&self, opts: &ChangelogDisplay, mut out: W) -> std::io::Result<()> {
         let ChangelogDisplay {
             generate_title,
@@ -142,26 +164,7 @@ impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
         } = opts;
 
         if *generate_title {
-            let from_or_since = if self.include_from { "from" } else { "since" };
-            let from_or_since_from = self
-                .from
-                .as_ref()
-                .map(|v| format!("{from_or_since} version {v}"))
-                .unwrap_or("".into());
-            let until_to = self
-                .to
-                .as_ref()
-                .map(|v| format!("until version {v}"))
-                .unwrap_or("".into());
-            writeln!(
-                out,
-                "# Changes {from_or_since_from} {until_to}{}",
-                if self.is_downgrade {
-                    " (for downgrade)"
-                } else {
-                    ""
-                }
-            )?;
+            writeln!(out, "{}", self.display_title())?;
         }
 
         match style {
