@@ -25,7 +25,7 @@ pub const MD_FILE: OutputFile = OutputFile {
 pub const PROGRAM_NAME: &str = XMLHUB_BINARY_FILE_NAME;
 
 #[derive(clap::Args, Debug, Clone)]
-pub struct Verbosity {
+pub struct VerbosityOpt {
     /// Show external modifying commands that are run. (Note that this
     /// does not disable `--quiet` if that option is allowed.)
     #[clap(short, long)]
@@ -33,7 +33,7 @@ pub struct Verbosity {
 }
 
 #[derive(clap::Args, Debug)]
-pub struct Quiet {
+pub struct QuietOpt {
     /// Suppress some unimportant output. (Note that this does
     /// not disable `--verbose` if that option is allowed.)
     #[clap(short, long)]
@@ -41,7 +41,7 @@ pub struct Quiet {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-pub struct Dryness {
+pub struct DrynessOpt {
     /// Do not run external processes like git or browsers,
     /// i.e. ignore all the options asking to do so. Instead just say
     /// on stderr what would be done. Still writes to the output
@@ -51,7 +51,7 @@ pub struct Dryness {
 }
 
 #[derive(clap::Args, Debug)]
-pub struct VersionCheck {
+pub struct VersionCheckOpt {
     /// Do not check the program version against versions specified in
     /// the automatic commit messages in the xmlhub repo. Only use if
     /// you know what you're doing.

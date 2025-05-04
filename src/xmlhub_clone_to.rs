@@ -7,16 +7,16 @@ use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
     path_util::{AppendToPath, FixupPath},
-    xmlhub_global_opts::{git_log_version_checker, Dryness, VersionCheck},
+    xmlhub_global_opts::{git_log_version_checker, DrynessOpt, VersionCheckOpt},
     xmlhub_indexer_defaults::XMLHUB_CHECKOUT,
 };
 
 #[derive(clap::Parser, Debug)]
 pub struct CloneToOpts {
     #[clap(flatten)]
-    pub dryness: Dryness,
+    pub dryness: DrynessOpt,
     #[clap(flatten)]
-    pub versioncheck: VersionCheck,
+    pub versioncheck: VersionCheckOpt,
 
     /// Do not show the Git commands that are run (by default, they
     /// are shown even if the global `--verbose` option was not given)
@@ -90,8 +90,8 @@ pub fn clone_to_command(
     command_opts: CloneToOpts,
 ) -> Result<()> {
     let CloneToOpts {
-        dryness: Dryness { dry_run },
-        versioncheck: VersionCheck { no_version_check },
+        dryness: DrynessOpt { dry_run },
+        versioncheck: VersionCheckOpt { no_version_check },
         no_verbose,
         target_path,
         experiments,

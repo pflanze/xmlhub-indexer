@@ -61,8 +61,8 @@ use xmlhub_indexer::{
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_global_opts::{
-        git_log_version_checker, Dryness, Quiet, Verbosity, VersionCheck, HTML_FILE, MD_FILE,
-        PROGRAM_NAME,
+        git_log_version_checker, DrynessOpt, QuietOpt, VerbosityOpt, VersionCheckOpt, HTML_FILE,
+        MD_FILE, PROGRAM_NAME,
     },
     xmlhub_help::{print_basic_standalone_html_page, save_basic_standalone_html_page},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
@@ -379,13 +379,13 @@ struct ChangelogOpts {
 #[derive(clap::Parser, Debug)]
 struct BuildOpts {
     #[clap(flatten)]
-    dryness: Dryness,
+    dryness: DrynessOpt,
     #[clap(flatten)]
-    verbosity: Verbosity,
+    verbosity: VerbosityOpt,
     #[clap(flatten)]
-    versioncheck: VersionCheck,
+    versioncheck: VersionCheckOpt,
     #[clap(flatten)]
-    quietness: Quiet,
+    quietness: QuietOpt,
 
     /// When running in `--daemon start` mode, for the log messages,
     /// use time stamps in the local time zone. The default is to use
@@ -534,13 +534,13 @@ struct BuildOpts {
 #[derive(clap::Parser, Debug)]
 struct CheckOpts {
     #[clap(flatten)]
-    versioncheck: VersionCheck,
+    versioncheck: VersionCheckOpt,
     #[clap(flatten)]
-    dryness: Dryness,
+    dryness: DrynessOpt,
     #[clap(flatten)]
-    verbosity: Verbosity,
+    verbosity: VerbosityOpt,
     #[clap(flatten)]
-    quietness: Quiet,
+    quietness: QuietOpt,
 
     /// Open the generated `README.html` file in a web browser.
     /// Tries the browsers specified in the `BROWSER` environment
@@ -576,7 +576,7 @@ struct CheckOpts {
 #[derive(clap::Parser, Debug)]
 struct PrepareOpts {
     #[clap(flatten)]
-    quietness: Quiet,
+    quietness: QuietOpt,
 
     /// The path(s) to the XML file(s) which should be
     /// modified. Careful: they are modified in place (although the
@@ -610,9 +610,9 @@ struct PrepareOpts {
 #[derive(clap::Parser, Debug)]
 struct AddToOpts {
     #[clap(flatten)]
-    versioncheck: VersionCheck,
+    versioncheck: VersionCheckOpt,
     #[clap(flatten)]
-    quietness: Quiet,
+    quietness: QuietOpt,
 
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
@@ -2215,9 +2215,9 @@ fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileError
 
 /// The subset of the options of `BuildOpts` used by `build_index`
 struct BuildIndexOpts {
-    dryness: Dryness,
-    verbosity: Verbosity,
-    quietness: Quiet,
+    dryness: DrynessOpt,
+    verbosity: VerbosityOpt,
+    quietness: QuietOpt,
 
     pull: bool,
     batch: bool,
@@ -2241,9 +2241,9 @@ fn build_index(
     maybe_checked_xmlhub_checkout: &Option<CheckedCheckoutContext2<Cow<Path>>>,
 ) -> Result<i32> {
     let BuildIndexOpts {
-        dryness: Dryness { dry_run },
-        verbosity: Verbosity { verbose },
-        quietness: Quiet { quiet },
+        dryness: DrynessOpt { dry_run },
+        verbosity: VerbosityOpt { verbose },
+        quietness: QuietOpt { quiet },
         pull,
         batch,
         ignore_untracked,
@@ -2885,8 +2885,8 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
     let BuildOpts {
         dryness,
         verbosity,
-        versioncheck: VersionCheck { no_version_check },
-        quietness: Quiet { quiet },
+        versioncheck: VersionCheckOpt { no_version_check },
+        quietness: QuietOpt { quiet },
         write_errors,
         no_commit_errors,
         ok_on_written_errors,
@@ -2940,7 +2940,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             BuildIndexOpts {
                 dryness: dryness.clone(),
                 verbosity: verbosity.clone(),
-                quietness: Quiet { quiet },
+                quietness: QuietOpt { quiet },
                 pull,
                 batch,
                 ignore_untracked,
@@ -3048,10 +3048,10 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
 /// directly in the non-`Err` case. `!` is not stable yet.)
 fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts) -> Result<()> {
     let CheckOpts {
-        versioncheck: VersionCheck { no_version_check },
-        dryness: Dryness { dry_run },
-        verbosity: Verbosity { verbose },
-        quietness: Quiet { quiet },
+        versioncheck: VersionCheckOpt { no_version_check },
+        dryness: DrynessOpt { dry_run },
+        verbosity: VerbosityOpt { verbose },
+        quietness: QuietOpt { quiet },
         file_paths,
         open,
         open_if_changed,
@@ -3138,9 +3138,9 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
     // doing all the errors? Relying on that.
     build_index(
         BuildIndexOpts {
-            dryness: Dryness { dry_run },
-            verbosity: Verbosity { verbose },
-            quietness: Quiet { quiet },
+            dryness: DrynessOpt { dry_run },
+            verbosity: VerbosityOpt { verbose },
+            quietness: QuietOpt { quiet },
             pull: false,
             batch: false,
             ignore_untracked: false,
@@ -3318,7 +3318,7 @@ fn overwrite_file_moving_to_trash_if_exists(
 /// Execute a `prepare` command.
 fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
-        quietness: Quiet { quiet },
+        quietness: QuietOpt { quiet },
         files_to_prepare,
         no_blind,
         blind_comment,
@@ -3362,8 +3362,8 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
 /// Execute an `add-to` command.
 fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOpts) -> Result<()> {
     let AddToOpts {
-        versioncheck: VersionCheck { no_version_check },
-        quietness: Quiet { quiet },
+        versioncheck: VersionCheckOpt { no_version_check },
+        quietness: QuietOpt { quiet },
         target_directory,
         files_to_add,
         mkdir,
@@ -3707,8 +3707,8 @@ fn main() -> Result<()> {
                 Command::Build(BuildOpts {
                     dryness,
                     verbosity,
-                    versioncheck: VersionCheck { no_version_check },
-                    quietness: Quiet { quiet },
+                    versioncheck: VersionCheckOpt { no_version_check },
+                    quietness: QuietOpt { quiet },
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
                     ok_on_written_errors,
@@ -3780,8 +3780,8 @@ fn main() -> Result<()> {
                         command: Some(Command::Build(BuildOpts {
                             dryness,
                             verbosity,
-                            versioncheck: VersionCheck { no_version_check },
-                            quietness: Quiet { quiet },
+                            versioncheck: VersionCheckOpt { no_version_check },
+                            quietness: QuietOpt { quiet },
                             write_errors,
                             no_commit_errors,
                             ok_on_written_errors,
