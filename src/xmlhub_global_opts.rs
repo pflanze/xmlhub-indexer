@@ -59,6 +59,37 @@ pub struct VersionCheckOpt {
     pub no_version_check: bool,
 }
 
+#[derive(clap::Args, Debug)]
+pub struct OpenOrPrintOpts {
+    /// Show the output in the browser (default)
+    #[clap(long)]
+    open: bool,
+    /// Print the output to the terminal in Markdown format instead of
+    /// showing it in the browser (although if `--open` is given
+    /// explicitly, this is still done, too)
+    #[clap(long)]
+    print: bool,
+}
+
+impl OpenOrPrintOpts {
+    pub fn do_opts(&self) -> (bool, bool) {
+        let Self { open, print } = self;
+        let (do_open, do_print) = match (open, print) {
+            (false, false) => (true, false),
+            _ => (*open, *print),
+        };
+        (do_open, do_print)
+    }
+
+    pub fn do_open(&self) -> bool {
+        self.do_opts().0
+    }
+
+    pub fn do_print(&self) -> bool {
+        self.do_opts().1
+    }
+}
+
 pub fn git_log_version_checker(
     program_version: GitVersion<SemVersion>,
     no_version_check: bool,

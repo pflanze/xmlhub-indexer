@@ -61,8 +61,8 @@ use xmlhub_indexer::{
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_global_opts::{
-        git_log_version_checker, DrynessOpt, QuietOpt, VerbosityOpt, VersionCheckOpt, HTML_FILE,
-        MD_FILE, PROGRAM_NAME,
+        git_log_version_checker, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
+        VersionCheckOpt, HTML_FILE, MD_FILE, PROGRAM_NAME,
     },
     xmlhub_help::{print_basic_standalone_html_page, save_basic_standalone_html_page},
     xmlhub_indexer_defaults::{SOURCE_CHECKOUT, XMLHUB_CHECKOUT},
@@ -326,14 +326,8 @@ enum Command {
 
 #[derive(clap::Parser, Debug)]
 struct HelpAttributesOpts {
-    /// Open the attributes description in the browser (default)
-    #[clap(long)]
-    open: bool,
-    /// Print the attributes description to the terminal in Markdown
-    /// instead of opening in the browser (although if `--open` is
-    /// given explicitly, still does that, too)
-    #[clap(long)]
-    print: bool,
+    #[clap(flatten)]
+    open_or_print: OpenOrPrintOpts,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -357,6 +351,9 @@ struct UpgradeOpts {
 
 #[derive(clap::Parser, Debug)]
 struct ChangelogOpts {
+    #[clap(flatten)]
+    open_or_print: OpenOrPrintOpts,
+
     /// Which version to start from (exclusive)
     #[clap(long)]
     from: Option<GitVersion<SemVersion>>,
@@ -366,14 +363,6 @@ struct ChangelogOpts {
     /// Whether it's OK to have `--from` > `--to`
     #[clap(long)]
     allow_downgrades: bool,
-    /// Open the log in the browser (default)
-    #[clap(long)]
-    open: bool,
-    /// Print the log to the terminal in Markdown
-    /// instead of opening in the browser (although if `--open` is
-    /// given explicitly, still does that, too)
-    #[clap(long)]
-    print: bool,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -2830,14 +2819,8 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         from,
         to,
         allow_downgrades,
-        open,
-        print,
+        open_or_print,
     } = command_opts;
-
-    let (do_open, do_print) = match (open, print) {
-        (false, false) => (true, false),
-        _ => (open, print),
-    };
 
     let changelog = Changelog::new_builtin()?;
     let part =
@@ -2860,7 +2843,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         Ok(())
     };
 
-    if do_open {
+    if open_or_print.do_open() {
         let base = global_app_state_dir()?.docs_base(PROGRAM_VERSION)?;
         let output_path = base.append("changes.html");
         with_output_to_file(&output_path, |output| -> Result<()> {
@@ -2869,7 +2852,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         spawn_browser_on_path(&output_path)?;
     }
 
-    if do_print {
+    if open_or_print.do_print() {
         let mut output = BufWriter::new(stdout().lock());
         print_markdown_to(&mut output)?;
         output.flush()?;
@@ -3619,18 +3602,13 @@ fn help_contributing_command() -> Result<()> {
 }
 
 fn help_attributes_command(command_opts: HelpAttributesOpts) -> Result<()> {
-    let HelpAttributesOpts { open, print } = command_opts;
+    let HelpAttributesOpts { open_or_print } = command_opts;
 
-    let (do_open, do_print) = match (open, print) {
-        (false, false) => (true, false),
-        _ => (open, print),
-    };
-
-    if do_open {
+    if open_or_print.do_open() {
         open_help_page(WhichPage::Attributes)?;
     }
 
-    if do_print {
+    if open_or_print.do_print() {
         let mut out = stdout().lock();
         writeln!(
             &mut out,
