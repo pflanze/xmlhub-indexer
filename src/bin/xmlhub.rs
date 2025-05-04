@@ -2994,12 +2994,21 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                             Resource::RLIMIT_AS,
                             AS_BYTES_LIMIT_IN_WORKER_CHILD,
                             AS_BYTES_LIMIT_IN_WORKER_CHILD,
-                        )?;
+                        )
+                        .with_context(|| {
+                            anyhow!("setting RLIMIT_AS to {AS_BYTES_LIMIT_IN_WORKER_CHILD}")
+                        })?;
                         setrlimit(
                             Resource::RLIMIT_CPU,
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1,
-                        )?;
+                        )
+                        .with_context(|| {
+                            anyhow!(
+                                "setting RLIMIT_CPU to {CPU_SECONDS_LIMIT_IN_WORKER_CHILD} / {}",
+                                CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1
+                            )
+                        })?;
 
                         // Set nicety (scheduling priority):
                         possibly_setpriority(PriorityWhich::Process(0), 10)?;
