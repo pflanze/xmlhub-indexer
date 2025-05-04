@@ -299,20 +299,17 @@ pub fn git_based_upgrade(rules: UpgradeRules, upgrades_log_base: &Path) -> Resul
                 let changelog = Changelog::from_str(&changelog_string)?;
                 let part =
                     changelog.get_between_versions(true, false, Some(&current_version), None)?;
-                let mut out = Vec::new();
                 // XX should share the settings with `changelog_command`
-                part.display(
-                    &ChangelogDisplay {
-                        generate_title: true,
-                        style: ChangelogDisplayStyle::ReleasesAsSections {
-                            print_colon_after_release: true,
-                            newest_section_first: false,
-                            newest_item_first: false,
-                        },
+                ChangelogDisplay {
+                    changelog: &part,
+                    generate_title: true,
+                    style: ChangelogDisplayStyle::ReleasesAsSections {
+                        print_colon_after_release: true,
+                        newest_section_first: false,
+                        newest_item_first: false,
                     },
-                    &mut out,
-                )?;
-                String::from_utf8(out).expect("no utf-8 problems possible")
+                }
+                .to_string()
             };
 
             let changelog_output = format!(

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::Write, mem::take};
+use std::{borrow::Cow, fmt::Display, mem::take};
 
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -76,9 +76,72 @@ impl ChangelogDisplayStyle {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ChangelogDisplay {
+pub struct ChangelogDisplay<'s: 't, 't, 't0: 't, 't1> {
+    pub changelog: &'t1 Changelog<'s, 't, 't0>,
     pub generate_title: bool,
     pub style: ChangelogDisplayStyle,
+}
+
+impl<'s: 't, 't, 't0: 't, 't1> Display for ChangelogDisplay<'s, 't, 't0, 't1> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ChangelogDisplay {
+            changelog,
+            generate_title,
+            style,
+        } = self;
+
+        if *generate_title {
+            f.write_str(&changelog.display_title())?;
+        }
+
+        match style {
+            ChangelogDisplayStyle::Innovative => {
+                if let Some(newest) = changelog.newest {
+                    writeln!(f, "{newest}\n")?;
+                }
+                for entry in &*changelog.entries {
+                    match entry {
+                        ChangelogEntry::Release(Release { version, date }) => {
+                            writeln!(f, "\nv{version} released on {date}\n")?
+                        }
+                        ChangelogEntry::PointEntry(e) => writeln!(f, "{e}")?,
+                    }
+                }
+                Ok(())
+            }
+
+            ChangelogDisplayStyle::ReleasesAsSections {
+                print_colon_after_release,
+                newest_section_first,
+                newest_item_first,
+            } => {
+                let mut sections = changelog.sections();
+                if *newest_section_first {
+                    sections.reverse();
+                }
+
+                let possibly_colon = if *print_colon_after_release { ":" } else { "" };
+
+                for section in &sections {
+                    let ChangelogSection { release, entries } = section;
+                    if let Some(Release { version, date }) = release {
+                        writeln!(f, "\n## v{version} ({date}){possibly_colon}\n",)?;
+                    } else {
+                        writeln!(f, "\n## (unreleased){possibly_colon}\n")?;
+                    }
+                    let entries: Box<dyn Iterator<Item = &&str>> = if *newest_item_first {
+                        Box::new(entries.iter().rev())
+                    } else {
+                        Box::new(entries.iter())
+                    };
+                    for e in entries {
+                        writeln!(f, "{e}")?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -155,65 +218,6 @@ impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
                 ""
             }
         )
-    }
-
-    pub fn display<W: Write>(&self, opts: &ChangelogDisplay, mut out: W) -> std::io::Result<()> {
-        let ChangelogDisplay {
-            generate_title,
-            style,
-        } = opts;
-
-        if *generate_title {
-            writeln!(out, "{}", self.display_title())?;
-        }
-
-        match style {
-            ChangelogDisplayStyle::Innovative => {
-                if let Some(newest) = self.newest {
-                    writeln!(out, "{newest}\n")?;
-                }
-                for entry in &*self.entries {
-                    match entry {
-                        ChangelogEntry::Release(Release { version, date }) => {
-                            writeln!(out, "\nv{version} released on {date}\n")?
-                        }
-                        ChangelogEntry::PointEntry(e) => writeln!(out, "{e}")?,
-                    }
-                }
-                Ok(())
-            }
-
-            ChangelogDisplayStyle::ReleasesAsSections {
-                print_colon_after_release,
-                newest_section_first,
-                newest_item_first,
-            } => {
-                let mut sections = self.sections();
-                if *newest_section_first {
-                    sections.reverse();
-                }
-
-                let possibly_colon = if *print_colon_after_release { ":" } else { "" };
-
-                for section in &sections {
-                    let ChangelogSection { release, entries } = section;
-                    if let Some(Release { version, date }) = release {
-                        writeln!(out, "\n## v{version} ({date}){possibly_colon}\n",)?;
-                    } else {
-                        writeln!(out, "\n## (unreleased){possibly_colon}\n")?;
-                    }
-                    let entries: Box<dyn Iterator<Item = &&str>> = if *newest_item_first {
-                        Box::new(entries.iter().rev())
-                    } else {
-                        Box::new(entries.iter())
-                    };
-                    for e in entries {
-                        writeln!(out, "{e}")?;
-                    }
-                }
-                Ok(())
-            }
-        }
     }
 
     pub fn from_str(changelog: &'s str) -> Result<Self> {

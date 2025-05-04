@@ -1,5 +1,3 @@
-use std::io::stdout;
-
 use anyhow::Result;
 use clap::Parser;
 use xmlhub_indexer::changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle};
@@ -39,8 +37,10 @@ fn main() -> Result<()> {
         opts.to.as_ref(),
     )?;
 
-    part.display(
-        &ChangelogDisplay {
+    print!(
+        "{}",
+        ChangelogDisplay {
+            changelog: &part,
             generate_title: true,
             style: if opts.as_sections {
                 ChangelogDisplayStyle::ReleasesAsSections {
@@ -51,8 +51,7 @@ fn main() -> Result<()> {
             } else {
                 ChangelogDisplayStyle::Innovative
             },
-        },
-        &mut stdout().lock(),
-    )?;
+        }
+    );
     Ok(())
 }

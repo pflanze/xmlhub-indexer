@@ -2844,16 +2844,18 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         changelog.get_between_versions(allow_downgrades, false, from.as_ref(), to.as_ref())?;
 
     let print_markdown_to = |out: &mut dyn Write| {
-        part.display(
-            &ChangelogDisplay {
+        write!(
+            out,
+            "{}",
+            ChangelogDisplay {
+                changelog: &part,
                 generate_title: true,
                 style: ChangelogDisplayStyle::ReleasesAsSections {
                     print_colon_after_release: true,
                     newest_section_first: false,
                     newest_item_first: false,
                 },
-            },
-            out,
+            }
         )
     };
 
