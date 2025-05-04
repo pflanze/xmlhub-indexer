@@ -25,8 +25,9 @@ pub enum ChangelogEntry<'s, 't> {
 #[derive(Clone, Debug)]
 pub struct Changelog<'s: 't, 't, 't0: 't> {
     /// When a subset was taken, what the range was
-    pub include_from: bool,
     pub from: Option<RefOrOwned<'t, GitVersion<SemVersion>>>,
+    /// Whether `from` is included (inclusive range)
+    pub include_from: bool,
     pub to: Option<RefOrOwned<'t, GitVersion<SemVersion>>>,
     pub is_downgrade: bool,
 
@@ -141,20 +142,20 @@ impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
         } = opts;
 
         if *generate_title {
-            let from = self
+            let from_or_since = if self.include_from { "from" } else { "since" };
+            let from_or_since_from = self
                 .from
                 .as_ref()
-                .map(|v| format!("version {v}"))
-                .unwrap_or("the beginning".into());
-            let to = self
+                .map(|v| format!("{from_or_since} version {v}"))
+                .unwrap_or("".into());
+            let until_to = self
                 .to
                 .as_ref()
-                .map(|v| format!("version {v}"))
-                .unwrap_or("the end".into());
-            let from_or_since = if self.include_from { "from" } else { "since" };
+                .map(|v| format!("until version {v}"))
+                .unwrap_or("".into());
             writeln!(
                 out,
-                "# Changes {from_or_since} {from} until {to}{}",
+                "# Changes {from_or_since_from} {until_to}{}",
                 if self.is_downgrade {
                     " (for downgrade)"
                 } else {
