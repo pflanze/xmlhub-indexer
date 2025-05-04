@@ -366,12 +366,14 @@ struct ChangelogOpts {
     /// Whether it's OK to have `--from` > `--to`
     #[clap(long)]
     allow_downgrades: bool,
-    /// Print the log formatted as HTML (default: Markdown)
-    #[clap(long)]
-    print_html: bool,
-    /// Open the log in the browser (disables printing)
+    /// Open the log in the browser (default)
     #[clap(long)]
     open: bool,
+    /// Print the log to the terminal in Markdown
+    /// instead of opening in the browser (although if `--open` is
+    /// given explicitly, still does that, too)
+    #[clap(long)]
+    print: bool,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -2828,9 +2830,14 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         from,
         to,
         allow_downgrades,
-        print_html,
         open,
+        print,
     } = command_opts;
+
+    let (do_open, do_print) = match (open, print) {
+        (false, false) => (true, false),
+        _ => (open, print),
+    };
 
     let changelog = Changelog::new_builtin()?;
     let part =
@@ -2865,20 +2872,18 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         Ok(())
     };
 
-    if open {
+    if do_open {
         let base = global_app_state_dir()?.docs_base(PROGRAM_VERSION)?;
         let output_path = base.append("changes.html");
         with_output_to_file(&output_path, |output| -> Result<()> {
             Ok(print_html_to(output)?)
         })?;
         spawn_browser_on_path(&output_path)?;
-    } else {
+    }
+
+    if do_print {
         let mut output = BufWriter::new(stdout().lock());
-        if print_html {
-            print_html_to(&mut output)?;
-        } else {
-            print_markdown_to(&mut output)?;
-        }
+        print_markdown_to(&mut output)?;
         output.flush()?;
     }
 
