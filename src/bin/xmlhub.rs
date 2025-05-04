@@ -518,6 +518,11 @@ struct BuildOpts {
     /// Hub. The default is `.`.
     #[clap(long)]
     base_path: Option<PathBuf>,
+
+    /// The virtual address space limit for the child process carrying
+    /// out a build when in daemon mode, in bytes (default: 3 GiB)
+    #[clap(long)]
+    limit_as: Option<u64>,
 }
 
 #[derive(clap::Parser, Debug)]
@@ -2889,6 +2894,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
         localtime,
         max_log_file_size,
         max_log_files,
+        limit_as,
     } = build_opts;
 
     let no_repo_check = typed_from_no_repo_check(no_repo_check);
@@ -2990,14 +2996,9 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                     || {
                         // Set resource limits in case there are issues that
                         // lead to overuse of CPU or memory
-                        setrlimit(
-                            Resource::RLIMIT_AS,
-                            AS_BYTES_LIMIT_IN_WORKER_CHILD,
-                            AS_BYTES_LIMIT_IN_WORKER_CHILD,
-                        )
-                        .with_context(|| {
-                            anyhow!("setting RLIMIT_AS to {AS_BYTES_LIMIT_IN_WORKER_CHILD}")
-                        })?;
+                        let limit_as = limit_as.unwrap_or(AS_BYTES_LIMIT_IN_WORKER_CHILD);
+                        setrlimit(Resource::RLIMIT_AS, limit_as, limit_as)
+                            .with_context(|| anyhow!("setting RLIMIT_AS to {limit_as}"))?;
                         setrlimit(
                             Resource::RLIMIT_CPU,
                             CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
@@ -3715,6 +3716,7 @@ fn main() -> Result<()> {
                     localtime,
                     max_log_file_size,
                     max_log_files,
+                    limit_as,
                 }) => {
                     // Create uninitialized variables without the underscores,
                     // then initialize them differently depending on some of the
@@ -3788,6 +3790,7 @@ fn main() -> Result<()> {
                             localtime,
                             max_log_file_size,
                             max_log_files,
+                            limit_as,
                         })),
                     }
                 }
