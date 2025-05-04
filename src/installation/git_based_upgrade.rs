@@ -299,17 +299,7 @@ pub fn git_based_upgrade(rules: UpgradeRules, upgrades_log_base: &Path) -> Resul
                 let changelog = Changelog::from_str(&changelog_string)?;
                 let part =
                     changelog.get_between_versions(true, false, Some(&current_version), None)?;
-                // XX should share the settings with `changelog_command`
-                ChangelogDisplay {
-                    changelog: &part,
-                    generate_title: true,
-                    style: ChangelogDisplayStyle::ReleasesAsSections {
-                        print_colon_after_release: true,
-                        newest_section_first: false,
-                        newest_item_first: false,
-                    },
-                }
-                .to_string()
+                changelog_display(&part).to_string()
             };
 
             let changelog_output = format!(
@@ -338,4 +328,20 @@ pub fn git_based_upgrade(rules: UpgradeRules, upgrades_log_base: &Path) -> Resul
     }
 
     Ok(())
+}
+
+/// Show a changelog (`ChangelogDisplay` implements `Display`) in the
+/// way appropriate for upgrades (and probably other situations).
+pub fn changelog_display<'s: 't, 't, 't0: 't, 't1>(
+    changelog: &'t1 Changelog<'s, 't, 't0>,
+) -> ChangelogDisplay<'s, 't, 't0, 't1> {
+    ChangelogDisplay {
+        changelog,
+        generate_title: true,
+        style: ChangelogDisplayStyle::ReleasesAsSections {
+            print_colon_after_release: true,
+            newest_section_first: false,
+            newest_item_first: false,
+        },
+    }
 }

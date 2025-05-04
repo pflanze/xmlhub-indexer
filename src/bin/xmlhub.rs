@@ -33,7 +33,7 @@ use walkdir::WalkDir;
 use xmlhub_indexer::{
     backoff::{LoopVerbosity, LoopWithBackoff},
     browser::{spawn_browser, spawn_browser_on_path},
-    changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle},
+    changelog::Changelog,
     checkout_context::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
     },
@@ -46,7 +46,7 @@ use xmlhub_indexer::{
     git_version::{GitVersion, SemVersion},
     installation::{
         defaults::global_app_state_dir,
-        git_based_upgrade::{git_based_upgrade, UpgradeRules},
+        git_based_upgrade::{changelog_display, git_based_upgrade, UpgradeRules},
     },
     modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, CURRENT_DIRECTORY},
@@ -2843,21 +2843,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
     let part =
         changelog.get_between_versions(allow_downgrades, false, from.as_ref(), to.as_ref())?;
 
-    let print_markdown_to = |out: &mut dyn Write| {
-        write!(
-            out,
-            "{}",
-            ChangelogDisplay {
-                changelog: &part,
-                generate_title: true,
-                style: ChangelogDisplayStyle::ReleasesAsSections {
-                    print_colon_after_release: true,
-                    newest_section_first: false,
-                    newest_item_first: false,
-                },
-            }
-        )
-    };
+    let print_markdown_to = |out: &mut dyn Write| write!(out, "{}", changelog_display(&part));
 
     let print_html_to = |output: &mut dyn Write| -> Result<()> {
         let mut out = Vec::new();
