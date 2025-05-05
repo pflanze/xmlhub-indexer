@@ -409,6 +409,23 @@ lazy_static! {
         .collect();
 }
 
+/// Sort a sequence of attribute name / value pairings in the same
+/// order as given in `METADATA_SPECIFICATION`, with gaps where an
+/// attribute name is not present.
+pub fn sort_in_definition_order<T>(
+    key_vals: impl IntoIterator<Item = (AttributeName, T)>,
+) -> Vec<(AttributeName, Option<T>)> {
+    let mut result: Vec<_> = METADATA_SPECIFICATION
+        .iter()
+        .map(|spec| (spec.key, None))
+        .collect();
+    for (key, val) in key_vals {
+        let i = METADATA_KEY_POSITION[&key];
+        result[i].1 = Some(val);
+    }
+    result
+}
+
 /// Settings and a method for the conversion of a value (string) into
 /// the key string to be used in an index entry (e.g. an item of
 /// `Packages` like "BDSKY 1.2.3" might be converted to "BDSKY", or a

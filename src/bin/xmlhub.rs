@@ -72,8 +72,8 @@ use xmlhub_indexer::{
     },
     xmlhub_install::{install_command, InstallOpts},
     xmlhub_metadata::{
-        AttributeKind, AttributeName, AttributeNeed, AttributeSpecification, KeyStringPreparation,
-        METADATA_KEY_POSITION, METADATA_SPECIFICATION,
+        sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed,
+        AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
     },
     xmlhub_types::OutputFile,
 };
@@ -827,15 +827,7 @@ impl Metadata {
     /// `METADATA_SPECIFICATION`, with gaps where a key wasn't given
     /// in the file.
     fn sorted_entries(&self) -> Vec<(AttributeName, Option<&AttributeValue>)> {
-        let mut result: Vec<_> = METADATA_SPECIFICATION
-            .iter()
-            .map(|spec| (spec.key, None))
-            .collect();
-        for (key, attval) in &self.0 {
-            let i = METADATA_KEY_POSITION[key];
-            result[i].1 = Some(attval);
-        }
-        result
+        sort_in_definition_order(self.0.iter().map(|(k, v)| (*k, v)))
     }
 
     /// An HTML table with all metadata.
