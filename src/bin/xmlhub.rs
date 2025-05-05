@@ -2853,7 +2853,8 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
 
     if open_or_print.do_open() {
         let base = global_app_state_dir()?.docs_base(PROGRAM_VERSION)?;
-        let output_path = base.append("changes.html");
+        let filename = format!("{}.html", part.display_title(false).0);
+        let output_path = base.append(filename);
         with_output_to_file(&output_path, |output| -> Result<()> {
             Ok(print_html_to(output)?)
         })?;

@@ -91,7 +91,7 @@ impl<'s: 't, 't, 't0: 't, 't1> Display for ChangelogDisplay<'s, 't, 't0, 't1> {
         } = self;
 
         if *generate_title {
-            f.write_str(&changelog.display_title())?;
+            writeln!(f, "# {}", changelog.display_title(true).0)?;
         }
 
         match style {
@@ -198,25 +198,34 @@ impl<'s: 't, 't, 't0> Changelog<'s, 't, 't0> {
         sections
     }
 
-    pub fn display_title(&self) -> String {
+    /// Returns "Changes" document title string (with ucfirst
+    /// "Changes") and whether it is actually more than just "Changes"
+    pub fn display_title(&self, show_downgrade: bool) -> (String, bool) {
         let from_or_since = if self.include_from { "from" } else { "since" };
         let from_or_since_from = self
             .from
             .as_ref()
-            .map(|v| format!("{from_or_since} version {v}"))
+            .map(|v| format!(" {from_or_since} version {v}"))
             .unwrap_or("".into());
         let until_to = self
             .to
             .as_ref()
-            .map(|v| format!("until version {v}"))
+            .map(|v| format!(" until version {v}"))
             .unwrap_or("".into());
-        format!(
-            "# Changes {from_or_since_from} {until_to}{}",
-            if self.is_downgrade {
+        let has_downgrade;
+        let title = format!(
+            "Changes{from_or_since_from}{until_to}{}",
+            if self.is_downgrade && show_downgrade {
+                has_downgrade = true;
                 " (for downgrade)"
             } else {
+                has_downgrade = false;
                 ""
             }
+        );
+        (
+            title,
+            self.from.is_some() || self.to.is_some() || has_downgrade,
         )
     }
 
