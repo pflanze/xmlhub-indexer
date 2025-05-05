@@ -76,38 +76,56 @@ struct HelpPageInfo {
     body: AId<Node>,
 }
 
-/// Choice of a particular page from the set of help pages.
-#[derive(Clone, Copy, PartialEq)]
-pub enum WhichPage {
-    Start,
-    Attributes,
+macro_rules! def_enum_with_list{
+    { $t:tt { $($case:tt,)* } } => {
+        #[derive(Clone, Copy, PartialEq)]
+        pub enum $t {
+            $($case,)*
+        }
+        impl $t {
+            fn list() -> &'static [$t] {
+                use $t::*;
+                &[$($case,)*]
+            }
+        }
+    }
 }
 
-impl WhichPage {
-    fn list() -> &'static [WhichPage] {
-        use WhichPage::*;
-        &[Start, Attributes]
-    }
+// Choice of a particular page from the set of help pages.
+def_enum_with_list!(WhichPage {
+    Start,
+    Attributes,
+    MacOS,
+});
 
+impl WhichPage {
     fn create_page(self, html: &HtmlAllocator) -> Result<HelpPageInfo> {
         match self {
             WhichPage::Start => {
-                const DOCS_START: &str = include_str!("../docs/start.md");
-                let processed = markdown_to_html(DOCS_START, &html)?;
+                let body = markdown_to_html(include_str!("../docs/start.md"), &html)?.html();
                 Ok(HelpPageInfo {
                     which_page: self,
                     file_name: "start.html",
-                    title: "start",
-                    body: processed.html(),
+                    title: "Start",
+                    body,
                 })
             }
             WhichPage::Attributes => {
-                let processed = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
+                let body = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html();
                 Ok(HelpPageInfo {
                     which_page: self,
                     file_name: "attributes.html",
-                    title: "attributes list",
-                    body: processed.html(),
+                    title: "Attributes list",
+                    body,
+                })
+            }
+            WhichPage::MacOS => {
+                let body = markdown_to_html(include_str!("../docs/macos.md"), &html)?.html();
+                Ok(HelpPageInfo {
+                    which_page: self,
+                    file_name: "macos.html",
+                    title: "macOS",
+                    body,
                 })
             }
         }
