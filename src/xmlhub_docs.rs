@@ -69,13 +69,6 @@ pub fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'stat
     ]])))
 }
 
-/// Choice of a particular page from the set of help pages.
-#[derive(Clone, Copy, PartialEq)]
-pub enum WhichPage {
-    Start,
-    Attributes,
-}
-
 struct HelpPageInfo {
     which_page: WhichPage,
     file_name: &'static str,
@@ -83,25 +76,42 @@ struct HelpPageInfo {
     body: AId<Node>,
 }
 
-fn create_start_page(html: &HtmlAllocator) -> Result<HelpPageInfo> {
-    const DOCS_START: &str = include_str!("../docs/start.md");
-    let processed = markdown_to_html(DOCS_START, &html)?;
-    Ok(HelpPageInfo {
-        which_page: WhichPage::Start,
-        file_name: "start.html",
-        title: "start",
-        body: processed.html(),
-    })
+/// Choice of a particular page from the set of help pages.
+#[derive(Clone, Copy, PartialEq)]
+pub enum WhichPage {
+    Start,
+    Attributes,
 }
 
-fn create_attributes_page(html: &HtmlAllocator) -> Result<HelpPageInfo> {
-    let processed = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
-    Ok(HelpPageInfo {
-        which_page: WhichPage::Attributes,
-        file_name: "attributes.html",
-        title: "attributes list",
-        body: processed.html(),
-    })
+impl WhichPage {
+    fn list() -> &'static [WhichPage] {
+        use WhichPage::*;
+        &[Start, Attributes]
+    }
+
+    fn create_page(self, html: &HtmlAllocator) -> Result<HelpPageInfo> {
+        match self {
+            WhichPage::Start => {
+                const DOCS_START: &str = include_str!("../docs/start.md");
+                let processed = markdown_to_html(DOCS_START, &html)?;
+                Ok(HelpPageInfo {
+                    which_page: self,
+                    file_name: "start.html",
+                    title: "start",
+                    body: processed.html(),
+                })
+            }
+            WhichPage::Attributes => {
+                let processed = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?;
+                Ok(HelpPageInfo {
+                    which_page: self,
+                    file_name: "attributes.html",
+                    title: "attributes list",
+                    body: processed.html(),
+                })
+            }
+        }
+    }
 }
 
 // Create multiple/all help pages, so that they can link to each
@@ -112,9 +122,10 @@ fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Resul
 
     let output_path_base = global_app_state_dir()?.docs_base(program_version)?;
 
-    let mut page_infos: Vec<HelpPageInfo> = Vec::new();
-    page_infos.push(create_start_page(&html)?);
-    page_infos.push(create_attributes_page(&html)?);
+    let page_infos: Vec<HelpPageInfo> = WhichPage::list()
+        .iter()
+        .map(|which| which.create_page(&html))
+        .collect::<Result<_>>()?;
 
     let nav_for_page = |this_page: &HelpPageInfo| -> Result<AId<Node>> {
         let mut items = html.new_vec();
