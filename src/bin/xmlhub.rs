@@ -1027,19 +1027,6 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
-            key: AttributeName("Citation"),
-            desc: "Papers that this file was used for, or that describe it.",
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::StringList {
-                input_separator: "|",
-            },
-            autolink: Autolink::Web,
-            indexing: AttributeIndexing::Index {
-                first_word_only: false,
-                use_lowercase: false,
-            },
-        },
-        AttributeSpecification {
             key: AttributeName("DOI"),
             desc: "DOI of papers that this file was used for, or that describe it.",
             need: AttributeNeed::Optional,
@@ -1047,6 +1034,20 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
                 input_separator: ",",
             },
             autolink: Autolink::Doi,
+            indexing: AttributeIndexing::Index {
+                first_word_only: false,
+                use_lowercase: false,
+            },
+        },
+        AttributeSpecification {
+            key: AttributeName("Citation"),
+            desc: "Papers for which no DOI could be provided under `DOI`. Do *not* \
+                   provide information about papers here for which you have provided the `DOI`!",
+            need: AttributeNeed::Optional,
+            kind: AttributeKind::StringList {
+                input_separator: "|",
+            },
+            autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
                 use_lowercase: false,
