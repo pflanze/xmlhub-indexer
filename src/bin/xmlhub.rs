@@ -953,6 +953,10 @@ fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'static>>
         .into(),
         "(If you have a suggestion for another metadata field, tell your XML Hub maintainer!)"
             .into(),
+        "Note: you can use the xmlhub command line tool, via `xmlhub prepare` or \
+         `xmlhub add-to`, to get a template of these attributes into your file, \
+         so you don't have to add these headers individually yourself!"
+            .into(),
         spec_html.into(),
     ]])))
 }
