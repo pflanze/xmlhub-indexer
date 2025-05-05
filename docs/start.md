@@ -64,7 +64,7 @@ to adapt them in case you need to do things a bit differently.
 
 1. To copy an XML file: `xmlhub add-to <path-to-directory> <path-to-your-file.xml>`. If you ran the `cd <Your subdirectory name>` above, then `<path-to-directory>` is just `.`. Note that the `add-to` does remove sequences data by default. Read the terminal output to see if it did and what option to use to keep it.
 
-    Alternatively, you can copy XML files into the xmlhub checkout via the mac finder, then afterwards run: `xmlhub prepare <path-to-your-file.xml>`.
+    Alternatively, you can copy XML files into the xmlhub checkout via the macOS finder, then afterwards run: `xmlhub prepare <path-to-your-file.xml>`.
 
 1. Edit the copied / prepared XML file(s) with your editor of choice. `open <path-to-your-file.xml>` might open the file in the right editor, otherwise find your xmlhub clone from the editor's user interface.
 
@@ -72,7 +72,7 @@ to adapt them in case you need to do things a bit differently.
 
 1. Run `xmlhub check --open <path-to-your-file(s).xml>`. If this shows errors, you need to fix the problems. If on the other hand it opens the web brower, you can verify that the generated index lists your file(s) the way you wanted. You can run this command repeatedly, until you are satisfied with your edits.
 
-1. Once you're done preparing your files, run `git add <path-to-your-file(s).xml>`, or `git add .` when inside the folder with your files, then `git commit -m "my commit message"`. Change "my commit message" to be somewhat descriptive. You can also run `git commit`, that opens the editor set in the `EDITOR` environment variable, on the mac, that is by default vim. If you don't know how to use this editor, just type `:`, `q`, then the return key, to get out of it.
+1. Once you're done preparing your files, run `git add <path-to-your-file(s).xml>`, or `git add .` when inside the folder with your files, then `git commit -m "my commit message"`. Change "my commit message" to be somewhat descriptive. You can also run `git commit`, that opens the editor set in the `EDITOR` environment variable, on macOS, that is by default vim. If you don't know how to use this editor, just type `:`, `q`, then the return key, to get out of it.
 
 1. To conclude your contribution, run `xmlhub build`, which updates the index to the latest files and verifies that you didn't forget to add or commit any files. In case it shows errors about files that are not yours, add the `--write-errors` option to force it to accept the state anyway. Then run `git push` to push your changes to GitLab. Congrats, now your changes should be visible from the GitLab web user interface at [https://cevo-git.ethz.ch/cevo-resources/xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub), too. Thanks!
 
