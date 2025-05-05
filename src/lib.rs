@@ -38,6 +38,7 @@ pub mod xmlhub_autolink;
 pub mod xmlhub_check_version;
 pub mod xmlhub_clone_to;
 pub mod xmlhub_docs;
+pub mod xmlhub_fileinfo;
 pub mod xmlhub_global_opts;
 pub mod xmlhub_help;
 pub mod xmlhub_indexer_defaults;

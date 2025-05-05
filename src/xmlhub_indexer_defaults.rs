@@ -2,7 +2,8 @@
 //! is also covering application upgrades now. (TODO: clean up)
 use std::sync::Arc;
 
-use ahtml::HtmlAllocatorPool;
+use ahtml::{att, AId, HtmlAllocator, HtmlAllocatorPool, Node};
+use anyhow::Result;
 use lazy_static::lazy_static;
 
 use crate::checkout_context::CheckoutContext;
@@ -69,4 +70,93 @@ lazy_static! {
         true, // verify HTML correctness
         Arc::new(format!("change the limit in {}:{}", file!(), line!()))
     );
+}
+
+/// Used afer a value for linking back to the index entry (similar to
+/// linking back from a footnote)
+pub const BACK_TO_INDEX_SYMBOL: &str = "↑";
+
+/// Return the html code for loading the document symbol image
+pub fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
+    /// The symbol to use in the index page for links to the original
+    /// XML file.
+    const DOCUMENT_SYMBOL_PATH: &str = ".index/document.svg";
+
+    html.img(
+        [
+            att("src", DOCUMENT_SYMBOL_PATH),
+            att("style", "vertical-align: -2px;"),
+        ],
+        [],
+    )
+}
+
+pub const FILEINFO_PATH_BGCOLOR: &str = "#cec7f2";
+pub const FILEINFO_METADATA_BGCOLOR: &str = "#e3e7ff";
+
+/// CSS style information; only useful for the .html file, not
+/// included in the .md file as GitLab will ignore it anyway when
+/// formatting that file.
+pub fn css_styles() -> String {
+    [
+        "
+/* make sections/subsections stand out more */
+h2 {
+  margin-top: 40px;
+}
+
+h3 {
+  border-bottom: 2px solid #407cd9;
+  margin-top: 40px;
+}
+
+/* a TABLE */
+.fileinfo {
+  border-spacing: 0px;
+  margin-bottom: 20px; /* should instead use a grid something so that fileinfo is reusable */
+}
+/* a TD */
+.fileinfo_path {
+  background-color: ",
+        FILEINFO_PATH_BGCOLOR,
+        ";
+  font-weight: bold;
+}
+/* a TR */
+.fileinfo_metadata {
+  background-color: ",
+        FILEINFO_METADATA_BGCOLOR,
+        ";
+}
+/* a TD */
+.metadata_key {
+  vertical-align: top;
+  text-align: right;
+  font-style: italic;
+  padding-right: 6px;
+  padding-left: 2px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+/* a TD */
+.metadata_value {
+  padding: 2px;
+}
+.key_dl {
+}
+.key_dt {
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
+}
+.key_dd {
+}
+/* a STRONG */
+.key {
+}
+/* a DIV */
+.file_link {
+}
+",
+    ]
+    .join("")
 }
