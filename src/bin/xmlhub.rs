@@ -256,8 +256,7 @@ fn get_beast_version(document: &Document) -> Result<BeastVersion> {
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
 #[clap(set_term_width = get_terminal_width())]
-/// Build an index of the files in the XML Hub of the
-/// cEvo group at the D-BSSE, ETH Zurich.
+/// A tool to work with XML Hub, a Git repository of BEAST2 files.
 /// Start with the "docs" subcommand, it will tell you how to use
 /// this program!
 struct Opts {
