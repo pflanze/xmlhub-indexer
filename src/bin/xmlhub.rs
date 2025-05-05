@@ -258,9 +258,8 @@ fn get_beast_version(document: &Document) -> Result<BeastVersion> {
 #[clap(set_term_width = get_terminal_width())]
 /// Build an index of the files in the XML Hub of the
 /// cEvo group at the D-BSSE, ETH Zurich.
-///
-/// ** Start with the "docs" subcommand, it will tell you how to use
-/// this program. **
+/// Start with the "docs" subcommand, it will tell you how to use
+/// this program!
 struct Opts {
     /// Show the program version (it was copied from `git describe
     /// --tags ..` at compile time) as well as some other information
