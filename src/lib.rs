@@ -18,6 +18,7 @@ pub mod git;
 pub mod git_check_version;
 pub mod git_version;
 pub mod hack09;
+pub mod html_util;
 pub mod installation;
 pub mod modified_document;
 pub mod modified_xml_document;

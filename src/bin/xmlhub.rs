@@ -44,6 +44,7 @@ use xmlhub_indexer::{
     get_terminal_width::get_terminal_width,
     git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
     git_version::{GitVersion, SemVersion},
+    html_util::extract_paragraph_body,
     installation::{
         binaries_repo::Os,
         defaults::global_app_state_dir,
@@ -826,8 +827,8 @@ impl AttributeIndexing {
 #[derive(Debug)]
 struct AttributeSpecification {
     key: AttributeName,
-    /// Description for the help text /
-    /// `ATTRIBUTE_SPECIFICATION_FILENAME` file
+    /// Description for the "Metainfo attributes" help file, in
+    /// Markdown format
     desc: &'static str,
     need: AttributeNeed,
     kind: AttributeKind,
@@ -856,11 +857,16 @@ impl AttributeSpecification {
             autolink,
             indexing,
         } = self;
+        let desc_html = markdown_to_html(desc, html)?.html();
+        // markdown_to_html wraps paragraphs in <p> even if it's just
+        // one of them; strip that if possible:
+        let desc_stripped = extract_paragraph_body(desc_html, true, html);
+
         html.tr(
             [],
             [
                 html.td([], html.i([], html.text(key.as_ref())?)?)?,
-                html.td([], html.text(desc)?)?,
+                html.td([], desc_stripped)?,
                 html.td(
                     [],
                     html.text(match need {
