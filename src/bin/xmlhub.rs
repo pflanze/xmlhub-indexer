@@ -1028,7 +1028,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Citation"),
-            desc: "Papers this file was used for, or relates to.",
+            desc: "Papers that this file was used for, or that describe it.",
             need: AttributeNeed::Optional,
             kind: AttributeKind::StringList {
                 input_separator: "|",
@@ -1041,7 +1041,7 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
-            desc: "DOI of the papers listed in `Citation'.",
+            desc: "DOI of papers that this file was used for, or that describe it.",
             need: AttributeNeed::Optional,
             kind: AttributeKind::StringList {
                 input_separator: ",",
