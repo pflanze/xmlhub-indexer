@@ -1392,11 +1392,20 @@ fn parse_comments<'a>(
         })
         .collect();
     if !missing.is_empty() {
-        pluralized! { missing.len() => attributes, these, names, are }
+        let sorted_missing: Vec<AttributeName> =
+            sort_in_definition_order(missing.into_iter().map(|k| (k, ())))
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    v?;
+                    Some(k)
+                })
+                .collect();
+
+        pluralized! { sorted_missing.len() => attributes, these, names, are }
         errors.push(format!(
             "{attributes} with {these} {names} {are} missing: {}",
             // Show just the names, not the AttributeName wrappers
-            format_string_list(&missing),
+            format_string_list(&sorted_missing),
         ));
     }
 
