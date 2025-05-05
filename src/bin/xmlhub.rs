@@ -1028,14 +1028,16 @@ const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Citation"),
-            // XX that is the meaning, right? used for?
             desc: "Papers this file was used for, or relates to.",
             need: AttributeNeed::Optional,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
+            kind: AttributeKind::StringList {
+                input_separator: "|",
             },
             autolink: Autolink::Web,
-            indexing: AttributeIndexing::NoIndex,
+            indexing: AttributeIndexing::Index {
+                first_word_only: false,
+                use_lowercase: false,
+            },
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
