@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::{
     git_version::{GitVersion, SemVersion},
     xmlhub_check_version::XmlhubCheckVersion,
-    xmlhub_indexer_defaults::XMLHUB_BINARY_FILE_NAME,
+    xmlhub_indexer_defaults::PROGRAM_NAME,
     xmlhub_types::OutputFile,
 };
 
@@ -20,9 +20,6 @@ pub const HTML_FILE: OutputFile = OutputFile {
 pub const MD_FILE: OutputFile = OutputFile {
     path_from_repo_top: "README.md",
 };
-
-/// The name of the command line program.
-pub const PROGRAM_NAME: &str = XMLHUB_BINARY_FILE_NAME;
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct VerbosityOpt {

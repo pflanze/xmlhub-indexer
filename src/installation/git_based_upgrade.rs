@@ -18,8 +18,7 @@ use crate::{
     path_util::{add_extension, AppendToPath},
     sha256::sha256sum,
     util::ask_yn,
-    xmlhub_global_opts::PROGRAM_NAME,
-    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
+    xmlhub_indexer_defaults::{BINARIES_CHECKOUT, PROGRAM_NAME, XMLHUB_BINARY_FILE_NAME},
 };
 
 use super::{

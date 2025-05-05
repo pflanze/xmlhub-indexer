@@ -7,7 +7,7 @@ use crate::{
             carry_out_install_action_with_log, InstallAction, InstallActionWithLog,
         },
     },
-    xmlhub_global_opts::PROGRAM_NAME,
+    xmlhub_indexer_defaults::PROGRAM_NAME,
 };
 
 #[derive(clap::Parser, Debug, Clone)]
