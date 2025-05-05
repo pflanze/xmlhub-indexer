@@ -157,7 +157,8 @@ e.g. crontab.
 
 Besides those settings changeable via command line options, there are
 various others hard coded but defined near the top of the main program
-file, [`xmlhub.rs`](src/bin/xmlhub.rs), and
+file, [`xmlhub.rs`](src/bin/xmlhub.rs), or
+[`xmlhub_indexer_defaults.rs`](src/xmlhub_indexer_defaults.rs), and
 can be changed easily enough, although you will need to recompile the
 program for that--see the [From source](#from-source) and [Maintaining
 and changing the program](#Maintaining-and-changing-the-program)
@@ -188,12 +189,12 @@ the time of writing.
     is required.
     
   - Attribute keys (names) are case insensitive. They should be
-    specified in the program source code (in `METADATA_SPECIFICATION`)
-    in proper spelling, since that is what is used for display in the
-    index pages.
+    specified in the program source code (in `METADATA_SPECIFICATION`,
+    see further below for where to find this) in proper spelling,
+    since that is what is used for display in the index pages.
     
   - Attribute order in the XML file doesn't matter; for display, the
-    one given in `METADATA_SPECIFICATION` is used.
+    order as given in `METADATA_SPECIFICATION` is used.
     
   - Attributes that take lists of values can be split on whatever one
     configures in the `input_separator` field of
@@ -260,15 +261,16 @@ name completion, type display, function documentation display etc. So
 if you want to do larger changes, you should definitely use an editor
 with good Rust development support.
 
-The main program file is
-[`src/bin/xmlhub.rs`](src/bin/xmlhub.rs). It shouldn't be
-necessary to change anything in the other files.
+The main program file is [`src/bin/xmlhub.rs`](src/bin/xmlhub.rs), but
+some core functionality now lives in the `src/xmlhub_*.rs` files.  It
+shouldn't be necessary to change anything in the other files.
 
 The thing you most likely want to update is the
-`METADATA_SPECIFICATION` constant. The entries here describe which
-metadata keys are valid, and how they are parsed and indexed. You can
-introduce new metadata types simply by adding/changing
-`AttributeSpecification` entries here.
+`METADATA_SPECIFICATION` constant in
+[`src/xmlhub_metadata.rs`](src/xmlhub_metadata.rs). The entries here
+describe which metadata keys are valid, and how they are parsed and
+indexed. You can introduce new metadata types simply by
+adding/changing `AttributeSpecification` entries here.
 
 The `main` function, which is the last item in the
 [`src/bin/xmlhub.rs`](src/bin/xmlhub.rs) file
