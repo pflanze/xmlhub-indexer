@@ -64,7 +64,7 @@ use xmlhub_indexer::{
         docs_command, flatten_as_paragraphs, help_attributes_command, help_contributing_command,
         make_attributes_md, HelpAttributesOpts, CONTRIBUTE_FILENAME,
     },
-    xmlhub_file_issues::FileErrors,
+    xmlhub_file_issues::{FileErrors, FileIssues},
     xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
     xmlhub_global_opts::{
         git_log_version_checker, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
