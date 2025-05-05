@@ -1,10 +1,22 @@
 # Contributing to XML Hub with the `xmlhub` tool
 
-While you can work without the `xmlhub` tool--either with just Git and
+The XML Hub is a Git repository with BEAST2 XML files to learn from.
+
+The `xmlhub` tool has two purposes:
+
+1. It builds an index of the files to make it easier to find files when you're looking for a solution for some problem.
+
+1. It helps contributing your own XML files to the repository.
+
+It is currently a command line tool meant to download and use locally.
+While you can work without it--either with just Git and
 a text editor or even by using the GitLab web user interface--using
 the tool will make you more efficient. Here are the steps to
-follow. Note that all commands also have help directly in the
-terminal, via `xmlhub --help` or `xmlhub <subcommand> --help`.
+follow to contribute using it.
+
+Note that all `xmlhub` subcommands also have help directly in the
+terminal: run `xmlhub --help` for an overview over all subcommands, or
+`xmlhub <subcommand> --help` for the help on a particular subcommand.
 
 ## Making sure you have the tool
 
