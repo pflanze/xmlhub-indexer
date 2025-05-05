@@ -14,10 +14,10 @@ use crate::{
     installation::defaults::global_app_state_dir,
     path_util::AppendToPath,
     string_tree::StringTree,
+    xmlhub_attributes::{specifications_to_html, METADATA_SPECIFICATION},
     xmlhub_global_opts::OpenOrPrintOpts,
     xmlhub_help::save_basic_standalone_html_page,
     xmlhub_indexer_defaults::{GENERATED_MESSAGE, HTML_ALLOCATOR_POOL},
-    xmlhub_metadata::{specifications_to_html, METADATA_SPECIFICATION},
 };
 
 pub fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {

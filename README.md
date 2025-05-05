@@ -267,7 +267,7 @@ shouldn't be necessary to change anything in the other files.
 
 The thing you most likely want to update is the
 `METADATA_SPECIFICATION` constant in
-[`src/xmlhub_metadata.rs`](src/xmlhub_metadata.rs). The entries here
+[`src/xmlhub_attributes.rs`](src/xmlhub_attributes.rs). The entries here
 describe which metadata keys are valid, and how they are parsed and
 indexed. You can introduce new metadata types simply by
 adding/changing `AttributeSpecification` entries here.

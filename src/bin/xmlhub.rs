@@ -55,6 +55,10 @@ use xmlhub_indexer::{
     util::{append, list_get_by_key, with_output_to_file, InsertValue},
     utillib::setpriority::{possibly_setpriority, PriorityWhich},
     xml_document::{read_xml_file, XMLDocumentComment},
+    xmlhub_attributes::{
+        sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed,
+        AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
+    },
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
@@ -71,10 +75,6 @@ use xmlhub_indexer::{
         GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, PROGRAM_NAME, SOURCE_CHECKOUT, XMLHUB_CHECKOUT,
     },
     xmlhub_install::{install_command, InstallOpts},
-    xmlhub_metadata::{
-        sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed,
-        AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
-    },
     xmlhub_types::OutputFile,
 };
 
