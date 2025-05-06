@@ -179,10 +179,11 @@ impl FromStr for BeastVersion {
         if parts.len() < 2 {
             bail!("not a BEAST version number, misses a '.': {string:?}")
         } else {
-            let product_num = u16::from_str(parts[0]).with_context(|| {
+            let product_str = parts[0];
+            let product_num = u16::from_str(product_str).with_context(|| {
                 anyhow!(
-                    "not a BEAST version number, the product number part is \
-                     not an unsigned integer: {string:?}"
+                    "{string:?} is not a BEAST version number, the product number part \
+                     {product_str:?} is not an unsigned integer"
                 )
             })?;
             Ok(Self {
