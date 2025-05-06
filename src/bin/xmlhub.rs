@@ -1770,7 +1770,7 @@ fn build_index(
     if write_errors_to_stderr {
         let mut out = stderr().lock();
         (|| -> Result<()> {
-            writeln!(&mut out, "Indexing errors:")?;
+            writeln!(&mut out, "\nIndexing errors:")?;
             for file_errors in file_errorss {
                 file_errors.print_plain(&mut out)?
             }
@@ -1782,7 +1782,7 @@ fn build_index(
     if write_warnings_to_stderr {
         let mut out = stderr().lock();
         (|| -> Result<()> {
-            writeln!(&mut out, "Indexing warnings:")?;
+            writeln!(&mut out, "\nIndexing warnings:")?;
             for warning in warningss {
                 warning.print_plain(&mut out)?
             }
