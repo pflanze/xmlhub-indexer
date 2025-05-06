@@ -51,7 +51,7 @@ impl AttributeValue {
                 AttributeNeed::Required => {
                     bail!(
                         "attribute {:?} requires {}, but none given",
-                        spec.key,
+                        spec.key.as_ref(),
                         if spec.kind.is_list() {
                             "values"
                         } else {
