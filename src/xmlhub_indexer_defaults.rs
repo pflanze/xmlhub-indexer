@@ -87,6 +87,9 @@ lazy_static! {
     );
 }
 
+// -----------------------------------------------------------------------------
+// HTML generation settings
+
 // `HtmlAllocator` is an allocator for HTML elements (it manages
 // memory efficiently, and provides a method for each HTML element by
 // its name, e.g. `html.p(...)` creates a `<p>...</p>`

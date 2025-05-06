@@ -341,4 +341,12 @@ impl<'d> ModifiedXMLDocument<'d> {
     pub fn to_string_and_modified(&mut self) -> Result<(String, bool)> {
         self.document.to_string_and_modified()
     }
+
+    pub fn original_len(&self) -> usize {
+        self.document.original_len()
+    }
+
+    pub fn len(&mut self) -> Result<usize> {
+        self.document.len()
+    }
 }

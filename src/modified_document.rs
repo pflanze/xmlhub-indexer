@@ -71,6 +71,7 @@ impl PartialOrd for Modification {
 pub struct ModifiedDocument<'d> {
     string: &'d str,
     modifications: Vec<Modification>,
+    sorted_and_checked: bool,
 }
 
 impl<'d> ModifiedDocument<'d> {
@@ -78,11 +79,31 @@ impl<'d> ModifiedDocument<'d> {
         Self {
             string: document,
             modifications: Vec::new(),
+            sorted_and_checked: true,
         }
     }
 
     pub fn original_str(&self) -> &'d str {
         self.string
+    }
+
+    pub fn original_len(&self) -> usize {
+        self.original_str().len()
+    }
+
+    pub fn len(&mut self) -> Result<usize> {
+        self.sort_and_check_modifications()?;
+        let mut len = self.original_str().len();
+        for modification in &self.modifications {
+            // *Currently* guaranteed that an insertion can't be
+            // deleted, right? The check above verifies that,
+            // *currently*. TODO: test.
+            match modification {
+                Modification::Delete(range) => len -= range.len(),
+                Modification::Insert(_, s) => len += s.len(),
+            }
+        }
+        Ok(len)
     }
 
     /// Whether edits have been carried out; no check is done whether
@@ -99,10 +120,14 @@ impl<'d> ModifiedDocument<'d> {
     /// otherwise a panic will happen in `to_string`, and `write_to`
     /// will output invalid UTF-8!
     pub fn push(&mut self, modification: Modification) {
-        self.modifications.push(modification)
+        self.modifications.push(modification);
+        self.sorted_and_checked = false;
     }
 
     pub fn sort_and_check_modifications(&mut self) -> Result<()> {
+        if self.sorted_and_checked {
+            return Ok(());
+        }
         self.modifications.sort();
         // Check that no deletions overlap with other deletions or
         // inserts (can't insert in the middle of a deletion?, or
@@ -119,6 +144,7 @@ impl<'d> ModifiedDocument<'d> {
             }
             last_modification = Some(modification);
         }
+        self.sorted_and_checked = true;
         Ok(())
     }
 

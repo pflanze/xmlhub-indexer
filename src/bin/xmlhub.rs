@@ -2410,6 +2410,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
                 no_blind,
                 blind_all,
                 blind_comment,
+                recommended_max_file_size_bytes,
             },
         ignore_version,
         quiet,
@@ -2540,6 +2541,18 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
             "NOTE: sequences from this document have been removed \
              (use `--no-blind` to keep them!{more}): {source_path:?}"
         );
+    }
+
+    let len = modified_document.len()?;
+    if len > *recommended_max_file_size_bytes {
+        bail!(
+            "this file is larger than the recommended maximum file size \
+                 ({len} > {recommended_max_file_size_bytes} bytes): {source_path:?}.\n\
+                 Please consider *not* using the `--no-blind` option, or if you \
+                 are convinced it's worth adding such a large file to the repository, \
+                 re-run with the `--recommended_max_file_size_bytes` option \
+                 and a high enough value."
+        )
     }
 
     Ok(PreparedFile {

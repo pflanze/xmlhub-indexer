@@ -93,5 +93,16 @@ pub struct BlindingOpts {
     /// with regards to terms of use and privacy is given.
     #[clap(long)]
     pub blind_comment: Option<String>,
-    // Also move `ignore_version` here?
+
+    /// Contributed files (as added to Git) should be smaller than
+    /// this. `xmlhub` will refuse to accept files larger than
+    /// this. If you want to add files larger than this, you can
+    /// either specify a large enough size here, or you may want to
+    /// decide to allow `xmlhub prepare` to blind the data so that the
+    /// file gets smaller. The size is checked after preparing the
+    /// file, though; if the file is still too large even after
+    /// blinding, you may want to use the `--blind-all` option or find
+    /// out why your file is so large.
+    #[clap(long, default_value = "5000000")]
+    pub recommended_max_file_size_bytes: usize,
 }
