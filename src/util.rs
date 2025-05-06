@@ -265,3 +265,11 @@ fn t_prefix_lines() {
     assert_eq!(t("hi\nthere\n", "  "), "  hi\n  there\n");
     assert_eq!(t("\n\n", "  "), "  \n  \n");
 }
+
+pub fn strip_prefixes<'s>(s: &'s str, prefixes: &[&str]) -> &'s str {
+    let mut s = s;
+    for prefix in prefixes {
+        s = s.strip_prefix(prefix).unwrap_or(s);
+    }
+    s
+}

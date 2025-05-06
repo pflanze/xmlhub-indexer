@@ -7,6 +7,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, Node};
 use anyhow::{bail, Result};
+use pluraless::pluralized;
 
 use crate::{
     git::BaseAndRelPath,
@@ -16,8 +17,10 @@ use crate::{
         AttributeSpecification, METADATA_SPECIFICATION,
     },
     xmlhub_autolink::Autolink,
+    xmlhub_file_issues::{FileIssues, FileWarnings},
     xmlhub_indexer_defaults::{
         document_symbol, BACK_TO_INDEX_SYMBOL, FILEINFO_METADATA_BGCOLOR, FILEINFO_PATH_BGCOLOR,
+        FILEINFO_WARNINGS_BGCOLOR,
     },
 };
 
@@ -205,6 +208,9 @@ impl Metadata {
     /// Retrieve the value for an attribute name.
     pub fn get(&self, key: AttributeName) -> Option<&AttributeValue> {
         self.0.get(&key).or_else(|| {
+            // Double check that the `key` is actually a valid
+            // AttributeName before reporting that no value is present
+            // for that key.
             if list_get_by_key(METADATA_SPECIFICATION, |spec| &spec.key, &key).is_none() {
                 panic!("invalid AttributeName value {key:?}")
             }
@@ -269,6 +275,7 @@ pub struct FileInfo {
     pub id: usize,
     pub path: BaseAndRelPath,
     pub metadata: Metadata,
+    pub warnings: Vec<String>,
 }
 
 // For FileInfo to go into a BTreeSet (`BTreeSet<&FileInfo>` further
@@ -293,6 +300,20 @@ impl PartialEq for FileInfo {
 impl Eq for FileInfo {}
 
 impl FileInfo {
+    /// Give a temporary FileWarnings object with the same trait as
+    /// FileErrors, for warnings display.
+    pub fn opt_warnings(&self) -> Option<FileWarnings> {
+        if self.warnings.is_empty() {
+            None
+        } else {
+            Some(FileWarnings {
+                id: self.id,
+                path: &self.path,
+                warnings: &self.warnings,
+            })
+        }
+    }
+
     /// Show in a box with a table of the metadata
     pub fn to_info_box_html(
         &self,
@@ -347,6 +368,27 @@ impl FileInfo {
                             self.metadata.to_html(html)?,
                         )?,
                     )?,
+                    if let Some(warnings) = self.opt_warnings() {
+                        pluralized! { warnings.issues().len() => Warnings }
+                        html.tr(
+                            [att("class", "fileinfo_warnings")],
+                            html.td(
+                                [att("bgcolor", FILEINFO_WARNINGS_BGCOLOR)],
+                                [
+                                    html.div([], html.b([], html.text(format!("{Warnings}:"))?)?)?,
+                                    html.div(
+                                        [],
+                                        warnings.to_html(
+                                            false, // XX where is this defined?
+                                            "box", html,
+                                        )?,
+                                    )?,
+                                ],
+                            )?,
+                        )?
+                    } else {
+                        html.empty_node()?
+                    },
                 ],
             )?,
         )

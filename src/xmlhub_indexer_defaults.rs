@@ -93,6 +93,7 @@ pub fn document_symbol(html: &HtmlAllocator) -> Result<AId<Node>> {
 
 pub const FILEINFO_PATH_BGCOLOR: &str = "#cec7f2";
 pub const FILEINFO_METADATA_BGCOLOR: &str = "#e3e7ff";
+pub const FILEINFO_WARNINGS_BGCOLOR: &str = "#f8e080";
 
 /// CSS style information; only useful for the .html file, not
 /// included in the .md file as GitLab will ignore it anyway when

@@ -21,7 +21,9 @@ use crate::{
 /// metadata listings in the HTML/Markdown output. To try to avoid
 /// making mistakes, we define a wrapper struct `AttributeName` to
 /// make it clear everywhere whether we're having a string in
-/// canonical casing or not.
+/// canonical casing or not. If you want to get an AttributeName for a
+/// particular attribute by string, use
+/// `attribute_specification_by_name(name).map(|spec| spec.key)`.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct AttributeName(&'static str);
 
@@ -395,6 +397,17 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
     ]
 };
+
+/// Look up an attribute specification by attribute name. Casing must
+/// be identical to the spec or it won't be found!
+pub fn attribute_specification_by_name(
+    name: &'static str,
+) -> Option<&'static AttributeSpecification> {
+    let key = AttributeName(name); // XX why does this need it 'static ??
+    METADATA_SPECIFICATION
+        .iter()
+        .find(move |spec| spec.key == key)
+}
 
 // `lazy_static` sets things up so that the data for the given
 // constant (`METADATA_KEY_POSITION`) is calculated when it is read

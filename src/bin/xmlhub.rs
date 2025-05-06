@@ -2,6 +2,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
+    fmt::Display,
     fs::{create_dir, File},
     io::{stderr, stdout, BufWriter, Write},
     path::{Path, PathBuf},
@@ -50,12 +51,12 @@ use xmlhub_indexer::{
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
     util::format_string_list,
-    util::{append, with_output_to_file, InsertValue},
+    util::{append, strip_prefixes, with_output_to_file, InsertValue},
     utillib::setpriority::{possibly_setpriority, PriorityWhich},
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_attributes::{
-        sort_in_definition_order, AttributeName, AttributeNeed, AttributeSpecification,
-        KeyStringPreparation, METADATA_SPECIFICATION,
+        attribute_specification_by_name, sort_in_definition_order, AttributeName, AttributeNeed,
+        AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
     },
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
@@ -64,7 +65,7 @@ use xmlhub_indexer::{
         docs_command, flatten_as_paragraphs, help_attributes_command, help_contributing_command,
         make_attributes_md, HelpAttributesOpts, CONTRIBUTE_FILENAME,
     },
-    xmlhub_file_issues::{FileErrors, FileIssues},
+    xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
     xmlhub_global_opts::{
         git_log_version_checker, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
@@ -144,7 +145,7 @@ lazy_static! {
 /// What would normally be called the "major" version in a semantic
 /// version is called the product version for BEAST, since BEAST 1, 2,
 /// .. are "totally different products".
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum BeastProductVersion {
     One,
     Two,
@@ -167,7 +168,16 @@ impl TryFrom<u16> for BeastProductVersion {
 #[derive(PartialEq, Eq, Debug)]
 struct BeastVersion {
     product: BeastProductVersion,
+    /// This is the BEAST2 "major" number, if product is `Two`, e.g. "2.7.3" => 7
+    major: Option<u16>,
+    /// The full version string
     string: String,
+}
+
+impl Display for BeastVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.string)
+    }
 }
 
 impl FromStr for BeastVersion {
@@ -186,25 +196,50 @@ impl FromStr for BeastVersion {
                      {product_str:?} is not an unsigned integer"
                 )
             })?;
+            let product = BeastProductVersion::try_from(product_num)
+                .with_context(|| anyhow!("parsing version number string {string:?}"))?;
             Ok(Self {
-                product: BeastProductVersion::try_from(product_num)
-                    .with_context(|| anyhow!("parsing version number string {string:?}"))?,
+                product,
+                major: match product {
+                    BeastProductVersion::Two => {
+                        let major_str = parts[1];
+                        let major_num = u16::from_str(major_str).with_context(|| {
+                            anyhow!(
+                                "not a BEAST version number, the BEAST-major number part is \
+                     not an unsigned integer: {:?} in {string:?}",
+                                major_str
+                            )
+                        })?;
+                        Some(major_num)
+                    }
+                    _ => None,
+                },
                 string,
             })
         }
     }
 }
 
-fn get_beast_version(document: &Document) -> Result<BeastVersion> {
+#[derive(thiserror::Error, Debug)]
+enum GetBeastVersionError {
+    #[error("not a BEAST file, the root element is not a <beast> element")]
+    NotABeastFile,
+    #[error("<beast> element is missing the `version` attribute")]
+    MissingVersionAttribute,
+    #[error("error parsing BEAST version number")]
+    BeastVersionParseError(#[from] anyhow::Error),
+}
+
+fn get_beast_version(document: &Document) -> Result<BeastVersion, GetBeastVersionError> {
     let root_element = document.root_element();
     if root_element.tag_name().name() != "beast" {
         // XX check the namespace?
-        bail!("not a BEAST file, the root element is not a <beast> element");
+        return Err(GetBeastVersionError::NotABeastFile);
     }
     if let Some(version) = root_element.attribute("version") {
-        BeastVersion::from_str(version)
+        Ok(BeastVersion::from_str(version)?)
     } else {
-        bail!("<beast> element is missing the `version` attribute")
+        Err(GetBeastVersionError::MissingVersionAttribute)
     }
 }
 
@@ -1194,6 +1229,12 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
     )
 }
 
+lazy_static! {
+    static ref VERSION_KEY: AttributeName = attribute_specification_by_name("Version")
+        .map(|spec| spec.key)
+        .expect("'Version' attribute definition should always be present");
+}
+
 /// Map each file to the info extracted from it (or `FileErrors`
 /// when there were errors), including path and an id, held in a
 /// `FileInfo` struct. Generate the ids on the go for each of them
@@ -1225,7 +1266,54 @@ fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileError
             // attributes, defining extractors for those, doing
             // the extraction here and adding the results to
             // `FileInfo`.
-            Ok(FileInfo { id, path, metadata })
+
+            // Well, actually checking the version now:
+            let mut warnings = Vec::new();
+
+            match (|| -> Result<_> {
+                let att_val: &AttributeValue = metadata
+                    .get(*VERSION_KEY)
+                    .context("missing 'Version' entry")?;
+                let att_vals = att_val.as_string_list();
+                let user_specified_str = att_vals.first().context("'Version' entry is empty")?;
+                // Have to skip any "BEAST "
+                let user_specified_version_str = strip_prefixes(
+                    user_specified_str,
+                    &["BEAST2 ", "BEAST2", "BEAST ", "BEAST"],
+                )
+                .trim();
+                let user_specified_version = BeastVersion::from_str(user_specified_version_str)?;
+                let user_specified_major: u16 = user_specified_version.major.context(
+                    "provided 'Version' has no BEAST2-major number part \
+                     or is not a BEAST2 version",
+                )?;
+
+                let document_version =
+                    check_beast_version(xmldocument.document(), path.rel_path(), false)?;
+                (|| -> Option<()> {
+                    let found_major: u16 = document_version.major?;
+                    if found_major != user_specified_major {
+                        warnings.push(format!(
+                            "the <beast> element in the document specifies version \
+                             {document_version} with major {found_major}, but the \
+                             user-provided version {user_specified_version} has \
+                             major {user_specified_major}"
+                        ));
+                    }
+                    Some(())
+                })();
+                Ok(())
+            })() {
+                Ok(()) => (),
+                Err(e) => warnings.push(format!("{e}")),
+            }
+
+            Ok(FileInfo {
+                id,
+                path,
+                metadata,
+                warnings,
+            })
         })
         .collect()
 }
@@ -1416,6 +1504,11 @@ fn build_index(
     let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) =
         fileinfo_or_errors.into_iter().partition_result();
 
+    let warningss: Vec<FileWarnings> = file_infos
+        .iter()
+        .filter_map(|info| info.opt_warnings())
+        .collect();
+
     // Build the HTML fragments to use in the HTML page and the Markdown
     // file.
 
@@ -1427,7 +1520,7 @@ fn build_index(
     // returns a tuple with the results, which we then call
     // `transpose` on to move error values up so they (well, the first
     // one found) can easily be propagated via `?`)
-    let (file_info_boxes_section, index_sections_section, errors_section) = (
+    let (file_info_boxes_section, index_sections_section, errors_section, warnings_section) = (
         // Create a Section with boxes with the metainfo for all XML
         // files, in a hierarchy reflecting the folder hierarchy where
         // they are.
@@ -1476,11 +1569,38 @@ fn build_index(
 
                 let mut vec = html.new_vec();
                 for file_errors in &file_errorss {
-                    vec.push_flat(file_errors.to_html(&html)?)?;
+                    vec.push_flat(file_errors.to_html(
+                        true, // XX where is this defined?
+                        "box", &html,
+                    )?)?;
                 }
                 Ok(Some(Section {
                     in_red: true,
                     title: Some("Errors".into()),
+                    intro: Some(html.preserialize(html.dl([], vec)?)?),
+                    subsections: vec![],
+                }))
+            }
+        },
+        // Make an optional `Section` with all the warnings if there
+        // are any -- COPYPASTE from above except for input value,
+        // color, and title.
+        || -> Result<Option<Section>> {
+            if warningss.is_empty() {
+                Ok(None)
+            } else {
+                let html = HTML_ALLOCATOR_POOL.get();
+
+                let mut vec = html.new_vec();
+                for warnings in &warningss {
+                    vec.push_flat(warnings.to_html(
+                        true, // XX where is this defined?
+                        "box", &html,
+                    )?)?;
+                }
+                Ok(Some(Section {
+                    in_red: true,
+                    title: Some("Warnings".into()),
                     intro: Some(html.preserialize(html.dl([], vec)?)?),
                     subsections: vec![],
                 }))
@@ -1498,10 +1618,14 @@ fn build_index(
         title: None,
         intro: None,
         subsections: append(
-            // This converts the optional `errors_section` from an
-            // Option<Section> to a Vec<Section> that contains 0 or 1
-            // sections.
-            errors_section.into_iter().collect::<Vec<_>>(),
+            append(
+                // This converts the optional `errors_section` from an
+                // Option<Section> to a Vec<Section> that contains 0 or 1
+                // sections.
+                errors_section.into_iter().collect::<Vec<_>>(),
+                // Same again,
+                warnings_section.into_iter().collect::<Vec<_>>(),
+            ),
             // Always use the file_info_boxes_section and the index
             // sections.
             vec![index_sections_section, file_info_boxes_section],
@@ -1580,6 +1704,7 @@ fn build_index(
     };
 
     let have_errors = !file_errorss.is_empty();
+    let have_warnings = !warningss.is_empty();
 
     // The behaviour of the program in the face of errors depends on 3
     // command line options. Here's the logic that derives 3
@@ -1613,12 +1738,39 @@ fn build_index(
         }
     }
 
+    let write_warnings_to_stderr;
+    if !have_warnings {
+        write_warnings_to_stderr = false;
+    } else {
+        if write_errors {
+            if silent_on_written_errors {
+                write_warnings_to_stderr = false;
+            } else {
+                write_warnings_to_stderr = true;
+            }
+        } else {
+            write_warnings_to_stderr = true
+        }
+    }
+
     if write_errors_to_stderr {
         let mut out = stderr().lock();
         (|| -> Result<()> {
             writeln!(&mut out, "Indexing errors:")?;
             for file_errors in file_errorss {
                 file_errors.print_plain(&mut out)?
+            }
+            Ok(())
+        })()
+        .context("writing to stderr")?;
+    }
+
+    if write_warnings_to_stderr {
+        let mut out = stderr().lock();
+        (|| -> Result<()> {
+            writeln!(&mut out, "Indexing warnings:")?;
+            for warning in warningss {
+                warning.print_plain(&mut out)?
             }
             Ok(())
         })()
@@ -2211,6 +2363,36 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
     std::process::exit(exit_code);
 }
 
+#[derive(thiserror::Error, Debug)]
+enum CheckBeastVersionError {
+    #[error(
+        "only BEAST2 XML files are supported, unless you provide the --ignore-version \
+         option; file {source_path:?} indicates version {version}"
+    )]
+    NotABeast2File {
+        source_path: PathBuf,
+        version: String,
+    },
+    #[error("can't get BEAST version number")]
+    GetBeastVersionError(#[from] GetBeastVersionError),
+}
+
+fn check_beast_version<P: AsRef<Path>>(
+    document: &Document,
+    source_path: P,
+    ignore_1_2_version: bool,
+) -> Result<BeastVersion, CheckBeastVersionError> {
+    let beast_version = get_beast_version(document)?;
+
+    if !ignore_1_2_version && beast_version.product != BeastProductVersion::Two {
+        return Err(CheckBeastVersionError::NotABeast2File {
+            source_path: source_path.as_ref().to_owned(),
+            version: beast_version.string,
+        });
+    }
+    Ok(beast_version)
+}
+
 struct PreparedFile {
     content: String,
     content_has_changed: bool,
@@ -2241,16 +2423,8 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     let xmldocument = read_xml_file(source_path)
         .with_context(|| anyhow!("loading the XML file {source_path:?}"))?;
 
-    let beast_version = get_beast_version(xmldocument.document())
+    let beast_version = check_beast_version(xmldocument.document(), source_path, ignore_version)
         .with_context(|| anyhow!("preparing the file from {source_path:?}"))?;
-
-    if !ignore_version && beast_version.product != BeastProductVersion::Two {
-        bail!(
-            "only BEAST2 XML files are supported, unless you provide the --ignore-version \
-             option; file {source_path:?} indicates version {}",
-            beast_version.string
-        )
-    }
 
     let mut modified_document = ModifiedXMLDocument::new(&xmldocument);
 
