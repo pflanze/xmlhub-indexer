@@ -31,6 +31,7 @@ pub fn pluralized_let(input: TokenStream) -> TokenStream {
         let PluralizedWord { plural, singular } = xenglish_plural(&var_name);
 
         let code = quote! {
+            #[allow(non_snake_case)]
             let #var_ident = {
                 // Relying on pluraless re-exporting these identifiers
                 // from pluraless_impl
