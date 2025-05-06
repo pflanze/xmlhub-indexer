@@ -46,7 +46,7 @@ use xmlhub_indexer::{
         defaults::global_app_state_dir,
         git_based_upgrade::{changelog_display, git_based_upgrade, UpgradeRules},
     },
-    modified_xml_document::{ClearElementsOpts, ModifiedXMLDocument},
+    modified_xml_document::{ClearAction, ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, CURRENT_DIRECTORY},
     rayon_util::ParRun,
     string_tree::StringTree,
@@ -69,7 +69,7 @@ use xmlhub_indexer::{
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
     xmlhub_global_opts::{
-        git_log_version_checker, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
+        git_log_version_checker, BlindingOpts, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
         VersionCheckOpt, HTML_FILE, MD_FILE,
     },
     xmlhub_help::print_basic_standalone_html_page,
@@ -562,6 +562,8 @@ struct CheckOpts {
 struct PrepareOpts {
     #[clap(flatten)]
     quietness: QuietOpt,
+    #[clap(flatten)]
+    blinding: BlindingOpts,
 
     /// The path(s) to the XML file(s) which should be
     /// modified. Careful: they are modified in place (although the
@@ -571,24 +573,11 @@ struct PrepareOpts {
     /// stripped (unless you provide the `--no-blind` option). .
     files_to_prepare: Vec<PathBuf>,
 
-    /// Do *not* strip the sequences (`<data>` element contents); by
-    /// default they are stripped, as safety measure to avoid
-    /// accidental exposure of private data. If you can publish the
-    /// data and it's not overly large, feel free to use this option!
-    #[clap(long)]
-    no_blind: bool,
-
     /// Allow XML files from BEAST versions other than BEAST2. Note
     /// that you'll also have to provide `--no-blind` as blinding is
     /// only implemented for BEAST2.
     #[clap(long)]
     ignore_version: bool,
-
-    /// The comment to put above `<data>` elements when blinding the
-    /// data (i.e. `--no-blind` is not given). By default, a comment
-    /// with regards to terms of use and privacy is given.
-    #[clap(long)]
-    blind_comment: Option<String>,
     // XX FUTURE idea: --set "header: value"
 }
 
@@ -598,6 +587,8 @@ struct AddToOpts {
     versioncheck: VersionCheckOpt,
     #[clap(flatten)]
     quietness: QuietOpt,
+    #[clap(flatten)]
+    blinding: BlindingOpts,
 
     /// The path to an existing directory *inside* the Git checkout of
     /// the XML Hub, where the file(s) should be copied to. .
@@ -620,24 +611,11 @@ struct AddToOpts {
     #[clap(long)]
     mkdir: bool,
 
-    /// Do *not* strip the sequences (`<data>` element contents); by
-    /// default they are stripped, as safety measure to avoid
-    /// accidental exposure of private data. If you can publish the
-    /// data and it's not overly large, feel free to use this option!
-    #[clap(long)]
-    no_blind: bool,
-
     /// Allow XML files from BEAST versions other than BEAST2. Note
     /// that you'll also have to provide `--no-blind` as blinding is
     /// only implemented for BEAST2.
     #[clap(long)]
     ignore_version: bool,
-
-    /// The comment to put above `<data>` elements when blinding the
-    /// data (i.e. `--no-blind` is not given). By default, a comment
-    /// with regards to terms of use and privacy is given.
-    #[clap(long)]
-    blind_comment: Option<String>,
 
     /// Force overwriting of existing files at the target location. .
     #[clap(long, short)]
@@ -2417,8 +2395,7 @@ struct PreparedFile {
 /// Subset of `PrepareOpts`
 struct PrepareFileOpts<'t> {
     source_path: &'t Path,
-    no_blind: bool,
-    blind_comment: &'t Option<String>,
+    blinding: &'t BlindingOpts,
     ignore_version: bool,
     quiet: bool,
 }
@@ -2428,8 +2405,12 @@ struct PrepareFileOpts<'t> {
 fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     let PrepareFileOpts {
         source_path,
-        no_blind,
-        blind_comment,
+        blinding:
+            BlindingOpts {
+                no_blind,
+                blind_all,
+                blind_comment,
+            },
         ignore_version,
         quiet,
     } = opts;
@@ -2472,8 +2453,9 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     }
 
     // Optionally, delete (blind) data
-    let n_blinded = if no_blind {
-        0
+    let data_was_removed;
+    if *no_blind {
+        data_was_removed = false;
     } else {
         if beast_version.product != BeastProductVersion::Two {
             bail!(
@@ -2485,35 +2467,85 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
             )
         }
 
-        let comment = blind_comment
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
-        modified_document.clear_elements_named(
-            "data",
-            &ClearElementsOpts {
-                comment_and_indent: Some((comment, "    ")),
-                always_add_comment: false,
-                treat_whitespace_as_empty: true,
-            },
-        )
-    };
+        let n_sequences_blinded;
+        // Clear the sub-elements, without adding a comment
+        if *blind_all {
+            // Do blinding below by removing all of "data" element's
+            // contents, instead.
+            n_sequences_blinded = 0;
+        } else {
+            let actions = &[ClearAction::Attribute {
+                name: "value",
+                replacement: "-",
+            }];
+            // XX should the code check that the `beast > data > sequence`
+            // nesting is upheld? This doesn't.
+            n_sequences_blinded = modified_document.clear_elements_named(
+                "sequence",
+                &ClearElementsOpts {
+                    comment_and_indent: None,
+                    always_add_comment: false,
+                    actions,
+                },
+            );
+        }
+
+        // Add comment or also clear the element if --blind-all given
+        if n_sequences_blinded > 0 || *blind_all {
+            let comment = blind_comment
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(DEFAULT_COMMENT_FOR_BLINDED_DATA);
+            // No actions by default, to just add the comments
+            let mut actions = Vec::new();
+            if *blind_all {
+                actions.push(ClearAction::Element {
+                    treat_whitespace_as_empty: true,
+                });
+            }
+            let n = modified_document.clear_elements_named(
+                "data",
+                &ClearElementsOpts {
+                    comment_and_indent: Some((comment, "    ")),
+                    // If we're actually blinding here, don't always
+                    // add the comment. BTW note: there's a small bug
+                    // in that blinding normally first then with
+                    // --blind-all adds the comment twice to the
+                    // file. I guess that's fitting :)
+                    always_add_comment: !*blind_all,
+                    actions: &actions,
+                },
+            );
+            if *blind_all {
+                data_was_removed = n > 0;
+            } else {
+                data_was_removed = n_sequences_blinded > 0;
+            }
+        } else {
+            data_was_removed = n_sequences_blinded > 0;
+        }
+    }
 
     let (content, content_has_changed) = modified_document.to_string_and_modified()?;
 
-    let data_was_removed = n_blinded != 0;
-
     if data_was_removed && !quiet {
+        let more = if *blind_all {
+            ""
+        } else {
+            " Note that sequence metadata has been retained and is assumed \
+             to not be privacy sensitive; use `--blind-all` if you want to \
+             remove that, too!"
+        };
         println!(
-            "NOTE: data from this document has been removed \
-             (use `--no-blind` to keep it): {source_path:?}"
+            "NOTE: sequences from this document have been removed \
+             (use `--no-blind` to keep them!{more}): {source_path:?}"
         );
     }
 
     Ok(PreparedFile {
         content,
         content_has_changed,
-        data_was_removed: n_blinded != 0,
+        data_was_removed,
     })
 }
 
@@ -2539,8 +2571,7 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
         quietness: QuietOpt { quiet },
         files_to_prepare,
-        no_blind,
-        blind_comment,
+        blinding,
         ignore_version,
     } = command_opts;
 
@@ -2555,8 +2586,7 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
                 source_path,
                 prepare_file(PrepareFileOpts {
                     source_path,
-                    no_blind,
-                    blind_comment: &blind_comment,
+                    blinding: &blinding,
                     ignore_version,
                     quiet,
                 })?,
@@ -2583,11 +2613,10 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
     let AddToOpts {
         versioncheck: VersionCheckOpt { no_version_check },
         quietness: QuietOpt { quiet },
+        blinding,
         target_directory,
         files_to_add,
         mkdir,
-        no_blind,
-        blind_comment,
         force,
         no_repo_check,
         ignore_version,
@@ -2649,8 +2678,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
                     source_path,
                     prepare_file(PrepareFileOpts {
                         source_path,
-                        no_blind,
-                        blind_comment: &blind_comment,
+                        blinding: &blinding,
                         ignore_version,
                         quiet,
                     })?,

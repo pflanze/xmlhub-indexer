@@ -129,17 +129,33 @@ pub struct DocumentPosition {
 //     pub range: Range<usize>
 // }
 
+pub enum ClearAction<'t> {
+    /// Clear the element body
+    Element {
+        /// If the element body is all whitespace, do not remove
+        /// anything. Still remove whitespace together with other nodes if
+        /// there are any.
+        treat_whitespace_as_empty: bool,
+    },
+    /// Clear an attribute
+    Attribute {
+        /// Clear the attribute with the given name
+        name: &'t str,
+        /// Place this string instead -- XX CAREFUL: currently this
+        /// must be the xml-escaped form of a string!
+        replacement: &'t str,
+    },
+}
+
 pub struct ClearElementsOpts<'t> {
+    /// Actions to carry out on a found element
+    pub actions: &'t [ClearAction<'t>],
     /// Prefix found nodes with the given comment string and indent if
     /// given.
     pub comment_and_indent: Option<(&'t str, &'t str)>,
     /// If is true, the comment is added even if there were no child
     /// nodes.
     pub always_add_comment: bool,
-    /// If child node are all whitespace, do not remove
-    /// anything. Still remove whitespace together with other nodes if
-    /// there are any.
-    pub treat_whitespace_as_empty: bool,
 }
 
 impl<'d> ModifiedXMLDocument<'d> {
@@ -237,36 +253,69 @@ impl<'d> ModifiedXMLDocument<'d> {
     pub fn clear_elements_named(&mut self, element_name: &str, opts: &ClearElementsOpts) -> usize {
         let mut n_cleared = 0;
         for element in self.elements_named(element_name) {
-            let is_modified;
-            {
-                let mut delete_range: Option<Range<usize>> = None;
-                for node in element.children() {
-                    if let Some(range) = delete_range.as_mut() {
-                        range.end = node.range().end;
-                    } else {
-                        delete_range = Some(node.range());
+            for action in opts.actions {
+                match action {
+                    ClearAction::Element {
+                        treat_whitespace_as_empty,
+                    } => {
+                        let is_modified;
+                        {
+                            let mut delete_range: Option<Range<usize>> = None;
+                            for node in element.children() {
+                                if let Some(range) = delete_range.as_mut() {
+                                    range.end = node.range().end;
+                                } else {
+                                    delete_range = Some(node.range());
+                                }
+                            }
+                            if let Some(range) = delete_range {
+                                if *treat_whitespace_as_empty
+                                    && self.document.original_str()[range.clone()]
+                                        .chars()
+                                        .all(|c| c.is_ascii_whitespace())
+                                {
+                                    is_modified = false;
+                                } else {
+                                    self.document.push(Modification::Delete(range));
+                                    is_modified = true;
+                                }
+                            } else {
+                                is_modified = false;
+                            }
+                        }
+                        if is_modified {
+                            n_cleared += 1;
+                        }
+                    }
+                    ClearAction::Attribute { name, replacement } => {
+                        let is_modified;
+                        if let Some(attribute) = element.attribute_node(*name) {
+                            let range = attribute.range_value();
+                            if &self.document.original_str()[range.clone()] == *replacement {
+                                is_modified = false;
+                            } else {
+                                let start = range.start;
+                                self.document.push(Modification::Delete(range));
+                                if !replacement.is_empty() {
+                                    // (Copying `replacement` into a
+                                    // heap allocation for every
+                                    // replacement is a bit stupid.)
+                                    self.document
+                                        .push(Modification::Insert(start, (*replacement).into()));
+                                }
+                                is_modified = true;
+                            }
+                        } else {
+                            is_modified = false;
+                        }
+                        if is_modified {
+                            n_cleared += 1;
+                        }
                     }
                 }
-                if let Some(range) = delete_range {
-                    if opts.treat_whitespace_as_empty
-                        && self.document.original_str()[range.clone()]
-                            .chars()
-                            .all(|c| c.is_ascii_whitespace())
-                    {
-                        is_modified = false;
-                    } else {
-                        self.document.push(Modification::Delete(range));
-                        is_modified = true;
-                    }
-                } else {
-                    is_modified = false;
-                }
-            };
-            if is_modified {
-                n_cleared += 1;
             }
 
-            if opts.always_add_comment || is_modified {
+            if opts.always_add_comment || n_cleared > 0 {
                 if let Some((comment, indent)) = &opts.comment_and_indent {
                     let escaped_comment = escape_comment(comment, indent);
 

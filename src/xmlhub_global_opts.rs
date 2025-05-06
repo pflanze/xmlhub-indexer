@@ -87,6 +87,34 @@ impl OpenOrPrintOpts {
     }
 }
 
+#[derive(clap::Args, Debug)]
+pub struct BlindingOpts {
+    /// Do *not* strip the sequences; by default they are stripped
+    /// (the values of `value` attributes of `<sequence>` elements),
+    /// as safety measure to avoid accidental exposure of private
+    /// data. If you can publish the data and it's not overly large,
+    /// you're encouraged to use this option! Also see the
+    /// `--blind-all` option.
+    #[clap(long)]
+    pub no_blind: bool,
+
+    /// When stripping sequence data (i.e. no `--no-blind` option was
+    /// given), strip the whole `<data>` element contents instead of
+    /// just the `value` attributes of `<sequence>` elements. This
+    /// will also remove sequence metadata, which may be necessary if
+    /// your metadata is privacy sensitive, but it will create a file
+    /// that cannot be run in BEAST2.
+    #[clap(long)]
+    pub blind_all: bool,
+
+    /// The comment to put above `<data>` elements when blinding the
+    /// data (i.e. `--no-blind` is not given). By default, a comment
+    /// with regards to terms of use and privacy is given.
+    #[clap(long)]
+    pub blind_comment: Option<String>,
+    // Also move `ignore_version` here?
+}
+
 pub fn git_log_version_checker(
     program_version: GitVersion<SemVersion>,
     no_version_check: bool,
