@@ -97,7 +97,7 @@ impl<'a> Display for XMLDocumentLocation<'a> {
 
         pluralized! { (end.0 - start.0) + 1  => lines }
         f.write_fmt(format_args!(
-            "{lines} {} – {}",
+            "{lines}:columns {} – {}",
             line_col_string(start),
             line_col_string(end)
         ))
