@@ -16,6 +16,7 @@ use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use itertools::Itertools;
+use kstring::KString;
 use lazy_static::lazy_static;
 use nix::sys::resource::{setrlimit, Resource};
 use pluraless::pluralized;
@@ -652,13 +653,37 @@ struct AddToOpts {
 // * that a table of contents can be built from (showing and linking the
 //   (possibly nested) subsections).
 
+#[derive(Clone, Copy, PartialEq)]
+enum Highlight {
+    None,
+    Red,
+    Orange,
+}
+
+impl Highlight {
+    fn color_string(self) -> Option<&'static str> {
+        match self {
+            Highlight::None => None,
+            Highlight::Red => Some("red"),
+            Highlight::Orange => Some("orange"),
+        }
+    }
+
+    /// Give attribute key-value pair for html elements
+    fn color_att(self) -> Option<(KString, KString)> {
+        self.color_string()
+            .and_then(|color| att("style", format!("color: {color};")))
+    }
+}
+
 /// A section consists of a (optional) section title, an optional
 /// intro (that could be the only content), and a list of subsections
 /// which could be empty. The toplevel section will not have a title,
-/// but just a list of subsections. If `in_red` is true, will show the
-/// title in red if possible.
+/// but just a list of subsections.
 struct Section {
-    in_red: bool,
+    /// Whether to show the section title (both in the ToC and in the
+    /// document body) in a highlighted way (different colour)
+    highlight: Highlight,
     title: Option<String>,
     intro: Option<SerHtmlFrag>,
     subsections: Vec<Section>,
@@ -706,11 +731,7 @@ impl Section {
             html.a(
                 [
                     att("class", "toc_entry"),
-                    if self.in_red {
-                        att("style", "color: red;")
-                    } else {
-                        None
-                    },
+                    self.highlight.color_att(),
                     att("href", format!("#{section_id}")),
                 ],
                 html.text(format!("{number_path_string} {title}"))?,
@@ -761,14 +782,7 @@ impl Section {
             vec.push(html.a([att("name", &section_id)], [])?)?;
             vec.push(element(
                 html,
-                [
-                    att("id", section_id),
-                    if self.in_red {
-                        att("style", "color: red;")
-                    } else {
-                        None
-                    },
-                ],
+                [att("id", section_id), self.highlight.color_att()],
                 // Prefix the path to the title; don't try to use CSS
                 // as it won't make it through Markdown.
                 html.text(format!("{number_path_string} {title}"))?,
@@ -931,7 +945,7 @@ impl<'f> Folder<'f> {
             .collect::<Result<_>>()?;
 
         Ok(Section {
-            in_red: false,
+            highlight: Highlight::None,
             title,
             intro,
             subsections,
@@ -1128,7 +1142,7 @@ fn build_index_section(
     }
 
     Ok(Section {
-        in_red: false,
+        highlight: Highlight::None,
         title: Some(attribute_key.as_ref().into()),
         intro: Some(html.preserialize(html.dl([att("class", "key_dl")], body)?)?),
         subsections: vec![],
@@ -1554,7 +1568,7 @@ fn build_index(
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Section {
-                in_red: false,
+                highlight: Highlight::None,
                 title: Some("Index by attribute".into()),
                 intro: None,
                 subsections: index_sections,
@@ -1575,7 +1589,7 @@ fn build_index(
                     )?)?;
                 }
                 Ok(Some(Section {
-                    in_red: true,
+                    highlight: Highlight::Red,
                     title: Some("Errors".into()),
                     intro: Some(html.preserialize(html.dl([], vec)?)?),
                     subsections: vec![],
@@ -1599,7 +1613,7 @@ fn build_index(
                     )?)?;
                 }
                 Ok(Some(Section {
-                    in_red: true,
+                    highlight: Highlight::Orange,
                     title: Some("Warnings".into()),
                     intro: Some(html.preserialize(html.dl([], vec)?)?),
                     subsections: vec![],
@@ -1614,7 +1628,7 @@ fn build_index(
     // other sections. This way, creating the table of contents and
     // conversion to HTML vs. Markdown works seamlessly.
     let toplevel_section = Section {
-        in_red: false,
+        highlight: Highlight::None,
         title: None,
         intro: None,
         subsections: append(
