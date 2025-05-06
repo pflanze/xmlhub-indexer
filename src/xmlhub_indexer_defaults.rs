@@ -1,12 +1,20 @@
+//! Default values / configuration constants needed for library parts
+//! outside xmlhub.rs, too, thus can't be placed into xmlhub.rs.
+
 //! `xmlhub_indexer_defaults` was supposed to be xmlhub specific but
 //! is also covering application upgrades now. (TODO: clean up)
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use ahtml::{att, AId, HtmlAllocator, HtmlAllocatorPool, Node};
 use anyhow::Result;
 use lazy_static::lazy_static;
 
-use crate::checkout_context::CheckoutContext;
+use crate::{
+    checkout_context::CheckoutContext,
+    git_version::{GitVersion, SemVersion},
+    xmlhub_check_version::XmlhubCheckVersion,
+    xmlhub_types::OutputFile,
+};
 
 pub const XMLHUB_BINARY_FILE_NAME: &str = "xmlhub";
 
@@ -45,6 +53,32 @@ pub const BINARIES_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
 
 /// The name of the command line program.
 pub const PROGRAM_NAME: &str = XMLHUB_BINARY_FILE_NAME;
+
+/// The index file in HTML format (the one viewed when using `--open`
+/// locally).
+pub const HTML_FILE: OutputFile = OutputFile {
+    path_from_repo_top: "README.html",
+};
+
+/// The index file in markdown format (the one viewed on GitLab).
+pub const MD_FILE: OutputFile = OutputFile {
+    path_from_repo_top: "README.md",
+};
+
+pub fn git_log_version_checker(
+    program_version: GitVersion<SemVersion>,
+    no_version_check: bool,
+    base_path: &Path,
+) -> XmlhubCheckVersion {
+    XmlhubCheckVersion {
+        program_name: PROGRAM_NAME,
+        program_version: program_version.into(),
+        no_version_check,
+        base_path: base_path.into(),
+        html_file: (&HTML_FILE).into(),
+        md_file: (&MD_FILE).into(),
+    }
+}
 
 lazy_static! {
     pub static ref GENERATED_MESSAGE: String = format!(

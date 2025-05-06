@@ -69,13 +69,13 @@ use xmlhub_indexer::{
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
     xmlhub_global_opts::{
-        git_log_version_checker, BlindingOpts, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt,
-        VersionCheckOpt, HTML_FILE, MD_FILE,
+        BlindingOpts, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt, VersionCheckOpt,
     },
     xmlhub_help::print_basic_standalone_html_page,
     xmlhub_indexer_defaults::{
-        css_styles, document_symbol, BACK_TO_INDEX_SYMBOL, GENERATED_MESSAGE, HTML_ALLOCATOR_POOL,
-        PROGRAM_NAME, SOURCE_CHECKOUT, XMLHUB_CHECKOUT,
+        css_styles, document_symbol, git_log_version_checker, BACK_TO_INDEX_SYMBOL,
+        GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, HTML_FILE, MD_FILE, PROGRAM_NAME, SOURCE_CHECKOUT,
+        XMLHUB_CHECKOUT,
     },
     xmlhub_install::{install_command, InstallOpts},
     xmlhub_types::OutputFile,

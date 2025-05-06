@@ -7,8 +7,8 @@ use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
     path_util::{AppendToPath, FixupPath},
-    xmlhub_global_opts::{git_log_version_checker, DrynessOpt, VersionCheckOpt},
-    xmlhub_indexer_defaults::XMLHUB_CHECKOUT,
+    xmlhub_global_opts::{DrynessOpt, VersionCheckOpt},
+    xmlhub_indexer_defaults::{git_log_version_checker, XMLHUB_CHECKOUT},
 };
 
 #[derive(clap::Parser, Debug)]
