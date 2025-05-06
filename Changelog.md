@@ -271,3 +271,18 @@ v9.6 - 2025-04-25
 
 v9.7 - 2025-04-25
 
+- `xmlhub changelog`: open in the browser by default, add `--print` option (mirror the behaviour of `xmlhub help-attributes`; drop the `--print-html` option).
+- `xmlhub changelog`: simplify changelog title
+- `xmlhub build --daemon run|start`: get working on macOS again (do not try to set up a memory limit on macOS, macOS does not support it); add `--limit-as` option at the same time (for Linux only)
+- `xmlhub help-attributes` / in `attributes.md`: hint at the xmlhub command line tool
+- Index "Citations" and make the field into a "|"-separated list
+- Edit descriptions of "Citation" and "DOI"
+- Swap the order of the "DOI" and "Citation" fields, prefer "DOI" only (in view of near-future automatic retrieval of the paper details from the DOI)
+- Change the `desc` metainfo field to accept Markdown (allowing for formatting and links in attribute descriptions)
+- Add workaround to make the `-h` and `--help` options behave the same way
+- xmlhub help: update the 'blurb' about the program (about text shown first in the help)
+- `xmlhub docs`: add description about XML Hub and the xmlhub tool; add a preliminary macOS user page
+- xmlhub build error messages: list missing keywords sorted in the order of their definition (same as shown in templates or the attributes list)
+- Some nicer error messages
+- xmlhub build: add capability to collect warnings (for both terminal and index file output); check the BEAST version from the `<beast>` element, compare to the one passed manually, warn if different.
+- `xmlhub prepare / add-to`: fix the blinding feature: retain the <sequence> elements but empty their values attribute; add `--blind-all` option to get the old behaviour, and mention in the message that the option exists and that the default blinding does not strip the metadata (thus one has to be careful not to have privacy sensitive information in the metadata!)
