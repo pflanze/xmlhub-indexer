@@ -8,7 +8,11 @@ use anyhow::Result;
 
 use crate::util::with_output_to_file;
 
-const STANDALONE_HTML_STYLES: &str = r#"
+pub const CSS_CODE_BACKGROUND_COLOR: &str = "#f2f0e6";
+
+fn standalone_html_styles() -> String {
+    [
+        r#"
     body {
       font-family: sans;
       margin: 0 auto;
@@ -42,9 +46,14 @@ const STANDALONE_HTML_STYLES: &str = r#"
       font-size: 85%;
       margin: 1px;
       padding: 1px;
-      background-color: #f2f0e6;
+      background-color: "#,
+        CSS_CODE_BACKGROUND_COLOR,
+        ";
     }
-"#;
+",
+    ]
+    .join("")
+}
 
 pub fn print_basic_standalone_html_page(
     title: &str,
@@ -59,7 +68,7 @@ pub fn print_basic_standalone_html_page(
                 [],
                 [
                     html.title([], html.text(title)?)?,
-                    html.style([], html.text(STANDALONE_HTML_STYLES)?)?,
+                    html.style([], html.text(standalone_html_styles())?)?,
                 ],
             )?,
             html.body([], body)?,
