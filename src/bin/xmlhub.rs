@@ -524,8 +524,7 @@ struct AddToOpts {
 }
 
 // =============================================================================
-// Parsing and printing functionality, up to and including the
-// `build_index` function below.
+// Parsing
 
 /// Parse all XML comments from above the first XML opening element
 /// out of one file as `Metadata`. The comments are passed as an
@@ -616,6 +615,98 @@ fn parse_comments<'a>(
         Err(errors)
     }
 }
+
+lazy_static! {
+    static ref VERSION_KEY: AttributeName = attribute_specification_by_name("Version")
+        .map(|spec| spec.key)
+        .expect("'Version' attribute definition should always be present");
+}
+
+/// Map each file to the info extracted from it (or `FileErrors`
+/// when there were errors), including path and an id, held in a
+/// `FileInfo` struct. Generate the ids on the go for each of them
+/// by `enumerate`ing the values (the enumeration number value is
+/// passed as the `id` argument to the function given to `map`).
+/// The id is used to refer to each item in document-local links in
+/// the generated HTML/Markdown files.
+fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileErrors>> {
+    paths
+        .into_par_iter()
+        .enumerate()
+        .map(|(id, path)| -> Result<FileInfo, FileErrors> {
+            let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
+                path: path.clone(),
+                errors: vec![format!("{e:#}")],
+            })?;
+            let metadata =
+                parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
+                    FileErrors {
+                        path: path.clone(),
+                        errors,
+                    }
+                })?;
+            // We're currently doing nothing else with
+            // `xmldocument` (which holds the tree of all elements
+            // in the document). It would be possible to extract
+            // information from the XML tree for further indexes
+            // by defining another kind of indexing than metadata
+            // attributes, defining extractors for those, doing
+            // the extraction here and adding the results to
+            // `FileInfo`.
+
+            // Well, actually checking the version now:
+            let mut warnings = Vec::new();
+
+            match (|| -> Result<_> {
+                let att_val: &AttributeValue = metadata
+                    .get(*VERSION_KEY)
+                    .context("missing 'Version' entry")?;
+                let att_vals = att_val.as_string_list();
+                let user_specified_str = att_vals.first().context("'Version' entry is empty")?;
+                // Have to skip any "BEAST "
+                let user_specified_version_str = strip_prefixes(
+                    user_specified_str,
+                    &["BEAST2 ", "BEAST2", "BEAST ", "BEAST"],
+                )
+                .trim();
+                let user_specified_version = BeastVersion::from_str(user_specified_version_str)?;
+                let user_specified_major: u16 = user_specified_version.major.context(
+                    "provided 'Version' has no BEAST2-major number part \
+                     or is not a BEAST2 version",
+                )?;
+
+                let document_version =
+                    check_beast_version(xmldocument.document(), path.rel_path(), false)?;
+                (|| -> Option<()> {
+                    let found_major: u16 = document_version.major?;
+                    if found_major != user_specified_major {
+                        warnings.push(format!(
+                            "the <beast> element in the document specifies version \
+                             {document_version} with major {found_major}, but the \
+                             user-provided version {user_specified_version} has \
+                             major {user_specified_major}"
+                        ));
+                    }
+                    Some(())
+                })();
+                Ok(())
+            })() {
+                Ok(()) => (),
+                Err(e) => warnings.push(format!("{e}")),
+            }
+
+            Ok(FileInfo {
+                id,
+                path,
+                metadata,
+                warnings,
+            })
+        })
+        .collect()
+}
+
+// =============================================================================
+// Building output / implementing the various subcommands
 
 /// Build an index, as human-readable text (thus as `Section`), over
 /// all files for one particular attribute name (`attribute_key`).
@@ -812,95 +903,6 @@ fn make_intro(making_md: bool, html: &HtmlAllocator) -> Result<AId<Node>> {
             },
         ],
     )
-}
-
-lazy_static! {
-    static ref VERSION_KEY: AttributeName = attribute_specification_by_name("Version")
-        .map(|spec| spec.key)
-        .expect("'Version' attribute definition should always be present");
-}
-
-/// Map each file to the info extracted from it (or `FileErrors`
-/// when there were errors), including path and an id, held in a
-/// `FileInfo` struct. Generate the ids on the go for each of them
-/// by `enumerate`ing the values (the enumeration number value is
-/// passed as the `id` argument to the function given to `map`).
-/// The id is used to refer to each item in document-local links in
-/// the generated HTML/Markdown files.
-fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileErrors>> {
-    paths
-        .into_par_iter()
-        .enumerate()
-        .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-            let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
-                path: path.clone(),
-                errors: vec![format!("{e:#}")],
-            })?;
-            let metadata =
-                parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
-                    FileErrors {
-                        path: path.clone(),
-                        errors,
-                    }
-                })?;
-            // We're currently doing nothing else with
-            // `xmldocument` (which holds the tree of all elements
-            // in the document). It would be possible to extract
-            // information from the XML tree for further indexes
-            // by defining another kind of indexing than metadata
-            // attributes, defining extractors for those, doing
-            // the extraction here and adding the results to
-            // `FileInfo`.
-
-            // Well, actually checking the version now:
-            let mut warnings = Vec::new();
-
-            match (|| -> Result<_> {
-                let att_val: &AttributeValue = metadata
-                    .get(*VERSION_KEY)
-                    .context("missing 'Version' entry")?;
-                let att_vals = att_val.as_string_list();
-                let user_specified_str = att_vals.first().context("'Version' entry is empty")?;
-                // Have to skip any "BEAST "
-                let user_specified_version_str = strip_prefixes(
-                    user_specified_str,
-                    &["BEAST2 ", "BEAST2", "BEAST ", "BEAST"],
-                )
-                .trim();
-                let user_specified_version = BeastVersion::from_str(user_specified_version_str)?;
-                let user_specified_major: u16 = user_specified_version.major.context(
-                    "provided 'Version' has no BEAST2-major number part \
-                     or is not a BEAST2 version",
-                )?;
-
-                let document_version =
-                    check_beast_version(xmldocument.document(), path.rel_path(), false)?;
-                (|| -> Option<()> {
-                    let found_major: u16 = document_version.major?;
-                    if found_major != user_specified_major {
-                        warnings.push(format!(
-                            "the <beast> element in the document specifies version \
-                             {document_version} with major {found_major}, but the \
-                             user-provided version {user_specified_version} has \
-                             major {user_specified_major}"
-                        ));
-                    }
-                    Some(())
-                })();
-                Ok(())
-            })() {
-                Ok(()) => (),
-                Err(e) => warnings.push(format!("{e}")),
-            }
-
-            Ok(FileInfo {
-                id,
-                path,
-                metadata,
-                warnings,
-            })
-        })
-        .collect()
 }
 
 /// The subset of the options of `BuildOpts` used by `build_index`
