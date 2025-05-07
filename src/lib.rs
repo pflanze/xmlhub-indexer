@@ -25,6 +25,7 @@ pub mod modified_xml_document;
 pub mod path_util;
 pub mod rayon_util;
 pub mod ref_or_owned;
+pub mod section;
 pub mod sha256;
 pub mod string_tree;
 pub mod tuple_transpose;
