@@ -6,7 +6,7 @@ use std::{
 
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use itertools::intersperse_with;
 
 use crate::{
@@ -69,11 +69,10 @@ pub fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'stat
     ]])))
 }
 
-struct HelpPageInfo {
+struct PageInfo {
     which_page: WhichPage,
     file_name: &'static str,
     title: &'static str,
-    body: AId<Node>,
 }
 
 macro_rules! def_enum_with_list{
@@ -99,85 +98,169 @@ def_enum_with_list!(WhichPage {
 });
 
 impl WhichPage {
-    fn create_page(self, html: &HtmlAllocator) -> Result<HelpPageInfo> {
+    fn page_info(self) -> PageInfo {
+        match self {
+            WhichPage::Start => PageInfo {
+                which_page: self,
+                file_name: "start.html",
+                title: "Start",
+            },
+            WhichPage::Attributes => PageInfo {
+                which_page: self,
+                file_name: "attributes.html",
+                title: "Attributes list",
+            },
+            WhichPage::MacOS => PageInfo {
+                which_page: self,
+                file_name: "macos.html",
+                title: "macOS",
+            },
+        }
+    }
+
+    fn create_page(self, html: &HtmlAllocator) -> Result<AId<Node>> {
         match self {
             WhichPage::Start => {
-                let body = markdown_to_html(include_str!("../docs/start.md"), &html)?.html();
-                Ok(HelpPageInfo {
-                    which_page: self,
-                    file_name: "start.html",
-                    title: "Start",
-                    body,
-                })
+                Ok(markdown_to_html(include_str!("../docs/start.md"), &html)?.html())
             }
             WhichPage::Attributes => {
-                let body = markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html();
-                Ok(HelpPageInfo {
-                    which_page: self,
-                    file_name: "attributes.html",
-                    title: "Attributes list",
-                    body,
-                })
+                Ok(markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html())
             }
             WhichPage::MacOS => {
-                let body = markdown_to_html(include_str!("../docs/macos.md"), &html)?.html();
-                Ok(HelpPageInfo {
-                    which_page: self,
-                    file_name: "macos.html",
-                    title: "macOS",
-                    body,
-                })
+                Ok(markdown_to_html(include_str!("../docs/macos.md"), &html)?.html())
             }
         }
     }
 }
 
+pub struct IncludedImage {
+    pub file_name: &'static str,
+    pub image_bytes: &'static [u8],
+}
+
+pub const XMLHUB_LOGO: IncludedImage = IncludedImage {
+    file_name: "XMLHub-1s.png",
+    image_bytes: include_bytes!("../docs/XMLHub-1s.png"),
+};
+
+/// Page head for help pages 'site', with logo. `home_url`: where to
+/// go to when clicking the logo. `subtitle`: put below "XML Hub" logo
+/// lettering.
+pub fn help_pages_page_head(
+    subtitle: &str,
+    home_url: &str,
+    nav: AId<Node>,
+    html: &HtmlAllocator,
+) -> Result<AId<Node>> {
+    html.div(
+        [att("style", "display: flex; flex-direction: row;")],
+        [
+            html.div(
+                [att("style", "flex: 1; margin-right: 30px;")],
+                // XX both home_url and XMLHUB_LOGO.file_name are not
+                // right if the page this html is generated for is
+                // not in the same folder! (Relative path
+                // calculations necessary.)
+                html.a(
+                    [att("href", home_url)],
+                    html.img(
+                        [
+                            att("src", XMLHUB_LOGO.file_name),
+                            // native width is 129px
+                            att("width", "109px"),
+                        ],
+                        [],
+                    )?,
+                )?,
+            )?,
+            html.div(
+                [att(
+                    "style",
+                    "flex: 10; display: flex; flex-direction: column; ",
+                )],
+                [
+                    html.div([att("style", "flex: 3")], [])?,
+                    html.div(
+                        [att("style", "flex: 4; font-size: 40px; font-family: serif")],
+                        html.text("XML Hub")?,
+                    )?,
+                    html.div(
+                        [att("style", "flex: 3; margin-bottom: 15px;")],
+                        html.text(subtitle)?,
+                    )?,
+                    html.div([att("style", "flex: 3")], nav)?,
+                ],
+            )?,
+        ],
+    )
+}
+
+const HELP_PAGES_IMAGES: &[&IncludedImage] = &[&XMLHUB_LOGO];
+
 // Create multiple/all help pages, so that they can link to each
 // other! Returns the path to the page for which you passed the
 // `WhichPage`.
 fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Result<PathBuf> {
+    let site_title = "“xmlhub” tool documentation";
+
     let html = HTML_ALLOCATOR_POOL.get();
 
     let output_path_base = global_app_state_dir()?.docs_base(program_version)?;
 
-    let page_infos: Vec<HelpPageInfo> = WhichPage::list()
+    let page_infos: Vec<(PageInfo, AId<Node>)> = WhichPage::list()
         .iter()
-        .map(|which| which.create_page(&html))
+        .map(|which| Ok((which.page_info(), which.create_page(&html)?)))
         .collect::<Result<_>>()?;
 
-    let nav_for_page = |this_page: &HelpPageInfo| -> Result<AId<Node>> {
+    let nav_for_page = |this_page: &PageInfo| -> Result<AId<Node>> {
         let mut items = html.new_vec();
         let mut is_first = true;
-        for pi in &page_infos {
+        for (page_info, _body) in &page_infos {
             if is_first {
                 is_first = false;
             } else {
                 items.push(html.text(" | ")?)?;
             }
-            let item_text = html.text(pi.title)?;
-            let item = if pi.which_page == this_page.which_page {
+            let item_text = html.text(page_info.title)?;
+            let item = if page_info.which_page == this_page.which_page {
                 item_text
             } else {
-                html.a([att("href", pi.file_name)], item_text)?
+                html.a([att("href", page_info.file_name)], item_text)?
             };
             items.push(item)?;
         }
         html.div([att("class", "nav")], items)
     };
 
+    let start_url = WhichPage::Start.page_info().file_name;
+
     let pages: Vec<(WhichPage, PathBuf)> = page_infos
         .iter()
-        .map(|page_info| {
+        .map(|(page_info, body)| {
             let output_path = (&output_path_base).append(page_info.file_name);
 
             let nav = nav_for_page(page_info)?;
-            let body = Flat::Two(nav, page_info.body);
+            let body = Flat::Two(
+                help_pages_page_head(site_title, start_url, nav, &html)?,
+                *body,
+            );
 
-            save_basic_standalone_html_page(&output_path, page_info.title, body, &html)?;
+            let title = format!("{} — {site_title}", page_info.title);
+            save_basic_standalone_html_page(&output_path, &title, body, &html)?;
 
             Ok((page_info.which_page, output_path))
         })
         .collect::<Result<_>>()?;
+
+    for IncludedImage {
+        file_name,
+        image_bytes,
+    } in HELP_PAGES_IMAGES
+    {
+        let output_path = (&output_path_base).append(*file_name);
+        std::fs::write(&*output_path, *image_bytes)
+            .with_context(|| anyhow!("saving to file {output_path:?}"))?;
+    }
 
     Ok(pages
         .into_iter()
