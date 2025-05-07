@@ -51,7 +51,10 @@ use xmlhub_indexer::{
     tuple_transpose::TupleTranspose,
     util::format_string_list,
     util::{append, strip_prefixes, with_output_to_file, InsertValue},
-    utillib::setpriority::{possibly_setpriority, PriorityWhich},
+    utillib::{
+        file_util_with_trash::write_file_moving_to_trash_if_exists,
+        setpriority::{possibly_setpriority, PriorityWhich},
+    },
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_attributes::{
         attribute_specification_by_name, sort_in_definition_order, AttributeName, AttributeNeed,
@@ -2122,23 +2125,6 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     })
 }
 
-fn overwrite_file_moving_to_trash_if_exists(
-    target_path: &Path,
-    content: &str,
-    quiet: bool,
-) -> Result<()> {
-    if target_path.exists() {
-        trash::delete(&target_path)
-            .with_context(|| anyhow!("moving existing target file {target_path:?} to trash"))?;
-        if !quiet {
-            println!("Moved existing target file {target_path:?} to trash.");
-        }
-    }
-    std::fs::write(&target_path, content)
-        .with_context(|| anyhow!("writing contents to file {target_path:?}"))?;
-    Ok(())
-}
-
 /// Execute a `prepare` command.
 fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
@@ -2171,7 +2157,7 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     // them out. With regards to IO, only writing happens here.
     for (target_path, prepared_file) in converted {
         if prepared_file.content_has_changed {
-            overwrite_file_moving_to_trash_if_exists(&target_path, &prepared_file.content, quiet)?;
+            write_file_moving_to_trash_if_exists(&target_path, &prepared_file.content, quiet)?;
         } else {
             if !quiet {
                 println!("File is unchanged (already prepared): {target_path:?}");
@@ -2305,7 +2291,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
             // time!
 
             // Keep existing files in trash, even with --force?
-            overwrite_file_moving_to_trash_if_exists(target_path, &prepared_file.content, quiet)?;
+            write_file_moving_to_trash_if_exists(target_path, &prepared_file.content, quiet)?;
         }
 
         if !quiet {
