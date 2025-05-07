@@ -1,6 +1,7 @@
 # Contributing to XML Hub with the `xmlhub` tool
 
-The XML Hub is a Git repository with BEAST2 XML files to learn from.
+The XML Hub is a Git repository with [BEAST2](https://www.beast2.org/)
+XML files that could be useful to learn techniques from.
 
 The `xmlhub` tool has two purposes:
 
