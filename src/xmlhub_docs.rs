@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use ahtml::{att, AId, HtmlAllocator, Node, Print};
+use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::Result;
 use itertools::intersperse_with;
@@ -171,7 +171,7 @@ fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Resul
             let output_path = (&output_path_base).append(page_info.file_name);
 
             let nav = nav_for_page(page_info)?;
-            let body = html.div([], [nav, page_info.body])?;
+            let body = Flat::Two(nav, page_info.body);
 
             save_basic_standalone_html_page(&output_path, page_info.title, body, &html)?;
 

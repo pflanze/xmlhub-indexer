@@ -10,7 +10,7 @@ use std::{
 };
 
 // Use from external dependencies
-use ahtml::{att, AId, HtmlAllocator, Node, Print, SerHtmlFrag};
+use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print, SerHtmlFrag};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
@@ -1603,7 +1603,7 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
         let processed_markdown = markdown_to_html(&markdown, &html)?;
         print_basic_standalone_html_page(
             "xmlhub changelog",
-            processed_markdown.html(),
+            Flat::One(processed_markdown.html()),
             &html,
             output,
         )?;

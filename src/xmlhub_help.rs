@@ -3,7 +3,7 @@
 
 use std::{io::Write, path::Path};
 
-use ahtml::{AId, HtmlAllocator, Node};
+use ahtml::{flat::Flat, HtmlAllocator, Node};
 use anyhow::Result;
 
 use crate::util::with_output_to_file;
@@ -48,7 +48,7 @@ const STANDALONE_HTML_STYLES: &str = r#"
 
 pub fn print_basic_standalone_html_page(
     title: &str,
-    body: AId<Node>,
+    body: Flat<Node>,
     html: &HtmlAllocator,
     mut output: &mut dyn Write,
 ) -> Result<()> {
@@ -72,7 +72,7 @@ pub fn print_basic_standalone_html_page(
 pub fn save_basic_standalone_html_page(
     output_path: &Path,
     title: &str,
-    body: AId<Node>,
+    body: Flat<Node>,
     html: &HtmlAllocator,
 ) -> Result<()> {
     with_output_to_file(output_path, |output| -> Result<()> {
