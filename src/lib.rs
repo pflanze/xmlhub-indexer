@@ -12,6 +12,7 @@ pub mod effect;
 pub mod file_lock;
 pub mod file_util;
 pub mod flattened;
+pub mod folder;
 pub mod forking_loop;
 pub mod get_terminal_width;
 pub mod git;
