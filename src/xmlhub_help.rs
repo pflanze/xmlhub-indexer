@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use crate::util::with_output_to_file;
 
-pub const CSS_CODE_BACKGROUND_COLOR: &str = "#f2f0e6";
+pub const CSS_CODE_BACKGROUND_COLOR: &str = "#f4f2e6";
 
 fn standalone_html_styles() -> String {
     [
