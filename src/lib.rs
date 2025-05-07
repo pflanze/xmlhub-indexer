@@ -1,4 +1,5 @@
 pub mod backoff;
+pub mod beast_version;
 pub mod browser;
 pub mod cargo;
 pub mod changelog;
