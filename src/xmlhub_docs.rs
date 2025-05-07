@@ -17,7 +17,7 @@ use crate::{
     xmlhub_attributes::{specifications_to_html, METADATA_SPECIFICATION},
     xmlhub_global_opts::OpenOrPrintOpts,
     xmlhub_help::save_basic_standalone_html_page,
-    xmlhub_indexer_defaults::{GENERATED_MESSAGE, HTML_ALLOCATOR_POOL},
+    xmlhub_indexer_defaults::{GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, XMLHUB_CHECKOUT},
 };
 
 pub fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {
@@ -229,7 +229,24 @@ fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Resul
             };
             items.push(item)?;
         }
-        html.div([att("class", "nav")], items)
+        html.div(
+            [att(
+                "style",
+                "display: flex; flex-direction: row; justify-content: space-between; \
+                 background-color: #fff2e1; \
+                 padding: 5px;",
+            )],
+            [
+                html.div([], items)?,
+                html.div(
+                    [att("class", "nav")],
+                    html.a(
+                        [att("href", XMLHUB_CHECKOUT.supposed_upstream_web_url)],
+                        html.text("GitLab")?,
+                    )?,
+                )?,
+            ],
+        )
     };
 
     let start_url = WhichPage::Start.page_info().file_name;
