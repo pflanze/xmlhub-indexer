@@ -614,7 +614,8 @@ fn parse_comments<'a>(
     }
 }
 
-/// Build an index over all files for one particular attribute name (`attribute_key`).
+/// Build an index, as human-readable text (thus as `Section`), over
+/// all files for one particular attribute name (`attribute_key`).
 fn build_index_section(
     attribute_key: AttributeName,
     key_string_normalization: KeyStringPreparation,
