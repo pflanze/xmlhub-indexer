@@ -11,6 +11,7 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::{
     browser::{spawn_browser, spawn_browser_on_path},
+    const_util::file_name,
     git_version::{GitVersion, SemVersion},
     installation::defaults::global_app_state_dir,
     modified_document::{Modification, ModifiedDocument},
@@ -57,6 +58,20 @@ fn replace_all_lazily(
     Ok(())
 }
 
+fn replace_all_url_and_link(
+    page: &mut Cow<str>,
+    key_url: &str,
+    key_link: &str,
+    repo_url: &'static str,
+) -> Result<()> {
+    replace_all_lazily(page, key_url, &|| Ok(repo_url.into()))?;
+    replace_all_lazily(page, key_link, &|| {
+        let repo_name = file_name(repo_url);
+        Ok(format!("[{repo_name}]({repo_url})").into())
+    })?;
+    Ok(())
+}
+
 /// Replace variables in markdown string, then convert the resulting
 /// string to HTML
 fn markdown_with_variables_to_html<'s>(
@@ -65,15 +80,27 @@ fn markdown_with_variables_to_html<'s>(
     html: &HtmlAllocator,
 ) -> Result<AId<Node>> {
     let mut page: Cow<str> = page.into();
-    replace_all_lazily(&mut page, "{xmlhubIndexerRepoUrl}", &|| {
-        Ok(SOURCE_CHECKOUT.supposed_upstream_web_url.into())
-    })?;
-    replace_all_lazily(&mut page, "{xmlhubIndexerBinariesRepoUrl}", &|| {
-        Ok(BINARIES_CHECKOUT.supposed_upstream_web_url.into())
-    })?;
-    replace_all_lazily(&mut page, "{xmlhubRepoUrl}", &|| {
-        Ok(XMLHUB_CHECKOUT.supposed_upstream_web_url.into())
-    })?;
+    replace_all_url_and_link(
+        &mut page,
+        "{xmlhubIndexerRepoUrl}",
+        "{xmlhubIndexerRepoLink}",
+        SOURCE_CHECKOUT.supposed_upstream_web_url,
+    )?;
+
+    replace_all_url_and_link(
+        &mut page,
+        "{xmlhubIndexerBinariesRepoUrl}",
+        "{xmlhubIndexerBinariesRepoLink}",
+        BINARIES_CHECKOUT.supposed_upstream_web_url,
+    )?;
+
+    replace_all_url_and_link(
+        &mut page,
+        "{xmlhubRepoUrl}",
+        "{xmlhubRepoLink}",
+        XMLHUB_CHECKOUT.supposed_upstream_web_url,
+    )?;
+
     replace_all_lazily(
         &mut page,
         "{versionAndBuildInfo}",
@@ -83,6 +110,7 @@ fn markdown_with_variables_to_html<'s>(
             Ok(table_html.to_html_fragment_string(&html)?.into())
         },
     )?;
+
     Ok(markdown_to_html(page.as_ref(), html)?.html())
 }
 

@@ -12,14 +12,13 @@ which variables are supported).
 
 {versionAndBuildInfo}
 
-The source code for this program is in the
-[xmlhub-indexer]({xmlhubIndexerRepoUrl}) repository, pre-compiled
-binaries are in the
-[xmlhub-indexer-binaries]({xmlhubIndexerBinariesRepoUrl}) repository.
+The source code for this program is in the {xmlhubIndexerRepoLink}
+repository, pre-compiled binaries are in the
+{xmlhubIndexerBinariesRepoLink} repository.
 
 ## Your XML Hub instance
 
-* cEvo: [GitLab]({xmlhubRepoUrl})
+* cEvo: {xmlhubRepoLink}
 
 ## Your XML Hub maintainer
 
