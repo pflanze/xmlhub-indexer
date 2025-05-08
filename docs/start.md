@@ -69,7 +69,7 @@ to adapt them in case you need to do things a bit differently.
 
 1. Edit the copied / prepared XML file(s) with your editor of choice. `open <path-to-your-file.xml>` might open the file in the right editor, otherwise find your xmlhub clone from the editor's user interface.
 
-    To learn what you should enter for the various attributes, and which are optional, run `xmlhub help-attributes` or [click here](attributes.html).
+    To learn what you should enter for the various attributes, and which are optional, run `xmlhub help-attributes` or click the "Attributes list" item in the site navigation above or [click here](attributes.html).
 
 1. Run `xmlhub check --open <path-to-your-file(s).xml>`. If this shows errors, you need to fix the problems. If on the other hand it opens the web brower, you can verify that the generated index lists your file(s) the way you wanted. You can run this command repeatedly, until you are satisfied with your edits.
 
