@@ -1481,6 +1481,7 @@ dependencies = [
  "lazy_static",
  "nix",
  "num_threads",
+ "once_cell",
  "os_info",
  "ouroboros",
  "pluraless",
