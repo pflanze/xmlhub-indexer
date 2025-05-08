@@ -2345,16 +2345,6 @@ fn main() -> Result<()> {
 
         match command {
             Some(command) => match command {
-                Command::Install(opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::Install(opts)),
-                },
-                Command::Upgrade(upgrade_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::Upgrade(upgrade_opts)),
-                },
                 Command::Build(BuildOpts {
                     dryness,
                     verbosity,
@@ -2457,35 +2447,19 @@ fn main() -> Result<()> {
                         })),
                     }
                 }
-                Command::CloneTo(command_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::CloneTo(command_opts)),
-                },
-                Command::Prepare(command_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::Prepare(command_opts)),
-                },
-                Command::AddTo(command_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::AddTo(command_opts)),
-                },
-                Command::Docs | Command::HelpContributing | Command::HelpAttributes(_) => Opts {
+                Command::Install(_)
+                | Command::Upgrade(_)
+                | Command::CloneTo(_)
+                | Command::Prepare(_)
+                | Command::AddTo(_)
+                | Command::Docs
+                | Command::HelpContributing
+                | Command::HelpAttributes(_)
+                | Command::Check(_)
+                | Command::Changelog(_) => Opts {
                     v,
                     version_only,
                     command: Some(command),
-                },
-                Command::Check(command_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::Check(command_opts)),
-                },
-                Command::Changelog(command_opts) => Opts {
-                    v,
-                    version_only,
-                    command: Some(Command::Changelog(command_opts)),
                 },
             },
             None => {
@@ -2495,7 +2469,7 @@ fn main() -> Result<()> {
     };
 
     // Run the requested command
-    match opts.command.expect("`None` is dispatched above already") {
+    match opts.command.expect("`None` dispatched already above") {
         Command::Docs => docs_command(program_version),
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes(command_opts) => {
