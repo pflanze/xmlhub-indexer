@@ -42,21 +42,14 @@ macro_rules! markdown_paragraphs {
 fn replace_all_lazily(
     page: &mut Cow<str>,
     key: &str,
-    val: impl Fn() -> Result<Cow<'static, str>>,
+    get_value: impl FnOnce() -> Result<Cow<'static, str>, String>,
 ) -> Result<()> {
+    let value = once_cell::sync::Lazy::new(get_value);
     let mut doc = ModifiedDocument::new(page);
-    let mut value: Option<Cow<str>> = None;
     for (i, _) in page.match_indices(key) {
         doc.push(Modification::Delete(i..i + key.len()));
-        let val: &str = if let Some(value) = value.as_ref() {
-            value
-        } else {
-            value = Some(val()?);
-            value.as_ref().expect("we set it above")
-        };
-        // Stupid, now copyboxing all strings. Should change
-        // ModifiedDocument.
-        doc.push(Modification::Insert(i, val.into()));
+        let val = value.as_ref().map_err(|e| anyhow!("{e}"))?;
+        doc.push(Modification::Insert(i, (&**val).into()));
     }
     if doc.has_modifiations() {
         *page = doc.to_string()?.into();
@@ -84,10 +77,15 @@ fn markdown_with_variables_to_html<'s>(
     replace_all_lazily(
         &mut page,
         "{versionAndBuildInfo}",
-        || -> Result<Cow<str>> {
+        || -> Result<Cow<str>, String> {
             let html = HTML_ALLOCATOR_POOL.get();
-            let table_html = VersionInfo::new(program_version).to_html(&html)?;
-            Ok(table_html.to_html_fragment_string(&html)?.into())
+            let table_html = VersionInfo::new(program_version)
+                .to_html(&html)
+                .map_err(|e| e.to_string())?;
+            Ok(table_html
+                .to_html_fragment_string(&html)
+                .map_err(|e| e.to_string())?
+                .into())
         },
     )?;
     Ok(markdown_to_html(page.as_ref(), html)?.html())

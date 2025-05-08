@@ -12,21 +12,21 @@
 //! (regardless of the order of modifications) (currently raises an
 //! error).
 
-use std::{io::Write, ops::Range};
+use std::{borrow::Cow, io::Write, ops::Range};
 
 use anyhow::{bail, Result};
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub enum Modification {
+pub enum Modification<'d> {
     /// Delete the given byte range of the original backing string.
     Delete(Range<usize>),
     /// Insert the given string (which must represent a valid XML
     /// fragment) at the byte position in the original backing string.
-    Insert(usize, Box<str>),
+    Insert(usize, Cow<'d, str>),
     // Replace: just use Delete and Insert?
 }
 
-impl Modification {
+impl<'d> Modification<'d> {
     /// The start position
     pub fn start(&self) -> usize {
         match self {
@@ -54,7 +54,7 @@ impl Modification {
     }
 }
 
-impl Ord for Modification {
+impl<'d> Ord for Modification<'d> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.start()
             .cmp(&other.start())
@@ -62,7 +62,7 @@ impl Ord for Modification {
     }
 }
 
-impl PartialOrd for Modification {
+impl<'d> PartialOrd for Modification<'d> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
@@ -71,7 +71,7 @@ impl PartialOrd for Modification {
 #[derive(Debug)]
 pub struct ModifiedDocument<'d> {
     string: &'d str,
-    modifications: Vec<Modification>,
+    modifications: Vec<Modification<'d>>,
     sorted_and_checked: bool,
 }
 
@@ -120,7 +120,7 @@ impl<'d> ModifiedDocument<'d> {
     /// modifications. Positions must match UTF-8 boundaries,
     /// otherwise a panic will happen in `to_string`, and `write_to`
     /// will output invalid UTF-8!
-    pub fn push(&mut self, modification: Modification) {
+    pub fn push(&mut self, modification: Modification<'d>) {
         self.modifications.push(modification);
         self.sorted_and_checked = false;
     }

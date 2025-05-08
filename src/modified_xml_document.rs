@@ -147,9 +147,9 @@ pub enum ClearAction<'t> {
     },
 }
 
-pub struct ClearElementsOpts<'t> {
+pub struct ClearElementsOpts<'t, 'a> {
     /// Actions to carry out on a found element
-    pub actions: &'t [ClearAction<'t>],
+    pub actions: &'a [ClearAction<'t>],
     /// Prefix found nodes with the given comment string and indent if
     /// given.
     pub comment_and_indent: Option<(&'t str, &'t str)>,
@@ -250,7 +250,11 @@ impl<'d> ModifiedXMLDocument<'d> {
     /// position in the document. See `ClearElementsOpts` for
     /// details. NOTE: leaves attributes in place! Returns how many
     /// elements were cleared.
-    pub fn clear_elements_named(&mut self, element_name: &str, opts: &ClearElementsOpts) -> usize {
+    pub fn clear_elements_named<'actions>(
+        &mut self,
+        element_name: &str,
+        opts: &ClearElementsOpts<'d, 'actions>,
+    ) -> usize {
         let mut n_cleared = 0;
         for element in self.elements_named(element_name) {
             for action in opts.actions {
@@ -297,9 +301,6 @@ impl<'d> ModifiedXMLDocument<'d> {
                                 let start = range.start;
                                 self.document.push(Modification::Delete(range));
                                 if !replacement.is_empty() {
-                                    // (Copying `replacement` into a
-                                    // heap allocation for every
-                                    // replacement is a bit stupid.)
                                     self.document
                                         .push(Modification::Insert(start, (*replacement).into()));
                                 }
