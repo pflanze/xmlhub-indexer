@@ -29,6 +29,17 @@ pub const XMLHUB_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
     expected_sub_paths: &["attributes.md"],
 };
 
+/// Information on the Git checkout of the xmlhub-experiments repo;
+/// used by xmlhub.rs
+pub const XMLHUB_EXPERIMENTS_CHECKOUT: CheckoutContext<&str> = CheckoutContext {
+    // This path is replaced with the BASE_PATH argument
+    working_dir_path: ".",
+    branch_name: "master",
+    supposed_upstream_git_url: "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git",
+    supposed_upstream_web_url: "https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments",
+    expected_sub_paths: &["attributes.md"],
+};
+
 /// Information on the Git checkout of the xmlhub-indexer repo; used
 /// by both xmlhub.rs and make-release.rs
 pub const SOURCE_CHECKOUT: CheckoutContext<&str> = CheckoutContext {

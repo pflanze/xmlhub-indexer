@@ -8,7 +8,9 @@ use crate::{
     git_version::{GitVersion, SemVersion},
     path_util::{AppendToPath, FixupPath},
     xmlhub_global_opts::{DrynessOpt, VersionCheckOpt},
-    xmlhub_indexer_defaults::{git_log_version_checker, XMLHUB_CHECKOUT},
+    xmlhub_indexer_defaults::{
+        git_log_version_checker, XMLHUB_CHECKOUT, XMLHUB_EXPERIMENTS_CHECKOUT,
+    },
 };
 
 #[derive(clap::Parser, Debug)]
@@ -101,20 +103,11 @@ pub fn clone_to_command(
         target_path.ok_or_else(|| anyhow!("missing BASE_PATH argument. Run --help for help."))?;
 
     let target = {
-        // (Interestingly, rustc 1.82.0 allows this, even though
-        // CheckoutContext is not Copy. It allso allows it for
-        // `const`, where it makes sense, but not for `static`.)
-        let mut checkout = XMLHUB_CHECKOUT;
-
-        if experiments {
-            checkout.supposed_upstream_git_url =
-                "git@cevo-git.ethz.ch:cevo-resources/xmlhub-experiments.git";
-            // Unused (XXX is there really no other place that needs the
-            // override, when working with an already-cloned repository?)
-            checkout.supposed_upstream_web_url =
-                "https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments";
-        }
-
+        let checkout = if experiments {
+            XMLHUB_EXPERIMENTS_CHECKOUT
+        } else {
+            XMLHUB_CHECKOUT
+        };
         let exists = target_path.exists();
         Target::new(checkout, target_path, exists)
     };
