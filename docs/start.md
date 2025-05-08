@@ -44,7 +44,7 @@ subcommands used here has their own `--help`, too! There are options
 to adapt them in case you need to do things a bit differently.
 
 1. If you don't already have a clone of the
-   [xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub)
+   {xmlhubRepoLink}
    repository, run `xmlhub clone-to <path-to-a-directory>`, where
    `<path-to-a-directory>` is either an existing directory into which
    to make a `xmlhub` subdirectory, or a path including the name of
@@ -58,7 +58,7 @@ to adapt them in case you need to do things a bit differently.
    If you're new, and you would like to first experiment with
    contributing to XML Hub, you can instead run `xmlhub clone-to
    <path-to-a-directory> --experiments`. This clones the
-   [xmlhub-experiments](https://cevo-git.ethz.ch/cevo-resources/xmlhub-experiments)
+   {xmlhubExperimentsRepoLink}
    repository instead that is not used for the real exchange of files.
 
 1. Create a subdirectory for the project if there is none yet: `mkdir <Your subdirectory name>`, `cd <Your subdirectory name>`. (You can use the tabulator key to have the shell complete a path for you, especially if it contains spaces or other special characters!)
@@ -75,7 +75,7 @@ to adapt them in case you need to do things a bit differently.
 
 1. Once you're done preparing your files, run `git add <path-to-your-file(s).xml>`, or `git add .` when inside the folder with your files, then `git commit -m "my commit message"`. Change "my commit message" to be somewhat descriptive. You can also run `git commit`, that opens the editor set in the `EDITOR` environment variable, on macOS, that is by default vim. If you don't know how to use this editor, just type `:`, `q`, then the return key, to get out of it.
 
-1. To conclude your contribution, run `xmlhub build`, which updates the index to the latest files and verifies that you didn't forget to add or commit any files. In case it shows errors about files that are not yours, add the `--write-errors` option to force it to accept the state anyway. Then run `git push` to push your changes to GitLab. Congrats, now your changes should be visible from the GitLab web user interface at [https://cevo-git.ethz.ch/cevo-resources/xmlhub](https://cevo-git.ethz.ch/cevo-resources/xmlhub), too. Thanks!
+1. To conclude your contribution, run `xmlhub build`, which updates the index to the latest files and verifies that you didn't forget to add or commit any files. In case it shows errors about files that are not yours, add the `--write-errors` option to force it to accept the state anyway. Then run `git push` to push your changes to GitLab. Congrats, now your changes should be visible from the GitLab web user interface at {xmlhubRepoLink}, too. Thanks!
 
 For more information on contributing, see [CONTRIBUTE](https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md) -- NOTE: currently this page is partially outdated! (XX TODO)
 
