@@ -13,6 +13,7 @@ use crate::{
     browser::{spawn_browser, spawn_browser_on_path},
     git_version::{GitVersion, SemVersion},
     installation::defaults::global_app_state_dir,
+    modified_document::{Modification, ModifiedDocument},
     path_util::AppendToPath,
     string_tree::StringTree,
     version_info::VersionInfo,
@@ -36,37 +37,59 @@ macro_rules! markdown_paragraphs {
     }
 }
 
-/// Replace variables in markdown string, then convert to HTML
+/// Replace key with val where val is only generated when key is
+/// actually present.
+fn replace_all_lazily(
+    page: &mut Cow<str>,
+    key: &str,
+    val: impl Fn() -> Result<Cow<'static, str>>,
+) -> Result<()> {
+    let mut doc = ModifiedDocument::new(page);
+    let mut value: Option<Cow<str>> = None;
+    for (i, _) in page.match_indices(key) {
+        doc.push(Modification::Delete(i..i + key.len()));
+        let val: &str = if let Some(value) = value.as_ref() {
+            value
+        } else {
+            value = Some(val()?);
+            value.as_ref().expect("we set it above")
+        };
+        // Stupid, now copyboxing all strings. Should change
+        // ModifiedDocument.
+        doc.push(Modification::Insert(i, val.into()));
+    }
+    if doc.has_modifiations() {
+        *page = doc.to_string()?.into();
+    }
+    Ok(())
+}
+
+/// Replace variables in markdown string, then convert the resulting
+/// string to HTML
 fn markdown_with_variables_to_html<'s>(
     page: &'s str,
     program_version: &GitVersion<SemVersion>,
     html: &HtmlAllocator,
 ) -> Result<AId<Node>> {
-    let replacements: [(&str, String); 4] = [
-        (
-            "{xmlhubIndexerRepoUrl}",
-            SOURCE_CHECKOUT.supposed_upstream_web_url.into(),
-        ),
-        (
-            "{xmlhubIndexerBinariesRepoUrl}",
-            BINARIES_CHECKOUT.supposed_upstream_web_url.into(),
-        ),
-        (
-            "{xmlhubRepoUrl}",
-            XMLHUB_CHECKOUT.supposed_upstream_web_url.into(),
-        ),
-        ("{versionAndBuildInfo}", {
+    let mut page: Cow<str> = page.into();
+    replace_all_lazily(&mut page, "{xmlhubIndexerRepoUrl}", || {
+        Ok(SOURCE_CHECKOUT.supposed_upstream_web_url.into())
+    })?;
+    replace_all_lazily(&mut page, "{xmlhubIndexerBinariesRepoUrl}", || {
+        Ok(BINARIES_CHECKOUT.supposed_upstream_web_url.into())
+    })?;
+    replace_all_lazily(&mut page, "{xmlhubRepoUrl}", || {
+        Ok(XMLHUB_CHECKOUT.supposed_upstream_web_url.into())
+    })?;
+    replace_all_lazily(
+        &mut page,
+        "{versionAndBuildInfo}",
+        || -> Result<Cow<str>> {
             let html = HTML_ALLOCATOR_POOL.get();
             let table_html = VersionInfo::new(program_version).to_html(&html)?;
-            table_html.to_html_fragment_string(&html)?
-        }),
-    ];
-
-    let mut page: Cow<str> = page.into();
-    for (key, val) in &replacements {
-        page = page.replace(key, val).into();
-    }
-
+            Ok(table_html.to_html_fragment_string(&html)?.into())
+        },
+    )?;
     Ok(markdown_to_html(page.as_ref(), html)?.html())
 }
 

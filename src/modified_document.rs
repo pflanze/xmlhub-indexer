@@ -68,6 +68,7 @@ impl PartialOrd for Modification {
     }
 }
 
+#[derive(Debug)]
 pub struct ModifiedDocument<'d> {
     string: &'d str,
     modifications: Vec<Modification>,
