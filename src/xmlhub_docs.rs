@@ -22,7 +22,8 @@ use crate::{
     xmlhub_global_opts::OpenOrPrintOpts,
     xmlhub_help::{save_basic_standalone_html_page, CSS_CODE_BACKGROUND_COLOR},
     xmlhub_indexer_defaults::{
-        BINARIES_CHECKOUT, GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, SOURCE_CHECKOUT, XMLHUB_CHECKOUT,
+        BINARIES_CHECKOUT, GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, SOURCE_CHECKOUT,
+        XMLHUB_CHECKOUT, XMLHUB_EXPERIMENTS_CHECKOUT,
     },
 };
 
@@ -99,6 +100,13 @@ fn markdown_with_variables_to_html<'s>(
         "{xmlhubRepoUrl}",
         "{xmlhubRepoLink}",
         XMLHUB_CHECKOUT.supposed_upstream_web_url,
+    )?;
+
+    replace_all_url_and_link(
+        &mut page,
+        "{xmlhubExperimentsRepoUrl}",
+        "{xmlhubExperimentsRepoLink}",
+        XMLHUB_EXPERIMENTS_CHECKOUT.supposed_upstream_web_url,
     )?;
 
     replace_all_lazily(
