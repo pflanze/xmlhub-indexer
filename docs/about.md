@@ -1,5 +1,9 @@
-<!-- NOTE: the parts in { } are variables that are replaced as the
-`xmlhub` program is running. (This currently only works in this file!)
+<!-- 
+
+NOTE: the parts in { } are variables that are replaced as the `xmlhub`
+program is running (see function `markdown_with_variables_to_html` for
+which variables are supported).
+
 -->
 
 # About
@@ -8,9 +12,10 @@
 
 {versionAndBuildInfo}
 
-The source code for this program is in
-[xmlhub-indexer]({xmlhubIndexerRepoUrl}), pre-compiled binaries are in
-[xmlhub-indexer-binaries]({xmlhubIndexerBinariesRepoUrl}).
+The source code for this program is in the
+[xmlhub-indexer]({xmlhubIndexerRepoUrl}) repository, pre-compiled
+binaries are in the
+[xmlhub-indexer-binaries]({xmlhubIndexerBinariesRepoUrl}) repository.
 
 ## Your XML Hub instance
 

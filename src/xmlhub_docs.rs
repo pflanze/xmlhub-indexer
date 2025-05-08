@@ -36,6 +36,40 @@ macro_rules! markdown_paragraphs {
     }
 }
 
+/// Replace variables in markdown string, then convert to HTML
+fn markdown_with_variables_to_html<'s>(
+    page: &'s str,
+    program_version: &GitVersion<SemVersion>,
+    html: &HtmlAllocator,
+) -> Result<AId<Node>> {
+    let replacements: [(&str, String); 4] = [
+        (
+            "{xmlhubIndexerRepoUrl}",
+            SOURCE_CHECKOUT.supposed_upstream_web_url.into(),
+        ),
+        (
+            "{xmlhubIndexerBinariesRepoUrl}",
+            BINARIES_CHECKOUT.supposed_upstream_web_url.into(),
+        ),
+        (
+            "{xmlhubRepoUrl}",
+            XMLHUB_CHECKOUT.supposed_upstream_web_url.into(),
+        ),
+        ("{versionAndBuildInfo}", {
+            let html = HTML_ALLOCATOR_POOL.get();
+            let table_html = VersionInfo::new(program_version).to_html(&html)?;
+            table_html.to_html_fragment_string(&html)?
+        }),
+    ];
+
+    let mut page: Cow<str> = page.into();
+    for (key, val) in &replacements {
+        page = page.replace(key, val).into();
+    }
+
+    Ok(markdown_to_html(page.as_ref(), html)?.html())
+}
+
 /// The file name (without the .md or .html suffix) of the file with
 /// information on how to contribute.
 pub const CONTRIBUTE_FILENAME: &str = "CONTRIBUTE";
@@ -138,45 +172,24 @@ impl WhichPage {
         html: &HtmlAllocator,
     ) -> Result<AId<Node>> {
         match self {
-            WhichPage::Start => {
-                Ok(markdown_to_html(include_str!("../docs/start.md"), &html)?.html())
-            }
+            WhichPage::Start => markdown_with_variables_to_html(
+                include_str!("../docs/start.md"),
+                program_version,
+                html,
+            ),
             WhichPage::Attributes => {
                 Ok(markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html())
             }
-            WhichPage::MacOS => {
-                Ok(markdown_to_html(include_str!("../docs/macos.md"), &html)?.html())
-            }
-            WhichPage::About => {
-                let page = include_str!("../docs/about.md");
-                // Replace 'variables' in that document:
-                let replacements: [(&str, String); 4] = [
-                    (
-                        "{xmlhubIndexerRepoUrl}",
-                        SOURCE_CHECKOUT.supposed_upstream_web_url.into(),
-                    ),
-                    (
-                        "{xmlhubIndexerBinariesRepoUrl}",
-                        BINARIES_CHECKOUT.supposed_upstream_web_url.into(),
-                    ),
-                    (
-                        "{xmlhubRepoUrl}",
-                        XMLHUB_CHECKOUT.supposed_upstream_web_url.into(),
-                    ),
-                    ("{versionAndBuildInfo}", {
-                        let html = HTML_ALLOCATOR_POOL.get();
-                        let table_html = VersionInfo::new(program_version).to_html(&html)?;
-                        table_html.to_html_fragment_string(&html)?
-                    }),
-                ];
-
-                let mut page: Cow<str> = page.into();
-                for (key, val) in &replacements {
-                    page = page.replace(key, val).into();
-                }
-
-                Ok(markdown_to_html(page.as_ref(), html)?.html())
-            }
+            WhichPage::MacOS => markdown_with_variables_to_html(
+                include_str!("../docs/macos.md"),
+                program_version,
+                html,
+            ),
+            WhichPage::About => markdown_with_variables_to_html(
+                include_str!("../docs/about.md"),
+                program_version,
+                html,
+            ),
         }
     }
 }
