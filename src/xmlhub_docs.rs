@@ -42,7 +42,7 @@ macro_rules! markdown_paragraphs {
 fn replace_all_lazily(
     page: &mut Cow<str>,
     key: &str,
-    get_value: &dyn Fn() -> Result<Cow<'static, str>, String>,
+    get_value: &dyn Fn() -> Result<Cow<'static, str>>,
 ) -> Result<()> {
     let value = once_cell::sync::Lazy::new(get_value);
     let mut doc = ModifiedDocument::new(page);
@@ -77,15 +77,10 @@ fn markdown_with_variables_to_html<'s>(
     replace_all_lazily(
         &mut page,
         "{versionAndBuildInfo}",
-        &|| -> Result<Cow<str>, String> {
+        &|| -> Result<Cow<str>> {
             let html = HTML_ALLOCATOR_POOL.get();
-            let table_html = VersionInfo::new(program_version)
-                .to_html(&html)
-                .map_err(|e| e.to_string())?;
-            Ok(table_html
-                .to_html_fragment_string(&html)
-                .map_err(|e| e.to_string())?
-                .into())
+            let table_html = VersionInfo::new(program_version).to_html(&html)?;
+            Ok(table_html.to_html_fragment_string(&html)?.into())
         },
     )?;
     Ok(markdown_to_html(page.as_ref(), html)?.html())
