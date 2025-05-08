@@ -42,7 +42,7 @@ macro_rules! markdown_paragraphs {
 fn replace_all_lazily(
     page: &mut Cow<str>,
     key: &str,
-    get_value: impl FnOnce() -> Result<Cow<'static, str>, String>,
+    get_value: &dyn Fn() -> Result<Cow<'static, str>, String>,
 ) -> Result<()> {
     let value = once_cell::sync::Lazy::new(get_value);
     let mut doc = ModifiedDocument::new(page);
@@ -65,19 +65,19 @@ fn markdown_with_variables_to_html<'s>(
     html: &HtmlAllocator,
 ) -> Result<AId<Node>> {
     let mut page: Cow<str> = page.into();
-    replace_all_lazily(&mut page, "{xmlhubIndexerRepoUrl}", || {
+    replace_all_lazily(&mut page, "{xmlhubIndexerRepoUrl}", &|| {
         Ok(SOURCE_CHECKOUT.supposed_upstream_web_url.into())
     })?;
-    replace_all_lazily(&mut page, "{xmlhubIndexerBinariesRepoUrl}", || {
+    replace_all_lazily(&mut page, "{xmlhubIndexerBinariesRepoUrl}", &|| {
         Ok(BINARIES_CHECKOUT.supposed_upstream_web_url.into())
     })?;
-    replace_all_lazily(&mut page, "{xmlhubRepoUrl}", || {
+    replace_all_lazily(&mut page, "{xmlhubRepoUrl}", &|| {
         Ok(XMLHUB_CHECKOUT.supposed_upstream_web_url.into())
     })?;
     replace_all_lazily(
         &mut page,
         "{versionAndBuildInfo}",
-        || -> Result<Cow<str>, String> {
+        &|| -> Result<Cow<str>, String> {
             let html = HTML_ALLOCATOR_POOL.get();
             let table_html = VersionInfo::new(program_version)
                 .to_html(&html)
