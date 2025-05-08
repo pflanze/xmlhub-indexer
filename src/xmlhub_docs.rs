@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     ffi::OsString,
     io::{stdout, Write},
     path::PathBuf,
@@ -11,13 +12,17 @@ use itertools::intersperse_with;
 
 use crate::{
     browser::{spawn_browser, spawn_browser_on_path},
+    git_version::{GitVersion, SemVersion},
     installation::defaults::global_app_state_dir,
     path_util::AppendToPath,
     string_tree::StringTree,
+    version_info::VersionInfo,
     xmlhub_attributes::{specifications_to_html, METADATA_SPECIFICATION},
     xmlhub_global_opts::OpenOrPrintOpts,
     xmlhub_help::{save_basic_standalone_html_page, CSS_CODE_BACKGROUND_COLOR},
-    xmlhub_indexer_defaults::{GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, XMLHUB_CHECKOUT},
+    xmlhub_indexer_defaults::{
+        BINARIES_CHECKOUT, GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, SOURCE_CHECKOUT, XMLHUB_CHECKOUT,
+    },
 };
 
 pub fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {
@@ -95,6 +100,7 @@ def_enum_with_list!(WhichPage {
     Start,
     Attributes,
     MacOS,
+    About,
 });
 
 impl WhichPage {
@@ -115,10 +121,19 @@ impl WhichPage {
                 file_name: "macos.html",
                 title: "macOS",
             },
+            WhichPage::About => PageInfo {
+                which_page: self,
+                file_name: "about.html",
+                title: "About",
+            },
         }
     }
 
-    fn create_page(self, html: &HtmlAllocator) -> Result<AId<Node>> {
+    fn create_page(
+        self,
+        program_version: &GitVersion<SemVersion>,
+        html: &HtmlAllocator,
+    ) -> Result<AId<Node>> {
         match self {
             WhichPage::Start => {
                 Ok(markdown_to_html(include_str!("../docs/start.md"), &html)?.html())
@@ -128,6 +143,36 @@ impl WhichPage {
             }
             WhichPage::MacOS => {
                 Ok(markdown_to_html(include_str!("../docs/macos.md"), &html)?.html())
+            }
+            WhichPage::About => {
+                let page = include_str!("../docs/about.md");
+                // Replace 'variables' in that document:
+                let replacements: [(&str, String); 4] = [
+                    (
+                        "{xmlhubIndexerRepoUrl}",
+                        SOURCE_CHECKOUT.supposed_upstream_web_url.into(),
+                    ),
+                    (
+                        "{xmlhubIndexerBinariesRepoUrl}",
+                        BINARIES_CHECKOUT.supposed_upstream_web_url.into(),
+                    ),
+                    (
+                        "{xmlhubRepoUrl}",
+                        XMLHUB_CHECKOUT.supposed_upstream_web_url.into(),
+                    ),
+                    ("{versionAndBuildInfo}", {
+                        let html = HTML_ALLOCATOR_POOL.get();
+                        let table_html = VersionInfo::new(program_version).to_html(&html)?;
+                        table_html.to_html_fragment_string(&html)?
+                    }),
+                ];
+
+                let mut page: Cow<str> = page.into();
+                for (key, val) in &replacements {
+                    page = page.replace(key, val).into();
+                }
+
+                Ok(markdown_to_html(page.as_ref(), html)?.html())
             }
         }
     }
@@ -200,16 +245,24 @@ const HELP_PAGES_IMAGES: &[&IncludedImage] = &[&XMLHUB_LOGO];
 // Create multiple/all help pages, so that they can link to each
 // other! Returns the path to the page for which you passed the
 // `WhichPage`.
-fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Result<PathBuf> {
+fn create_help_pages(
+    give_which_page: WhichPage,
+    program_version: &GitVersion<SemVersion>,
+) -> Result<PathBuf> {
     let site_title = "“xmlhub” tool documentation";
 
     let html = HTML_ALLOCATOR_POOL.get();
 
-    let output_path_base = global_app_state_dir()?.docs_base(program_version)?;
+    let output_path_base = global_app_state_dir()?.docs_base(&program_version.to_string())?;
 
     let page_infos: Vec<(PageInfo, AId<Node>)> = WhichPage::list()
         .iter()
-        .map(|which| Ok((which.page_info(), which.create_page(&html)?)))
+        .map(|which| {
+            Ok((
+                which.page_info(),
+                which.create_page(program_version, &html)?,
+            ))
+        })
         .collect::<Result<_>>()?;
 
     let nav_for_page = |this_page: &PageInfo| -> Result<AId<Node>> {
@@ -288,13 +341,16 @@ fn create_help_pages(give_which_page: WhichPage, program_version: &str) -> Resul
         .1)
 }
 
-pub fn open_help_page(which_page: WhichPage, program_version: &str) -> Result<()> {
+pub fn open_help_page(
+    which_page: WhichPage,
+    program_version: &GitVersion<SemVersion>,
+) -> Result<()> {
     let output_path = create_help_pages(which_page, program_version)?;
     spawn_browser_on_path(&output_path)
 }
 
-pub fn docs_command(program_version: &str) -> Result<()> {
-    open_help_page(WhichPage::Start, program_version)
+pub fn docs_command(program_version: GitVersion<SemVersion>) -> Result<()> {
+    open_help_page(WhichPage::Start, &program_version)
 }
 
 pub fn help_contributing_command() -> Result<()> {
@@ -319,12 +375,12 @@ pub struct HelpAttributesOpts {
 
 pub fn help_attributes_command(
     command_opts: HelpAttributesOpts,
-    program_version: &str,
+    program_version: GitVersion<SemVersion>,
 ) -> Result<()> {
     let HelpAttributesOpts { open_or_print } = command_opts;
 
     if open_or_print.do_open() {
-        open_help_page(WhichPage::Attributes, program_version)?;
+        open_help_page(WhichPage::Attributes, &program_version)?;
     }
 
     if open_or_print.do_print() {

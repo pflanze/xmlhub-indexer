@@ -55,6 +55,7 @@ use xmlhub_indexer::{
         file_util_with_trash::write_file_moving_to_trash_if_exists,
         setpriority::{possibly_setpriority, PriorityWhich},
     },
+    version_info::VersionInfo,
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_attributes::{
         attribute_specification_by_name, sort_in_definition_order, AttributeName, AttributeNeed,
@@ -2336,18 +2337,8 @@ fn main() -> Result<()> {
 
         // `--version`
         if v {
-            println!("{REPO_NAME} {program_version}");
-            println!(
-                "Compiled for OS/architecture: {}/{}",
-                std::env::consts::OS,
-                std::env::consts::ARCH
-            );
-            let profile = if cfg!(debug_assertions) {
-                "debug"
-            } else {
-                "release"
-            };
-            println!("Compilation profile: {profile}");
+            let version_info = VersionInfo::new(&program_version);
+            print!("{version_info}");
             return Ok(());
         }
         // `--version-only`
@@ -2509,10 +2500,10 @@ fn main() -> Result<()> {
 
     // Run the requested command
     match opts.command.expect("`None` is dispatched above already") {
-        Command::Docs => docs_command(PROGRAM_VERSION),
+        Command::Docs => docs_command(program_version),
         Command::HelpContributing => help_contributing_command(),
         Command::HelpAttributes(command_opts) => {
-            help_attributes_command(command_opts, PROGRAM_VERSION)
+            help_attributes_command(command_opts, program_version)
         }
         Command::Changelog(command_opts) => changelog_command(command_opts),
 
