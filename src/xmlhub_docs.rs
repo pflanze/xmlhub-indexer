@@ -8,7 +8,6 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, Context, Result};
-use itertools::intersperse_with;
 
 use crate::{
     browser::{spawn_browser, spawn_browser_on_path},
@@ -25,8 +24,16 @@ use crate::{
     },
 };
 
-pub fn flatten_as_paragraphs(vecs: Vec<Vec<StringTree>>) -> Vec<StringTree> {
-    intersperse_with(vecs.into_iter().flatten(), || "\n\n".into()).collect()
+#[macro_export]
+macro_rules! markdown_paragraphs {
+    [ $($para:expr,)*  ] => {
+        $crate::string_tree::StringTree::Branching(
+            itertools::intersperse_with(
+                [ $($crate::string_tree::StringTree::from($para),)* ],
+                || $crate::string_tree::StringTree::from("\n\n")
+            ).collect::<Vec<$crate::string_tree::StringTree>>()
+        )
+    }
 }
 
 /// The file name (without the .md or .html suffix) of the file with
@@ -46,13 +53,12 @@ pub fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'stat
         )?
         .to_html_fragment_string(&html)?;
 
-    Ok(StringTree::Branching(flatten_as_paragraphs(vec![vec![
+    Ok(markdown_paragraphs![
         format!(
             "<!-- NOTE: {}, do not edit manually! -->",
             *GENERATED_MESSAGE
-        )
-        .into(),
-        format!("# Metainfo attributes").into(),
+        ),
+        format!("# Metainfo attributes"),
         format!(
             "This describes how each attribute from the XML file headers {} is interpreted. \
              `required` means that an actual non-empty value is required, just the \
@@ -62,16 +68,13 @@ pub fn make_attributes_md(link_contribute_file: bool) -> Result<StringTree<'stat
             } else {
                 "".into()
             }
-        )
-        .into(),
-        "(If you have a suggestion for another metadata field, tell your XML Hub maintainer!)"
-            .into(),
+        ),
+        "(If you have a suggestion for another metadata field, tell your XML Hub maintainer!)",
         "Note: you can use the xmlhub command line tool, via `xmlhub prepare` or \
          `xmlhub add-to`, to get a template of these attributes into your file, \
-         so you don't have to add these headers individually yourself!"
-            .into(),
-        spec_html.into(),
-    ]])))
+         so you don't have to add these headers individually yourself!",
+        spec_html,
+    ])
 }
 
 struct PageInfo {

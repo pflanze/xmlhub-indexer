@@ -43,6 +43,7 @@ use xmlhub_indexer::{
         defaults::global_app_state_dir,
         git_based_upgrade::{changelog_display, git_based_upgrade, UpgradeRules},
     },
+    markdown_paragraphs,
     modified_xml_document::{ClearAction, ClearElementsOpts, ModifiedXMLDocument},
     path_util::{AppendToPath, CURRENT_DIRECTORY},
     rayon_util::ParRun,
@@ -65,8 +66,8 @@ use xmlhub_indexer::{
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_clone_to::{clone_to_command, CloneToOpts},
     xmlhub_docs::{
-        docs_command, flatten_as_paragraphs, help_attributes_command, help_contributing_command,
-        make_attributes_md, HelpAttributesOpts, CONTRIBUTE_FILENAME,
+        docs_command, help_attributes_command, help_contributing_command, make_attributes_md,
+        HelpAttributesOpts, CONTRIBUTE_FILENAME,
     },
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
@@ -1272,23 +1273,18 @@ fn build_index(
     let make_mddocument = || -> Result<StringTree> {
         let html = HTML_ALLOCATOR_POOL.get();
 
-        Ok(StringTree::Branching(flatten_as_paragraphs(vec![vec![
+        Ok(markdown_paragraphs![
             format!(
                 "<!-- NOTE: {}, do not edit manually! -->",
                 *GENERATED_MESSAGE
-            )
-            .into(),
-            format!("# {title}").into(),
-            make_intro(true, &html)?
-                .to_html_fragment_string(&html)?
-                .into(),
-            "## Contents".into(),
-            toc_html.as_arc_str().into(),
+            ),
+            format!("# {title}"),
+            make_intro(true, &html)?.to_html_fragment_string(&html)?,
+            "## Contents",
+            toc_html.as_arc_str(),
             toplevel_section.to_markdown(NumberPath::empty())?,
-            empty_space_element(40, &html)?
-                .to_html_fragment_string(&html)?
-                .into(),
-        ]])))
+            empty_space_element(40, &html)?.to_html_fragment_string(&html)?,
+        ])
     };
 
     let have_errors = !file_errorss.is_empty();
