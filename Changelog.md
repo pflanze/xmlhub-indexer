@@ -281,8 +281,10 @@ v9.7 - 2025-04-25
 - Change the `desc` metainfo field to accept Markdown (allowing for formatting and links in attribute descriptions)
 - Add workaround to make the `-h` and `--help` options behave the same way
 - xmlhub help: update the 'blurb' about the program (about text shown first in the help)
-- `xmlhub docs`: add description about XML Hub and the xmlhub tool; add a preliminary macOS user page
 - xmlhub build error messages: list missing keywords sorted in the order of their definition (same as shown in templates or the attributes list)
 - Some nicer error messages
 - xmlhub build: add capability to collect warnings (for both terminal and index file output); check the BEAST version from the `<beast>` element, compare to the one passed manually, warn if different.
 - `xmlhub prepare / add-to`: fix the blinding feature: retain the <sequence> elements but empty their values attribute; add `--blind-all` option to get the old behaviour, and mention in the message that the option exists and that the default blinding does not strip the metadata (thus one has to be careful not to have privacy sensitive information in the metadata!)
+- `xmlhub prepare`: check that the file size is below 5 MB, provide an option to override
+- for `xmlhub docs`: implement variables for repository urls and version information that documentation pages can use
+- `xmlhub docs`: add a (preliminary) logo, link to the BEAST2 website, add link to XML Hub repository to the navigation bar, add description about XML Hub and the xmlhub tool, add a preliminary macOS user page, add an "about" page with version info, add "signatures verification" page
