@@ -189,6 +189,7 @@ def_enum_with_list!(WhichPage {
     Start,
     Attributes,
     MacOS,
+    Signatures,
     About,
 });
 
@@ -215,6 +216,11 @@ impl WhichPage {
                 file_name: "about.html",
                 title: "About",
             },
+            WhichPage::Signatures => PageInfo {
+                which_page: self,
+                file_name: "signatures.html",
+                title: "Code signatures",
+            },
         }
     }
 
@@ -239,6 +245,11 @@ impl WhichPage {
             ),
             WhichPage::About => markdown_with_variables_to_html(
                 include_str!("../docs/about.md"),
+                program_version,
+                html,
+            ),
+            WhichPage::Signatures => markdown_with_variables_to_html(
+                include_str!("../docs/signatures.md"),
                 program_version,
                 html,
             ),
