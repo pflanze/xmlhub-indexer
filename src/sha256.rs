@@ -4,7 +4,7 @@ use anyhow::Result;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    command::run_stdout_string, path_util::CURRENT_DIRECTORY, rayon_util::ParRun,
+    command::run_stdout_string, fixup_path::CURRENT_DIRECTORY, rayon_util::ParRun,
     utillib::hex::to_hex_string,
 };
 

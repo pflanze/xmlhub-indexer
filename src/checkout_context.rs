@@ -13,8 +13,9 @@ use nix::NixPath;
 
 use crate::{
     const_util::file_name,
+    fixup_path::FixupPath,
     git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
-    path_util::{AppendToPath, FixupPath},
+    path_util::AppendToPath,
 };
 
 #[derive(Debug, Clone)]

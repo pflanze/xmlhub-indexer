@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::{
     command::{run_outputs, spawn, Capturing},
-    path_util::CURRENT_DIRECTORY,
+    fixup_path::CURRENT_DIRECTORY,
     util::{append, to_owned_items},
 };
 

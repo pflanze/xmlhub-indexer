@@ -12,6 +12,7 @@ pub mod dry_run;
 pub mod effect;
 pub mod file_lock;
 pub mod file_util;
+pub mod fixup_path;
 pub mod flattened;
 pub mod folder;
 pub mod forking_loop;
