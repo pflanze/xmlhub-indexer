@@ -15,7 +15,7 @@ use crate::{
     git::git,
     git_version::{GitVersion, SemVersion},
     installation::shell::AppendToShellFileDone,
-    path_util::{add_extension, AppendToPath},
+    path_util::{add_extension_mut, AppendToPath},
     sha256::sha256sum,
     util::ask_yn,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, PROGRAM_NAME, XMLHUB_BINARY_FILE_NAME},
@@ -190,7 +190,7 @@ pub fn carry_out_install_action_with_log(args: InstallActionWithLog) -> Result<(
             app_info.save_for_app_path(&pseudo_binary_path)?;
             // No need to save the .sig? Don't currently have it here.
         } else {
-            add_extension(&mut pseudo_binary_path, "direct-install");
+            add_extension_mut(&mut pseudo_binary_path, "direct-install");
             std::fs::write(
                 &pseudo_binary_path,
                 "direct 'install' action, not via upgrade",

@@ -11,7 +11,7 @@ use fips205::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    path_util::add_extension,
+    path_util::add_extension_mut,
     utillib::hex::{decode_hex, to_hex_string},
 };
 
@@ -73,7 +73,7 @@ pub trait SaveLoadKeyFile: Serialize + JsonFile<Header = AppSignatureKeyHeader> 
 
     fn path_add_suffix<P: AsRef<Path>>(path_without_suffix: P) -> Result<PathBuf> {
         let mut path = path_without_suffix.as_ref().to_owned();
-        if !add_extension(&mut path, Self::SUFFIX) {
+        if !add_extension_mut(&mut path, Self::SUFFIX) {
             bail!(
                 "cannot add extension to path {:?} (does not have a file name)",
                 path_without_suffix.as_ref()

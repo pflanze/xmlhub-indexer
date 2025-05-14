@@ -111,11 +111,11 @@ fn t_fixup() {
 // dot. If `extension` is empty, nothing is appended (not even the
 // dot). This function exists because the `add_extension` method in
 // std is currently an unstable library feature.
-pub fn add_extension<S: AsRef<OsStr>>(this: &mut PathBuf, extension: S) -> bool {
-    _add_extension(this, extension.as_ref())
+pub fn add_extension_mut<S: AsRef<OsStr>>(this: &mut PathBuf, extension: S) -> bool {
+    _add_extension_mut(this, extension.as_ref())
 }
 
-fn _add_extension(this: &mut PathBuf, extension: &OsStr) -> bool {
+fn _add_extension_mut(this: &mut PathBuf, extension: &OsStr) -> bool {
     let file_name = match this.file_name() {
         None => return false,
         Some(f) => f.as_encoded_bytes(),
@@ -145,7 +145,7 @@ fn _add_extension(this: &mut PathBuf, extension: &OsStr) -> bool {
 fn t_add_extension() {
     let t = |path: &str, ext: &str| {
         let mut path = PathBuf::from(path);
-        if add_extension(&mut path, ext) {
+        if add_extension_mut(&mut path, ext) {
             path.to_string_lossy().to_string()
         } else {
             format!("{path:?} -- unchanged")

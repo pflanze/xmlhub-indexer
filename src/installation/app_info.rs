@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{path_util::add_extension, sha256::sha256sum};
+use crate::{path_util::add_extension_mut, sha256::sha256sum};
 
 use super::json_file::{JsonFile, JsonFileHeader};
 
@@ -75,7 +75,7 @@ impl AppInfo {
 
     pub fn info_path_for_app_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
         let mut path = path.as_ref().to_owned();
-        if !add_extension(&mut path, Self::SUFFIX) {
+        if !add_extension_mut(&mut path, Self::SUFFIX) {
             let path: &Path = path.as_ref();
             bail!("path does not have a file name: {path:?}")
         }
