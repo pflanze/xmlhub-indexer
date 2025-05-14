@@ -106,6 +106,19 @@ fn t_fixup() {
     );
 }
 
+// Add an extension to a path with a filename. Returns none if the
+// path does not in fact have a filename. `extension` must not include
+// the dot. If `extension` is empty, nothing is appended (not even the
+// dot).
+pub fn add_extension<P: AsRef<Path>, S: AsRef<OsStr>>(this: P, extension: S) -> Option<PathBuf> {
+    let mut path = this.as_ref().to_owned();
+    if !_add_extension_mut(&mut path, extension.as_ref()) {
+        None
+    } else {
+        Some(path)
+    }
+}
+
 // Add an extension to a path with a filename. Returns false if it
 // does not in fact have a filename. `extension` must not include the
 // dot. If `extension` is empty, nothing is appended (not even the
