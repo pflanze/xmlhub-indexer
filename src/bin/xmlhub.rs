@@ -72,7 +72,8 @@ use xmlhub_indexer::{
     },
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{
-        AttributeValue, FileInfo, Metadata, WithDerivedValues, WithoutDerivedValues,
+        AttributeValue, FileInfo, Metadata, WithCommentsOnly, WithDerivedValues,
+        WithExtractedValues,
     },
     xmlhub_global_opts::{
         BlindingOpts, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt, VersionCheckOpt,
@@ -80,8 +81,8 @@ use xmlhub_indexer::{
     xmlhub_help::print_basic_standalone_html_page,
     xmlhub_indexer_defaults::{
         css_styles, document_symbol, git_log_version_checker, BACK_TO_INDEX_SYMBOL,
-        GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, HTML_FILE, MD_FILE, PROGRAM_NAME, SOURCE_CHECKOUT,
-        XMLHUB_CHECKOUT,
+        GENERATED_MESSAGE, HTML_ALLOCATOR_POOL, HTML_FILE, MD_FILE, PROGRAM_NAME,
+        SEQUENCES_ELEMENT_NAME, SOURCE_CHECKOUT, XMLHUB_CHECKOUT,
     },
     xmlhub_install::{install_command, InstallOpts},
     xmlhub_types::OutputFile,
@@ -543,7 +544,7 @@ struct AddToOpts {
 fn parse_comments<'a>(
     comments: impl Iterator<Item = XMLDocumentComment<'a>>,
     dry: bool,
-) -> Result<Metadata<WithoutDerivedValues>, Vec<String>> {
+) -> Result<Metadata<WithCommentsOnly>, Vec<String>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
         .map(|spec| (spec.key.as_ref().to_lowercase(), spec))
@@ -590,7 +591,7 @@ fn parse_comments<'a>(
         .filter_map(|spec| {
             let source_spec = match &spec.source {
                 AttributeSource::Specified(source_spec) => source_spec,
-                AttributeSource::Derived(_) => return None,
+                AttributeSource::Derived(_) | AttributeSource::Extracted(_) => return None,
             };
             // Do not report as missing if it's optional
             if source_spec.need == AttributeNeed::Optional {
@@ -640,12 +641,12 @@ lazy_static! {
 /// the generated HTML/Markdown files.
 fn read_file_infos(
     paths: Vec<BaseAndRelPath>,
-) -> Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> {
+) -> Vec<Result<FileInfo<WithExtractedValues>, FileErrors>> {
     paths
         .into_par_iter()
         .enumerate()
         .map(
-            |(id, path)| -> Result<FileInfo<WithoutDerivedValues>, FileErrors> {
+            |(id, path)| -> Result<FileInfo<WithExtractedValues>, FileErrors> {
                 let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
                     path: path.clone(),
                     errors: vec![format!("{e:#}")],
@@ -660,14 +661,7 @@ fn read_file_infos(
 
                 let mut warnings = Vec::new();
 
-                // We're currently doing nothing else with
-                // `xmldocument` (which holds the tree of all elements
-                // in the document). It would be possible to extract
-                // information from the XML tree for further indexes
-                // by defining another kind of indexing than metadata
-                // attributes, defining extractors for those, doing
-                // the extraction here and adding the results to
-                // `FileInfo`.
+                let metadata = metadata.add_extracted_attributes(&xmldocument, &mut warnings);
 
                 // Check the version in the XML: verify that it fits
                 // what the user provided in the XML comment.
@@ -1103,12 +1097,12 @@ fn build_index(
     };
 
     // See help text on `read_file_infos` for what it's doing.
-    let fileinfo_or_errors: Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> =
+    let fileinfo_or_errors: Vec<Result<FileInfo<WithExtractedValues>, FileErrors>> =
         read_file_infos(paths);
 
     // Partition fileinfo_or_errors into vectors with only the
     // successful and only the erroneous results.
-    let (file_infos, file_errorss): (Vec<FileInfo<WithoutDerivedValues>>, Vec<FileErrors>) =
+    let (file_infos, file_errorss): (Vec<FileInfo<WithExtractedValues>>, Vec<FileErrors>) =
         fileinfo_or_errors.into_iter().partition_result();
 
     // Build derived attribute values. Errors during this phase are
@@ -1123,7 +1117,7 @@ fn build_index(
                 metadata,
                 mut warnings,
             } = info;
-            let metadata = metadata.extend(&mut warnings);
+            let metadata = metadata.add_derived_attributes(&mut warnings);
             FileInfo {
                 id,
                 path,
@@ -1966,7 +1960,7 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
     )?;
 
     // Now check the given paths explicitly.
-    let fileinfo_or_errors: Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> =
+    let fileinfo_or_errors: Vec<Result<FileInfo<WithExtractedValues>, FileErrors>> =
         read_file_infos(paths);
     let mut exit_code = 0;
     let mut err = stderr().lock();
@@ -2044,7 +2038,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
         for spec in METADATA_SPECIFICATION {
             let source_spec = match &spec.source {
                 AttributeSource::Specified(source_spec) => source_spec,
-                AttributeSource::Derived(_) => continue,
+                AttributeSource::Derived(_) | AttributeSource::Extracted(_) => continue,
             };
             let comment = format!(
                 "{}: {}",
@@ -2089,7 +2083,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
             // XX should the code check that the `beast > data > sequence`
             // nesting is upheld? This doesn't.
             n_sequences_blinded = modified_document.clear_elements_named(
-                "sequence",
+                SEQUENCES_ELEMENT_NAME,
                 &ClearElementsOpts {
                     comment_and_indent: None,
                     always_add_comment: false,

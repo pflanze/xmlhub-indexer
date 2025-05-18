@@ -98,6 +98,12 @@ lazy_static! {
     );
 }
 
+/// The name of XML elements containing sequences; currently searching
+/// for this element name is how those elements are found; if
+/// something better (upholding element nesting) is required, the
+/// implementation will have to be changed.
+pub const SEQUENCES_ELEMENT_NAME: &str = "sequence";
+
 // -----------------------------------------------------------------------------
 // HTML generation settings
 

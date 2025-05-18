@@ -16,8 +16,10 @@ use lazy_static::lazy_static;
 use crate::{
     html_util::extract_paragraph_body,
     util::{self, format_anchor_name},
+    xml_document::XMLDocument,
     xmlhub_autolink::Autolink,
     xmlhub_fileinfo::{AttributeValue, AttributeValueKind},
+    xmlhub_indexer_defaults::SEQUENCES_ELEMENT_NAME,
 };
 
 /// An attribute name is a string that identifies an attribute. The
@@ -191,6 +193,11 @@ pub struct SourceSpecification {
 }
 
 #[derive(Debug)]
+pub struct ExtractionSpecification {
+    pub extractor: for<'a> fn(&'a XMLDocument, &mut Vec<String>) -> AttributeValueKind,
+}
+
+#[derive(Debug)]
 pub struct DerivationSpecification {
     /// Which other attributes this one is derived from, by name
     pub derived_from: &'static [AttributeName],
@@ -209,6 +216,8 @@ pub struct DerivationSpecification {
 pub enum AttributeSource {
     /// Value is specified via an XML comment
     Specified(SourceSpecification),
+    /// Value is extracted from the XML itself
+    Extracted(ExtractionSpecification),
     /// Value is calculated from other attributes
     Derived(DerivationSpecification),
 }
@@ -475,6 +484,23 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
                 need: AttributeNeed::Optional,
                 kind: AttributeKind::String {
                     normalize_whitespace: false,
+                },
+            }),
+            autolink: Autolink::Web,
+            indexing: AttributeIndexing::Index {
+                first_word_only: false,
+                use_lowercase: false,
+            },
+        },
+        AttributeSpecification {
+            key: AttributeName("Contains sequence data"),
+            source: AttributeSource::Extracted(ExtractionSpecification {
+                extractor: |xmldocument, _warnings| -> AttributeValueKind {
+                    AttributeValueKind::Boolean(
+                        !xmldocument
+                            .elements_named(SEQUENCES_ELEMENT_NAME)
+                            .is_empty(),
+                    )
                 },
             }),
             autolink: Autolink::Web,

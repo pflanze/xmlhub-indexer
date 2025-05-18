@@ -7,14 +7,17 @@ use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
 
 use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, Node};
 use anyhow::{bail, Result};
+use lazy_static::lazy_static;
 use pluraless::pluralized;
 
 use crate::{
     git::BaseAndRelPath,
-    util::{self, list_get_by_key},
+    util::{self, bool_to_yes_no, list_get_by_key},
+    xml_document::XMLDocument,
     xmlhub_attributes::{
         sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed, AttributeSource,
-        AttributeSpecification, DerivationSpecification, METADATA_SPECIFICATION,
+        AttributeSpecification, DerivationSpecification, ExtractionSpecification,
+        METADATA_SPECIFICATION,
     },
     xmlhub_autolink::Autolink,
     xmlhub_file_issues::{FileIssues, FileWarnings},
@@ -36,9 +39,10 @@ pub struct AttributeValue {
 
 #[derive(Debug)]
 pub enum AttributeValueKind {
+    NA,
     String(String),
     StringList(Vec<String>),
-    NA,
+    Boolean(bool),
 }
 
 impl AttributeValue {
@@ -50,8 +54,8 @@ impl AttributeValue {
     pub fn from_str_and_spec(val: &str, spec: &'static AttributeSpecification) -> Result<Self> {
         let source_spec = match &spec.source {
             AttributeSource::Specified(source_spec) => source_spec,
-            AttributeSource::Derived(_) => bail!(
-                "the value of the attribute {:?} is derived automatically, \
+            AttributeSource::Derived(_) | AttributeSource::Extracted(_) => bail!(
+                "the value of the attribute {:?} is calculated automatically, \
                  it cannot be specified manually; please remove the entry",
                 spec.key.as_ref()
             ),
@@ -123,6 +127,18 @@ impl AttributeValue {
             AttributeValueKind::StringList(value) => Cow::from(value.as_slice()),
             AttributeValueKind::NA => Cow::from(&[]),
             AttributeValueKind::String(value) => Cow::from(vec![value.clone()]),
+            AttributeValueKind::Boolean(b) => {
+                lazy_static! {
+                    static ref TRUE: Vec<String> = vec![bool_to_yes_no(true).into()];
+                    static ref FALSE: Vec<String> = vec![bool_to_yes_no(false).into()];
+                }
+                let val = if *b {
+                    TRUE.as_slice()
+                } else {
+                    FALSE.as_slice()
+                };
+                Cow::from(val)
+            }
         }
     }
 
@@ -161,6 +177,7 @@ impl AttributeValue {
             }
         };
         match value {
+            AttributeValueKind::NA => html.i([], html.text("n.A.")?).map(Flat::One),
             AttributeValueKind::String(value) => {
                 let softpre = SoftPre {
                     tabs_to_nbsp: Some(8),
@@ -201,17 +218,25 @@ impl AttributeValue {
                 }
                 Ok(Flat::Slice(body.as_slice()))
             }
-            AttributeValueKind::NA => html.i([], html.text("n.A.")?).map(Flat::One),
+            AttributeValueKind::Boolean(b) => Ok(Flat::One(html.text(bool_to_yes_no(*b))?)),
         }
     }
 }
 
 pub trait HavingDerivedValues {}
 
+/// Metadata stage 1: has only values extracted from XML comments
 #[derive(Debug)]
-pub struct WithoutDerivedValues;
-impl HavingDerivedValues for WithoutDerivedValues {}
+pub struct WithCommentsOnly;
+impl HavingDerivedValues for WithCommentsOnly {}
 
+/// Metadata stage 2: also has values extracted from the XML document
+/// itself
+#[derive(Debug)]
+pub struct WithExtractedValues;
+impl HavingDerivedValues for WithExtractedValues {}
+
+/// Metadata stage 3: also has values calculated from other attributes
 #[derive(Debug)]
 pub struct WithDerivedValues;
 impl HavingDerivedValues for WithDerivedValues {}
@@ -297,13 +322,43 @@ impl<H: HavingDerivedValues> Metadata<H> {
     }
 }
 
-impl Metadata<WithoutDerivedValues> {
-    /// Generate derived attribute values (as listed in
-    /// `METADATA_SPECIFICATION`)
-    pub fn extend(self, warnings: &mut Vec<String>) -> Metadata<WithDerivedValues> {
+impl Metadata<WithCommentsOnly> {
+    /// Generate attributes extracted from the XML document body as
+    /// listed in `METADATA_SPECIFICATION` with
+    /// `AttributeSource::Extracted`
+    pub fn add_extracted_attributes(
+        self,
+        document: &XMLDocument,
+        warnings: &mut Vec<String>,
+    ) -> Metadata<WithExtractedValues> {
         let mut values = self.values;
 
-        let mut from = Vec::new();
+        for spec in METADATA_SPECIFICATION {
+            if let AttributeSpecification {
+                key,
+                source: AttributeSource::Extracted(ExtractionSpecification { extractor }),
+                autolink: _,
+                indexing: _,
+            } = spec
+            {
+                let value = extractor(document, warnings);
+                values.insert(*key, AttributeValue { spec, value });
+            }
+        }
+
+        Metadata {
+            kind: Default::default(),
+            values,
+        }
+    }
+}
+
+impl Metadata<WithExtractedValues> {
+    /// Generate derived attribute values as listed in
+    /// `METADATA_SPECIFICATION` with `AttributeSource::Derived`
+    pub fn add_derived_attributes(self, warnings: &mut Vec<String>) -> Metadata<WithDerivedValues> {
+        let mut values = self.values;
+
         for spec in METADATA_SPECIFICATION {
             if let AttributeSpecification {
                 key,
@@ -316,7 +371,9 @@ impl Metadata<WithoutDerivedValues> {
                 indexing: _,
             } = spec
             {
-                from.clear();
+                // XX could re-use `from` across for loops with
+                // `clear()` if lifetimes wouldn't prevent it
+                let mut from = Vec::new();
                 for from_key in *derived_from {
                     from.push(values.get(from_key));
                 }

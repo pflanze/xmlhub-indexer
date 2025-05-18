@@ -233,7 +233,6 @@ fn t_format_anchor_name() {
     );
 }
 
-// unused?
 pub fn bool_to_yes_no(val: bool) -> &'static str {
     if val {
         "yes"
