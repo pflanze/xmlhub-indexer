@@ -3,7 +3,7 @@
 //! operations (`impl` blocks) including parsing that information from
 //! strings and formatting the information as HTML.
 
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
 
 use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, Node};
 use anyhow::{bail, Result};
@@ -13,8 +13,8 @@ use crate::{
     git::BaseAndRelPath,
     util::{self, list_get_by_key},
     xmlhub_attributes::{
-        sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed,
-        AttributeSpecification, METADATA_SPECIFICATION,
+        sort_in_definition_order, AttributeKind, AttributeName, AttributeNeed, AttributeSource,
+        AttributeSpecification, DerivationSpecification, METADATA_SPECIFICATION,
     },
     xmlhub_autolink::Autolink,
     xmlhub_file_issues::{FileIssues, FileWarnings},
@@ -35,7 +35,7 @@ pub struct AttributeValue {
 }
 
 #[derive(Debug)]
-enum AttributeValueKind {
+pub enum AttributeValueKind {
     String(String),
     StringList(Vec<String>),
     NA,
@@ -48,14 +48,22 @@ impl AttributeValue {
     /// if the input is only whitespace but a value is required by the
     /// spec.
     pub fn from_str_and_spec(val: &str, spec: &'static AttributeSpecification) -> Result<Self> {
+        let source_spec = match &spec.source {
+            AttributeSource::Specified(source_spec) => source_spec,
+            AttributeSource::Derived(_) => bail!(
+                "the value of the attribute {:?} is derived automatically, \
+                 it cannot be specified manually; please remove the entry",
+                spec.key.as_ref()
+            ),
+        };
         let value: AttributeValueKind = if val.is_empty() || val == "NA" {
-            match spec.need {
+            match source_spec.need {
                 AttributeNeed::Optional => AttributeValueKind::NA,
                 AttributeNeed::Required => {
                     bail!(
                         "attribute {:?} requires {}, but none given",
                         spec.key.as_ref(),
-                        if spec.kind.is_list() {
+                        if source_spec.kind.is_list() {
                             "values"
                         } else {
                             "a value"
@@ -64,7 +72,7 @@ impl AttributeValue {
                 }
             }
         } else {
-            match spec.kind {
+            match source_spec.kind {
                 AttributeKind::String {
                     normalize_whitespace,
                 } => {
@@ -87,7 +95,7 @@ impl AttributeValue {
                         .filter(|s| !s.is_empty())
                         .collect();
                     if vals.is_empty() {
-                        match spec.need {
+                        match source_spec.need {
                             AttributeNeed::Optional => AttributeValueKind::NA,
                             AttributeNeed::Required => {
                                 bail!(
@@ -198,16 +206,36 @@ impl AttributeValue {
     }
 }
 
+pub trait HavingDerivedValues {}
+
+#[derive(Debug)]
+pub struct WithoutDerivedValues;
+impl HavingDerivedValues for WithoutDerivedValues {}
+
+#[derive(Debug)]
+pub struct WithDerivedValues;
+impl HavingDerivedValues for WithDerivedValues {}
+
 /// The concrete metadata values for one particular file, specified
 /// via XML comments in it. The keys are the same as (or a subset of)
 /// those in `METADATA_SPECIFICATION`.
 #[derive(Debug)]
-pub struct Metadata(pub BTreeMap<AttributeName, AttributeValue>);
+pub struct Metadata<H: HavingDerivedValues> {
+    kind: PhantomData<H>,
+    values: BTreeMap<AttributeName, AttributeValue>,
+}
 
-impl Metadata {
+impl<H: HavingDerivedValues> Metadata<H> {
+    pub fn new(values: BTreeMap<AttributeName, AttributeValue>) -> Self {
+        Self {
+            kind: Default::default(),
+            values,
+        }
+    }
+
     /// Retrieve the value for an attribute name.
     pub fn get(&self, key: AttributeName) -> Option<&AttributeValue> {
-        self.0.get(&key).or_else(|| {
+        self.values.get(&key).or_else(|| {
             // Double check that the `key` is actually a valid
             // AttributeName before reporting that no value is present
             // for that key.
@@ -222,7 +250,7 @@ impl Metadata {
     /// `METADATA_SPECIFICATION`, with gaps where a key wasn't given
     /// in the file.
     fn sorted_entries(&self) -> Vec<(AttributeName, Option<&AttributeValue>)> {
-        sort_in_definition_order(self.0.iter().map(|(k, v)| (*k, v)))
+        sort_in_definition_order(self.values.iter().map(|(k, v)| (*k, v)))
     }
 
     /// An HTML table with all metadata.
@@ -269,12 +297,47 @@ impl Metadata {
     }
 }
 
+impl Metadata<WithoutDerivedValues> {
+    /// Generate derived attribute values (as listed in
+    /// `METADATA_SPECIFICATION`)
+    pub fn extend(self, warnings: &mut Vec<String>) -> Metadata<WithDerivedValues> {
+        let mut values = self.values;
+
+        let mut from = Vec::new();
+        for spec in METADATA_SPECIFICATION {
+            if let AttributeSpecification {
+                key,
+                source:
+                    AttributeSource::Derived(DerivationSpecification {
+                        derived_from,
+                        derivation,
+                    }),
+                autolink: _,
+                indexing: _,
+            } = spec
+            {
+                from.clear();
+                for from_key in *derived_from {
+                    from.push(values.get(from_key));
+                }
+                let value = derivation(&from, warnings);
+                values.insert(*key, AttributeValue { spec, value });
+            }
+        }
+
+        Metadata {
+            kind: Default::default(),
+            values,
+        }
+    }
+}
+
 /// The whole, concrete, information on one particular file.
 #[derive(Debug)]
-pub struct FileInfo {
+pub struct FileInfo<H: HavingDerivedValues> {
     pub id: usize,
     pub path: BaseAndRelPath,
-    pub metadata: Metadata,
+    pub metadata: Metadata<H>,
     pub warnings: Vec<String>,
 }
 
@@ -282,24 +345,24 @@ pub struct FileInfo {
 // below), it needs to be orderable. Only `id` is relevant for that
 // (and the other types have no Ord implementation), thus write
 // implementations manually:
-impl Ord for FileInfo {
+impl<H: HavingDerivedValues> Ord for FileInfo<H> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }
-impl PartialOrd for FileInfo {
+impl<H: HavingDerivedValues> PartialOrd for FileInfo<H> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
-impl PartialEq for FileInfo {
+impl<H: HavingDerivedValues> PartialEq for FileInfo<H> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
-impl Eq for FileInfo {}
+impl<H: HavingDerivedValues> Eq for FileInfo<H> {}
 
-impl FileInfo {
+impl<H: HavingDerivedValues> FileInfo<H> {
     /// Give a temporary FileWarnings object with the same trait as
     /// FileErrors, for warnings display.
     pub fn opt_warnings(&self) -> Option<FileWarnings> {

@@ -5,7 +5,7 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     section::{Highlight, Section},
-    xmlhub_fileinfo::FileInfo,
+    xmlhub_fileinfo::{FileInfo, WithDerivedValues},
     xmlhub_indexer_defaults::HTML_ALLOCATOR_POOL,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 /// also end up separately in a `Section` (files go to the intro,
 /// folders to the subsections).
 pub struct Folder<'f> {
-    files: BTreeMap<String, &'f FileInfo>,
+    files: BTreeMap<String, &'f FileInfo<WithDerivedValues>>,
     folders: BTreeMap<String, Folder<'f>>,
 }
 
@@ -31,7 +31,7 @@ impl<'f> Folder<'f> {
 
     // This is just a helper method that recursively calls itself; see
     // `add` for the relevant wrapper method.
-    fn add_(&mut self, segments: &[&str], file: &'f FileInfo) -> Result<()> {
+    fn add_(&mut self, segments: &[&str], file: &'f FileInfo<WithDerivedValues>) -> Result<()> {
         match segments {
             [] => unreachable!(),
             [segment, rest @ ..] => {
@@ -61,7 +61,7 @@ impl<'f> Folder<'f> {
     /// Add a `FileInfo` to the right place in the `Folder` hierarchy
     /// according to the `FileInfo`'s `rel_path`, which is split into
     /// path segments.
-    pub fn add(&mut self, file: &'f FileInfo) -> Result<()> {
+    pub fn add(&mut self, file: &'f FileInfo<WithDerivedValues>) -> Result<()> {
         let segments: Vec<&str> = file.path.rel_path().split('/').collect();
         self.add_(&segments, file)
     }

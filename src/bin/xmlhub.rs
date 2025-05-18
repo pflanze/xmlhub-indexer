@@ -61,7 +61,7 @@ use xmlhub_indexer::{
     xml_document::{read_xml_file, XMLDocumentComment},
     xmlhub_attributes::{
         attribute_specification_by_name, sort_in_definition_order, AttributeName, AttributeNeed,
-        AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
+        AttributeSource, AttributeSpecification, KeyStringPreparation, METADATA_SPECIFICATION,
     },
     xmlhub_autolink::Autolink,
     xmlhub_check_version::XmlhubCheckVersion,
@@ -71,7 +71,9 @@ use xmlhub_indexer::{
         HelpAttributesOpts, CONTRIBUTE_FILENAME,
     },
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
-    xmlhub_fileinfo::{AttributeValue, FileInfo, Metadata},
+    xmlhub_fileinfo::{
+        AttributeValue, FileInfo, Metadata, WithDerivedValues, WithoutDerivedValues,
+    },
     xmlhub_global_opts::{
         BlindingOpts, DrynessOpt, OpenOrPrintOpts, QuietOpt, VerbosityOpt, VersionCheckOpt,
     },
@@ -541,7 +543,7 @@ struct AddToOpts {
 fn parse_comments<'a>(
     comments: impl Iterator<Item = XMLDocumentComment<'a>>,
     dry: bool,
-) -> Result<Metadata, Vec<String>> {
+) -> Result<Metadata<WithoutDerivedValues>, Vec<String>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
         .map(|spec| (spec.key.as_ref().to_lowercase(), spec))
@@ -586,8 +588,12 @@ fn parse_comments<'a>(
     let missing: Vec<AttributeName> = unseen_specs_by_lowercase_key
         .into_values()
         .filter_map(|spec| {
+            let source_spec = match &spec.source {
+                AttributeSource::Specified(source_spec) => source_spec,
+                AttributeSource::Derived(_) => return None,
+            };
             // Do not report as missing if it's optional
-            if spec.need == AttributeNeed::Optional {
+            if source_spec.need == AttributeNeed::Optional {
                 None
             } else {
                 Some(spec.key)
@@ -613,7 +619,7 @@ fn parse_comments<'a>(
     }
 
     if errors.is_empty() {
-        Ok(Metadata(map))
+        Ok(Metadata::new(map))
     } else {
         Err(errors)
     }
@@ -632,79 +638,87 @@ lazy_static! {
 /// passed as the `id` argument to the function given to `map`).
 /// The id is used to refer to each item in document-local links in
 /// the generated HTML/Markdown files.
-fn read_file_infos(paths: Vec<BaseAndRelPath>) -> Vec<Result<FileInfo, FileErrors>> {
+fn read_file_infos(
+    paths: Vec<BaseAndRelPath>,
+) -> Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> {
     paths
         .into_par_iter()
         .enumerate()
-        .map(|(id, path)| -> Result<FileInfo, FileErrors> {
-            let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
-                path: path.clone(),
-                errors: vec![format!("{e:#}")],
-            })?;
-            let metadata =
-                parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
-                    FileErrors {
-                        path: path.clone(),
-                        errors,
-                    }
+        .map(
+            |(id, path)| -> Result<FileInfo<WithoutDerivedValues>, FileErrors> {
+                let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
+                    path: path.clone(),
+                    errors: vec![format!("{e:#}")],
                 })?;
-            // We're currently doing nothing else with
-            // `xmldocument` (which holds the tree of all elements
-            // in the document). It would be possible to extract
-            // information from the XML tree for further indexes
-            // by defining another kind of indexing than metadata
-            // attributes, defining extractors for those, doing
-            // the extraction here and adding the results to
-            // `FileInfo`.
+                let metadata =
+                    parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
+                        FileErrors {
+                            path: path.clone(),
+                            errors,
+                        }
+                    })?;
 
-            // Well, actually checking the version now:
-            let mut warnings = Vec::new();
+                let mut warnings = Vec::new();
 
-            match (|| -> Result<_> {
-                let att_val: &AttributeValue = metadata
-                    .get(*VERSION_KEY)
-                    .context("missing 'Version' entry")?;
-                let att_vals = att_val.as_string_list();
-                let user_specified_str = att_vals.first().context("'Version' entry is empty")?;
-                // Have to skip any "BEAST "
-                let user_specified_version_str = strip_prefixes(
-                    user_specified_str,
-                    &["BEAST2 ", "BEAST2", "BEAST ", "BEAST"],
-                )
-                .trim();
-                let user_specified_version = BeastVersion::from_str(user_specified_version_str)?;
-                let user_specified_major: u16 = user_specified_version.major.context(
-                    "provided 'Version' has no BEAST2-major number part \
+                // We're currently doing nothing else with
+                // `xmldocument` (which holds the tree of all elements
+                // in the document). It would be possible to extract
+                // information from the XML tree for further indexes
+                // by defining another kind of indexing than metadata
+                // attributes, defining extractors for those, doing
+                // the extraction here and adding the results to
+                // `FileInfo`.
+
+                // Check the version in the XML: verify that it fits
+                // what the user provided in the XML comment.
+                match (|| -> Result<_> {
+                    let att_val: &AttributeValue = metadata
+                        .get(*VERSION_KEY)
+                        .context("missing 'Version' entry")?;
+                    let att_vals = att_val.as_string_list();
+                    let user_specified_str =
+                        att_vals.first().context("'Version' entry is empty")?;
+                    // Have to skip any "BEAST "
+                    let user_specified_version_str = strip_prefixes(
+                        user_specified_str,
+                        &["BEAST2 ", "BEAST2", "BEAST ", "BEAST"],
+                    )
+                    .trim();
+                    let user_specified_version =
+                        BeastVersion::from_str(user_specified_version_str)?;
+                    let user_specified_major: u16 = user_specified_version.major.context(
+                        "provided 'Version' has no BEAST2-major number part \
                      or is not a BEAST2 version",
-                )?;
+                    )?;
 
-                let document_version =
-                    check_beast_version(xmldocument.document(), path.rel_path(), false)?;
-                (|| -> Option<()> {
-                    let found_major: u16 = document_version.major?;
-                    if found_major != user_specified_major {
-                        warnings.push(format!(
-                            "the <beast> element in the document specifies version \
+                    let document_version =
+                        check_beast_version(xmldocument.document(), path.rel_path(), false)?;
+                    (|| -> Option<()> {
+                        let found_major: u16 = document_version.major?;
+                        if found_major != user_specified_major {
+                            warnings.push(format!(
+                                "the <beast> element in the document specifies version \
                              {document_version} with major {found_major}, but the \
                              user-provided version {user_specified_version} has \
                              major {user_specified_major}"
-                        ));
-                    }
-                    Some(())
-                })();
-                Ok(())
-            })() {
-                Ok(()) => (),
-                Err(e) => warnings.push(format!("{e}")),
-            }
+                            ));
+                        }
+                        Some(())
+                    })();
+                    Ok(())
+                })() {
+                    Ok(()) => (),
+                    Err(e) => warnings.push(format!("{e}")),
+                }
 
-            Ok(FileInfo {
-                id,
-                path,
-                metadata,
-                warnings,
-            })
-        })
+                Ok(FileInfo {
+                    id,
+                    path,
+                    metadata,
+                    warnings,
+                })
+            },
+        )
         .collect()
 }
 
@@ -717,14 +731,15 @@ fn build_index_section(
     attribute_key: AttributeName,
     key_string_normalization: KeyStringPreparation,
     autolink: Autolink,
-    file_infos: &[FileInfo],
+    file_infos: &[FileInfo<WithDerivedValues>],
 ) -> Result<Section> {
     // Build an index by the value for attribute_key (lower-casing the
     // key values for consistency if use_lowercase is true). The index
     // maps from key value to a set of all `FileInfo`s for that
     // value. The BTreeMap keeps the key values sorted alphabetically,
     // which is nice so we don't have to sort those afterwards.
-    let mut file_infos_by_key_string: BTreeMap<String, BTreeSet<&FileInfo>> = BTreeMap::new();
+    let mut file_infos_by_key_string: BTreeMap<String, BTreeSet<&FileInfo<WithDerivedValues>>> =
+        BTreeMap::new();
 
     for file_info in file_infos {
         if let Some(attribute_value) = file_info.metadata.get(attribute_key) {
@@ -772,7 +787,8 @@ fn build_index_section(
         )?)?;
 
         // Output all the files for that key value, sorted by path.
-        let mut sorted_file_infos: Vec<&FileInfo> = file_infos.iter().copied().collect();
+        let mut sorted_file_infos: Vec<&FileInfo<WithDerivedValues>> =
+            file_infos.iter().copied().collect();
         sorted_file_infos.sort_by_key(|fileinfo| fileinfo.path.full_path());
         let mut dd_body = html.new_vec();
         for file_info in sorted_file_infos {
@@ -1087,12 +1103,35 @@ fn build_index(
     };
 
     // See help text on `read_file_infos` for what it's doing.
-    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = read_file_infos(paths);
+    let fileinfo_or_errors: Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> =
+        read_file_infos(paths);
 
     // Partition fileinfo_or_errors into vectors with only the
     // successful and only the erroneous results.
-    let (file_infos, file_errorss): (Vec<FileInfo>, Vec<FileErrors>) =
+    let (file_infos, file_errorss): (Vec<FileInfo<WithoutDerivedValues>>, Vec<FileErrors>) =
         fileinfo_or_errors.into_iter().partition_result();
+
+    // Build derived attribute values. Errors during this phase are
+    // stored as warnings, so as to not prevent users from pushing
+    // their changes, since some errors could be temporary.
+    let file_infos: Vec<FileInfo<WithDerivedValues>> = file_infos
+        .into_iter()
+        .map(|info| {
+            let FileInfo {
+                id,
+                path,
+                metadata,
+                mut warnings,
+            } = info;
+            let metadata = metadata.extend(&mut warnings);
+            FileInfo {
+                id,
+                path,
+                metadata,
+                warnings,
+            }
+        })
+        .collect();
 
     let warningss: Vec<FileWarnings> = file_infos
         .iter()
@@ -1927,7 +1966,8 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
     )?;
 
     // Now check the given paths explicitly.
-    let fileinfo_or_errors: Vec<Result<FileInfo, FileErrors>> = read_file_infos(paths);
+    let fileinfo_or_errors: Vec<Result<FileInfo<WithoutDerivedValues>, FileErrors>> =
+        read_file_infos(paths);
     let mut exit_code = 0;
     let mut err = stderr().lock();
     for fileinfo_or_error in fileinfo_or_errors {
@@ -2001,11 +2041,15 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
             .the_top()
             .ok_or_else(|| anyhow!("XML file {source_path:?} gave no top position?"))?;
         modified_document.insert_text_at(the_top.clone(), "\n");
-        for att in METADATA_SPECIFICATION {
+        for spec in METADATA_SPECIFICATION {
+            let source_spec = match &spec.source {
+                AttributeSource::Specified(source_spec) => source_spec,
+                AttributeSource::Derived(_) => continue,
+            };
             let comment = format!(
                 "{}: {}",
-                att.key.as_ref(),
-                if att.need == AttributeNeed::Optional {
+                spec.key.as_ref(),
+                if source_spec.need == AttributeNeed::Optional {
                     "NA"
                 } else {
                     ""

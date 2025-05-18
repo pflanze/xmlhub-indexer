@@ -3,9 +3,12 @@
 //! the metadata (`struct`, `enum`, `impl`), then, using those, the
 //! actual description in `METADATA_SPECIFICATION`.
 
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::BTreeMap,
+    fmt::{Debug, Display},
+};
 
-use ahtml::{att, util::SoftPre, AId, HtmlAllocator, Node};
+use ahtml::{att, flat::Flat, util::SoftPre, AId, HtmlAllocator, Node};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -14,6 +17,7 @@ use crate::{
     html_util::extract_paragraph_body,
     util::{self, format_anchor_name},
     xmlhub_autolink::Autolink,
+    xmlhub_fileinfo::{AttributeValue, AttributeValueKind},
 };
 
 /// An attribute name is a string that identifies an attribute. The
@@ -177,16 +181,44 @@ impl AttributeIndexing {
     }
 }
 
+#[derive(Debug)]
+pub struct SourceSpecification {
+    /// Description for the "Metainfo attributes" help file, in
+    /// Markdown format
+    pub desc: &'static str,
+    pub need: AttributeNeed,
+    pub kind: AttributeKind,
+}
+
+#[derive(Debug)]
+pub struct DerivationSpecification {
+    /// Which other attributes this one is derived from, by name
+    pub derived_from: &'static [AttributeName],
+    /// A function that receives the requested values, if they are
+    /// present. NOTE: currently derivations are run in the order as
+    /// specified in `METADATA_SPECIFICATION`, thus can't depend on a
+    /// result from a later one, only above; but they can depend on
+    /// user-specified values listed below due to running in a later
+    /// phase. Also receives a reference to warnings, to output errors
+    /// to.
+    pub derivation:
+        for<'v, 'a> fn(&'v [Option<&'a AttributeValue>], &mut Vec<String>) -> AttributeValueKind,
+}
+
+#[derive(Debug)]
+pub enum AttributeSource {
+    /// Value is specified via an XML comment
+    Specified(SourceSpecification),
+    /// Value is calculated from other attributes
+    Derived(DerivationSpecification),
+}
+
 /// All metainformation on an attribute (its name, format, indexing
 /// requirements..).
 #[derive(Debug)]
 pub struct AttributeSpecification {
     pub key: AttributeName,
-    /// Description for the "Metainfo attributes" help file, in
-    /// Markdown format
-    desc: &'static str,
-    pub need: AttributeNeed,
-    pub kind: AttributeKind,
+    pub source: AttributeSource,
     pub autolink: Autolink,
     pub indexing: AttributeIndexing,
 }
@@ -202,38 +234,41 @@ impl AttributeSpecification {
     ];
 
     /// Show the specification using HTML markup, for writing to
-    /// ATTRIBUTE_SPECIFICATION_FILENAME.
-    fn to_html(&self, html: &HtmlAllocator) -> Result<AId<Node>> {
-        let AttributeSpecification {
+    /// ATTRIBUTE_SPECIFICATION_FILENAME. Derived attributes yield no
+    /// output.
+    fn to_html(&self, html: &HtmlAllocator) -> Result<Flat<Node>> {
+        if let AttributeSpecification {
             key,
-            desc,
-            need,
-            kind,
+            source: AttributeSource::Specified(SourceSpecification { desc, need, kind }),
             autolink,
             indexing,
-        } = self;
-        let desc_html = markdown_to_html(desc, html)?.html();
-        // markdown_to_html wraps paragraphs in <p> even if it's just
-        // one of them; strip that if possible:
-        let desc_stripped = extract_paragraph_body(desc_html, true, html);
+        } = self
+        {
+            let desc_html = markdown_to_html(desc, html)?.html();
+            // markdown_to_html wraps paragraphs in <p> even if it's just
+            // one of them; strip that if possible:
+            let desc_stripped = extract_paragraph_body(desc_html, true, html);
 
-        html.tr(
-            [],
-            [
-                html.td([], html.i([], html.text(key.as_ref())?)?)?,
-                html.td([], desc_stripped)?,
-                html.td(
-                    [],
-                    html.text(match need {
-                        AttributeNeed::Optional => "optional",
-                        AttributeNeed::Required => "required",
-                    })?,
-                )?,
-                html.td([], kind.to_html(html)?)?,
-                html.td([], html.text(autolink.to_text())?)?,
-                html.td([], indexing.to_html(kind.is_list(), html)?)?,
-            ],
-        )
+            Ok(Flat::One(html.tr(
+                [],
+                [
+                    html.td([], html.i([], html.text(key.as_ref())?)?)?,
+                    html.td([], desc_stripped)?,
+                    html.td(
+                        [],
+                        html.text(match need {
+                            AttributeNeed::Optional => "optional",
+                            AttributeNeed::Required => "required",
+                        })?,
+                    )?,
+                    html.td([], kind.to_html(html)?)?,
+                    html.td([], html.text(autolink.to_text())?)?,
+                    html.td([], indexing.to_html(kind.is_list(), html)?)?,
+                ],
+            )?))
+        } else {
+            Ok(Flat::None)
+        }
     }
 }
 
@@ -241,23 +276,23 @@ impl AttributeSpecification {
 /// via the `help-attributes` subcommand
 impl Display for AttributeSpecification {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let AttributeSpecification {
+        if let AttributeSpecification {
             key,
-            desc,
-            need,
-            kind,
+            source: AttributeSource::Specified(SourceSpecification { desc, need, kind }),
             autolink,
             indexing,
-        } = self;
-        f.write_fmt(format_args!("  {}:\n", key.as_ref()))?;
-        f.write_fmt(format_args!("      {desc}\n"))?;
-        f.write_fmt(format_args!("    need: {need:?}\n"))?;
-        f.write_fmt(format_args!("    kind: {kind:?}\n"))?;
-        f.write_fmt(format_args!(
-            "    autolink: {}\n",
-            autolink.to_text() // XX too long?
-        ))?;
-        f.write_fmt(format_args!("    indexing: {indexing:?}\n"))?;
+        } = self
+        {
+            f.write_fmt(format_args!("  {}:\n", key.as_ref()))?;
+            f.write_fmt(format_args!("      {desc}\n"))?;
+            f.write_fmt(format_args!("    need: {need:?}\n"))?;
+            f.write_fmt(format_args!("    kind: {kind:?}\n"))?;
+            f.write_fmt(format_args!(
+                "    autolink: {}\n",
+                autolink.to_text() // XX too long?
+            ))?;
+            f.write_fmt(format_args!("    indexing: {indexing:?}\n"))?;
+        }
         Ok(())
     }
 }
@@ -269,7 +304,7 @@ pub fn specifications_to_html(html: &HtmlAllocator) -> Result<AId<Node>> {
         .collect::<Result<_>>()?;
     let mut body = html.new_vec();
     for spec in METADATA_SPECIFICATION {
-        body.push(spec.to_html(html)?)?;
+        body.push_flat(spec.to_html(html)?)?;
     }
     html.table(
         [att("border", 1)],
@@ -285,11 +320,13 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
     &[
         AttributeSpecification {
             key: AttributeName("Keywords"),
-            desc: "Words for the keyword index, for useful finding.",
-            need: AttributeNeed::Required,
-            kind: AttributeKind::StringList {
-                input_separator: ",",
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "Words for the keyword index, for useful finding.",
+                need: AttributeNeed::Required,
+                kind: AttributeKind::StringList {
+                    input_separator: ",",
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
@@ -298,11 +335,13 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Version"),
-            desc: "The BEAST version used, like \"2.7.1\".",
-            need: AttributeNeed::Required,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "The BEAST version used, like \"2.7.1\".",
+                need: AttributeNeed::Required,
+                kind: AttributeKind::String {
+                    normalize_whitespace: false,
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
@@ -311,11 +350,13 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Packages"),
-            desc: "The BEAST packages used (package name and version after a space).",
-            need: AttributeNeed::Required,
-            kind: AttributeKind::StringList {
-                input_separator: ",",
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "The BEAST packages used (package name and version after a space).",
+                need: AttributeNeed::Required,
+                kind: AttributeKind::StringList {
+                    input_separator: ",",
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: true,
@@ -324,31 +365,37 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Description"),
-            desc: "A description of the work / contex, can be multiple lines.",
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "A description of the work / contex, can be multiple lines.",
+                need: AttributeNeed::Optional,
+                kind: AttributeKind::String {
+                    normalize_whitespace: false,
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
             key: AttributeName("Comments"),
-            desc: "Additional comments.", // XX what is the thinking behind it, really?
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "Additional comments.", // XX what is the thinking behind it, really?
+                need: AttributeNeed::Optional,
+                kind: AttributeKind::String {
+                    normalize_whitespace: false,
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::NoIndex,
         },
         AttributeSpecification {
             key: AttributeName("DOI"),
-            desc: "DOI of papers that this file was used for, or that describe it.",
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::StringList {
-                input_separator: ",",
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "DOI of papers that this file was used for, or that describe it.",
+                need: AttributeNeed::Optional,
+                kind: AttributeKind::StringList {
+                    input_separator: ",",
+                },
+            }),
             autolink: Autolink::Doi,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
@@ -356,13 +403,40 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             },
         },
         AttributeSpecification {
-            key: AttributeName("Citation"),
-            desc: "Papers for which no DOI could be provided under `DOI`. Do *not* \
-                   provide information about papers here for which you have provided the `DOI`!",
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::StringList {
-                input_separator: "|",
+            key: AttributeName("Citation via DOI"), // XXX
+            source: AttributeSource::Derived(DerivationSpecification {
+                derived_from: &[AttributeName("DOI")],
+                derivation: |vals, warnings| -> AttributeValueKind {
+                    if let [doi] = vals {
+                        if let Some(doi) = doi {
+                            let vals = doi.as_string_list().iter().map(|s| {
+                                s.clone()
+                            }).collect();
+                            AttributeValueKind::StringList(vals)
+                        } else {
+                            AttributeValueKind::NA
+                        }
+                    } else {
+                        unreachable!("specified the same items in `derived_from`")
+                    }
+                },
+            }),
+            autolink: Autolink::Web,
+            indexing: AttributeIndexing::Index {
+                first_word_only: false,
+                use_lowercase: false,
             },
+        },
+        AttributeSpecification {
+            key: AttributeName("Citation"),
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "Papers for which no DOI could be provided under `DOI`. Do *not* \
+                   provide information about papers here for which you have provided the `DOI`!",
+                need: AttributeNeed::Optional,
+                kind: AttributeKind::StringList {
+                    input_separator: "|",
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
@@ -371,11 +445,13 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Contact"),
-            desc: "Whom to contact (and how) for more information on this file.",
-            need: AttributeNeed::Required,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "Whom to contact (and how) for more information on this file.",
+                need: AttributeNeed::Required,
+                kind: AttributeKind::String {
+                    normalize_whitespace: false,
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
@@ -384,11 +460,13 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
         },
         AttributeSpecification {
             key: AttributeName("Repository"),
-            desc: "Original repository for the xml file.",
-            need: AttributeNeed::Optional,
-            kind: AttributeKind::String {
-                normalize_whitespace: false,
-            },
+            source: AttributeSource::Specified(SourceSpecification {
+                desc: "Original repository for the xml file.",
+                need: AttributeNeed::Optional,
+                kind: AttributeKind::String {
+                    normalize_whitespace: false,
+                },
+            }),
             autolink: Autolink::Web,
             indexing: AttributeIndexing::Index {
                 first_word_only: false,
