@@ -205,7 +205,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         element_name: &str,
         comment_and_indent: Option<(&str, &str)>,
     ) {
-        for element in self.xml_document.elements_named(element_name) {
+        for element in self.xml_document.elements_named(element_name, usize::MAX) {
             let range = element.range();
             self.document.push(Modification::Delete(range.clone()));
 
@@ -227,7 +227,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         opts: &ClearElementsOpts<'d, 'actions>,
     ) -> usize {
         let mut n_cleared = 0;
-        for element in self.xml_document.elements_named(element_name) {
+        for element in self.xml_document.elements_named(element_name, usize::MAX) {
             for action in opts.actions {
                 match action {
                     ClearAction::Element {

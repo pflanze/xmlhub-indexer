@@ -498,7 +498,7 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
                 extractor: |xmldocument, _warnings| -> AttributeValueKind {
                     AttributeValueKind::Boolean(
                         !xmldocument
-                            .elements_named(SEQUENCES_ELEMENT_NAME)
+                            .elements_named(SEQUENCES_ELEMENT_NAME, 1)
                             .is_empty(),
                     )
                 },

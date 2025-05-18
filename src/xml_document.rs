@@ -12,17 +12,23 @@ use roxmltree::{Document, Node, ParsingOptions};
 
 /// Find elements with the given tag name without being in a namespace
 /// (XXX: danger?), append them to `output`. Do not recurse into found
-/// nodes.
+/// nodes. `limit` is the maximum number of nodes found before it
+/// stops and returns (it can push one more if called on an element
+/// that matches).
 pub fn find_elements_named<'a>(
     node: Node<'a, 'a>,
     element_name: &str,
+    limit: usize,
     output: &mut Vec<Node<'a, 'a>>,
 ) {
     if node.tag_name().name() == element_name && node.tag_name().namespace().is_none() {
         output.push(node);
     } else {
         for child in node.children() {
-            find_elements_named(child, element_name, output);
+            if output.len() >= limit {
+                return;
+            }
+            find_elements_named(child, element_name, limit, output);
         }
     }
 }
@@ -167,10 +173,17 @@ impl XMLDocument {
             })
     }
 
-    /// Find elements with the given tag name
-    pub fn elements_named(&self, element_name: &str) -> Vec<Node> {
+    /// Find elements with the given tag name. `limit` is the maximum
+    /// number of nodes found before it stops and returns (it can push
+    /// one more if called on an element that matches).
+    pub fn elements_named(&self, element_name: &str, limit: usize) -> Vec<Node> {
         let mut output = Vec::new();
-        find_elements_named(self.document().root_element(), element_name, &mut output);
+        find_elements_named(
+            self.document().root_element(),
+            element_name,
+            limit,
+            &mut output,
+        );
         output
     }
 }
