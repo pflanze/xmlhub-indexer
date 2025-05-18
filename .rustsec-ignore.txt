@@ -5,5 +5,8 @@ RUSTSEC-2024-0375
 # proc-macro-error 1.0.4 affected by RUSTSEC-2024-0370 (unmaintained)
 RUSTSEC-2024-0370
 # `idna` accepts Punycode labels that do not produce any non-ASCII when decoded
-# -> idna is used by `trash`, thus only for paths? XXX does this matter for us?
+# -> idna is used by `trash`, thus only for paths? Also it is only
+#    about comparisons returning true after idna when unequal before
+#    decoding while being all ASCII, can't see this mattering except
+#    perhaps overwriting files in trash?
 RUSTSEC-2024-0421
