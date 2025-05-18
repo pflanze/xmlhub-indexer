@@ -37,6 +37,7 @@ pub mod unix_passwd;
 pub mod util;
 pub mod utillib;
 pub mod version_info;
+pub mod webget;
 pub mod xml_document;
 pub mod xmlhub_attributes;
 pub mod xmlhub_autolink;
