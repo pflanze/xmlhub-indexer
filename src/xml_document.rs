@@ -11,7 +11,7 @@ use pluraless::pluralized;
 use roxmltree::{Document, Node, ParsingOptions};
 
 /// Find elements with the given tag name without being in a namespace
-/// (XXX: danger?), append them to `output`. Do not recurse into found
+/// (XX: danger?), append them to `output`. Do not recurse into found
 /// nodes. `limit` is the maximum number of nodes found before it
 /// stops and returns (it can push one more if called on an element
 /// that matches).
