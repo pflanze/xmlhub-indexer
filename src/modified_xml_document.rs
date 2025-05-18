@@ -11,29 +11,11 @@ use std::{
 };
 
 use anyhow::Result;
-use roxmltree::Node;
 
 use crate::{
     modified_document::{Modification, ModifiedDocument},
     xml_document::XMLDocument,
 };
-
-/// Find elements with the given tag name without being in a namespace
-/// (XXX: danger?), append them to `output`. Do not recurse into found
-/// nodes.
-pub fn find_elements_named<'a>(
-    node: Node<'a, 'a>,
-    element_name: &str,
-    output: &mut Vec<Node<'a, 'a>>,
-) {
-    if node.tag_name().name() == element_name && node.tag_name().namespace().is_none() {
-        output.push(node);
-    } else {
-        for child in node.children() {
-            find_elements_named(child, element_name, output);
-        }
-    }
-}
 
 /// Turn a comment string to XML comment syntax, safely. Puts spaces
 /// between subsequent '-' characters, is there any better approach?
@@ -215,17 +197,6 @@ impl<'d> ModifiedXMLDocument<'d> {
         ));
     }
 
-    /// Find elements with the given tag name
-    pub fn elements_named(&self, element_name: &str) -> Vec<Node<'d, 'd>> {
-        let mut output = Vec::new();
-        find_elements_named(
-            self.xml_document.document().root_element(),
-            element_name,
-            &mut output,
-        );
-        output
-    }
-
     /// Find elements with the given tag name, regardless of their
     /// position in the document, delete them, and replace them with
     /// the given comment string and indent if given.
@@ -234,7 +205,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         element_name: &str,
         comment_and_indent: Option<(&str, &str)>,
     ) {
-        for element in self.elements_named(element_name) {
+        for element in self.xml_document.elements_named(element_name) {
             let range = element.range();
             self.document.push(Modification::Delete(range.clone()));
 
@@ -256,7 +227,7 @@ impl<'d> ModifiedXMLDocument<'d> {
         opts: &ClearElementsOpts<'d, 'actions>,
     ) -> usize {
         let mut n_cleared = 0;
-        for element in self.elements_named(element_name) {
+        for element in self.xml_document.elements_named(element_name) {
             for action in opts.actions {
                 match action {
                     ClearAction::Element {

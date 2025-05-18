@@ -10,6 +10,23 @@ use ouroboros::self_referencing;
 use pluraless::pluralized;
 use roxmltree::{Document, Node, ParsingOptions};
 
+/// Find elements with the given tag name without being in a namespace
+/// (XXX: danger?), append them to `output`. Do not recurse into found
+/// nodes.
+pub fn find_elements_named<'a>(
+    node: Node<'a, 'a>,
+    element_name: &str,
+    output: &mut Vec<Node<'a, 'a>>,
+) {
+    if node.tag_name().name() == element_name && node.tag_name().namespace().is_none() {
+        output.push(node);
+    } else {
+        for child in node.children() {
+            find_elements_named(child, element_name, output);
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct XMLDocumentLocation<'a> {
     xmldocument: &'a XMLDocument,
@@ -148,6 +165,13 @@ impl XMLDocument {
                 },
                 string: item.text().expect("comment has text"),
             })
+    }
+
+    /// Find elements with the given tag name
+    pub fn elements_named(&self, element_name: &str) -> Vec<Node> {
+        let mut output = Vec::new();
+        find_elements_named(self.document().root_element(), element_name, &mut output);
+        output
     }
 }
 
