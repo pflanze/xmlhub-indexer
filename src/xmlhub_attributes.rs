@@ -406,13 +406,23 @@ pub const METADATA_SPECIFICATION: &[AttributeSpecification] = {
             key: AttributeName("Citation via DOI"), // XXX
             source: AttributeSource::Derived(DerivationSpecification {
                 derived_from: &[AttributeName("DOI")],
-                derivation: |vals, warnings| -> AttributeValueKind {
+                derivation: |vals, _warnings| -> AttributeValueKind {
                     if let [doi] = vals {
                         if let Some(doi) = doi {
-                            let vals = doi.as_string_list().iter().map(|s| {
-                                s.clone()
-                            }).collect();
-                            AttributeValueKind::StringList(vals)
+                            let vals = doi
+                                .as_string_list()
+                                .iter()
+                                .map(|s| s.clone())
+                                .collect::<Vec<_>>();
+                            if vals.is_empty() {
+                                // XX todo: ::NA and
+                                // ::StringList(vec![]) should show up
+                                // the same, this branch should not be
+                                // necessary!
+                                AttributeValueKind::NA
+                            } else {
+                                AttributeValueKind::StringList(vals)
+                            }
                         } else {
                             AttributeValueKind::NA
                         }
