@@ -105,7 +105,7 @@ pub fn install_executable(
                     }
                 },
                 format!(
-                    "not changing your shell config file because \
+                    "*not* change your shell config file because \
                      your PATH env variable already contains the path {cargo_bin_dir:?}"
                 )
                 .into(),
