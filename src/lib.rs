@@ -1,4 +1,5 @@
 pub mod backoff;
+pub mod base_and_rel_path;
 pub mod beast_version;
 pub mod browser;
 pub mod cargo;

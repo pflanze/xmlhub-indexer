@@ -4,54 +4,19 @@ use std::{
     fmt::{Debug, Display},
     io::{BufRead, BufReader, Read},
     os::unix::prelude::OsStrExt,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Child, ChildStdout, ExitStatus},
     sync::Arc,
 };
 
 use anyhow::{anyhow, bail, Context, Result};
 
+pub use crate::base_and_rel_path::BaseAndRelPath;
 use crate::{
     command::{run, run_outputs, run_stdout, spawn, Capturing},
     flattened::Flattened,
     util::contains_bytes,
 };
-
-#[derive(Debug, Clone)]
-pub struct BaseAndRelPath {
-    base_path: Option<Arc<PathBuf>>,
-    rel_path: PathBuf,
-}
-
-impl BaseAndRelPath {
-    pub fn new(base_path: Option<Arc<PathBuf>>, rel_path: PathBuf) -> Self {
-        Self {
-            base_path,
-            rel_path,
-        }
-    }
-
-    pub fn full_path(&self) -> PathBuf {
-        if let Some(path) = &self.base_path {
-            let mut path = (**path).to_owned();
-            path.push(&self.rel_path);
-            path
-        } else {
-            self.rel_path.clone()
-        }
-    }
-
-    pub fn extension(&self) -> Option<&OsStr> {
-        self.rel_path.extension()
-    }
-
-    pub fn rel_path(&self) -> &str {
-        self.rel_path
-            // XXX what happens on Windows? UTF-16 always needs recoding, no?
-            .to_str()
-            .expect("always works since created from str")
-    }
-}
 
 /// Execute the external "git" command with `base_path` as its current
 /// directory and with the given arguments. Returns true when git
