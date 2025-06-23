@@ -374,13 +374,14 @@ struct BuildOpts {
 
     /// Run as a daemon, i.e. do not exit, but run batch conversion
     /// repeatedly. The given string must be one of "run", "start",
-    /// "stop", "restart", "status". "run" does not put the process
-    /// into the background, "start" (and "restart") does.  Implies
-    /// `--batch`. You may want to use `--quiet` at the same
-    /// time. Also see `--daemon-sleep-time`. When using "start" mode,
-    /// writes logs to the directory `.xmlhub/logs/` under the given
-    /// `BASE_PATH`. You probably want to also give `--quiet` to
-    /// reduce the amount of log space required.
+    /// "start-if-not-running", "stop", "restart", "status". "run"
+    /// does not put the process into the background, "start" (and
+    /// "restart") does.  Implies `--batch`. You may want to use
+    /// `--quiet` at the same time. Also see
+    /// `--daemon-sleep-time`. When using "start" mode, writes logs to
+    /// the directory `.xmlhub/logs/` under the given `BASE_PATH`. You
+    /// probably want to also give `--quiet` to reduce the amount of
+    /// log space required.
     #[clap(long)]
     daemon: Option<DaemonMode>,
 
