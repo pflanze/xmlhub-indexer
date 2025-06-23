@@ -293,3 +293,6 @@ v9.7 - 2025-04-25
 
 v10 - 2025-06-23
 
+- Add DaemonMode::StartIfNotRunning for `xmlhub build --daemon start-if-not-running` to silently do nothing if already running (good for crontab)
+- xmlhub: do *not* imply `--no-repo-check` with batch (daemon) mode (even daemon mode users make errors)
+- xmlhub: *do* imply `--quiet` with batch/daemon mode
