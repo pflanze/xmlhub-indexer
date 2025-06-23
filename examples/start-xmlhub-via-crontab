@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# This is meant to be run from crontab, every minute or so (or from a
+# @reboot setting), to up the daemon if it is not running.
+
+xmlhub build --base-path ~/xmlhub-experiments/ --daemon start-if-not-running
+xmlhub build --base-path ~/xmlhub/ --daemon start-if-not-running
