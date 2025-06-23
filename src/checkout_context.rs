@@ -12,10 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use nix::NixPath;
 
 use crate::{
-    const_util::file_name,
-    fixup_path::FixupPath,
-    git::{git_branch_show_current, git_remote_get_default_for_branch, git_status},
-    path_util::AppendToPath,
+    const_util::file_name, fixup_path::FixupPath, git::GitWorkingDir, path_util::AppendToPath,
 };
 
 #[derive(Debug, Clone)]
@@ -49,6 +46,14 @@ pub enum CheckExpectedSubpathsExist {
 }
 
 impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
+    pub fn working_dir_path(&self) -> &Path {
+        self.working_dir_path.as_ref()
+    }
+
+    pub fn git_working_dir(&self) -> GitWorkingDir {
+        GitWorkingDir::from(self.working_dir_path().to_owned())
+    }
+
     /// Does not check `path`. Call `check1` later if you like.
     pub fn replace_working_dir_path<'t, 'p, P2>(&'t self, path: P2) -> CheckoutContext<'s, P2>
     where
@@ -140,7 +145,7 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
 
     /// Check that working directory is clean.
     pub fn check_status(&self) -> Result<()> {
-        let items = git_status(self.working_dir_path())?;
+        let items = self.git_working_dir().git_status()?;
         if !items.is_empty() {
             bail!(
                 "uncommitted changes in the git checkout at {:?}: {items:?}",
@@ -148,10 +153,6 @@ impl<'s, P: AsRef<Path>> CheckoutContext<'s, P> {
             );
         }
         Ok(())
-    }
-
-    pub fn working_dir_path(&self) -> &Path {
-        self.working_dir_path.as_ref()
     }
 
     /// Checks that the working dir exists (and has a .git subdir),
@@ -271,7 +272,7 @@ impl<'s, P: AsRef<Path>> CheckedCheckoutContext1<'s, P> {
         if self.branch_is_checked.load(Ordering::Relaxed) {
             return Ok(());
         }
-        let current_branch = git_branch_show_current(self.working_dir_path())?;
+        let current_branch = self.git_working_dir().git_branch_show_current()?;
         if current_branch.as_deref() != Some(self.branch_name) {
             bail!(
                 "expecting checked-out branch to be `{}`, but it is `{}`",
@@ -287,15 +288,15 @@ impl<'s, P: AsRef<Path>> CheckedCheckoutContext1<'s, P> {
 
     /// The remote name, not URL
     fn git_remote_get_default(&self) -> Result<String> {
-        git_remote_get_default_for_branch(self.working_dir_path(), self.branch_name)?.ok_or_else(
-            || {
+        self.git_working_dir()
+            .git_remote_get_default_for_branch(self.branch_name)?
+            .ok_or_else(|| {
                 anyhow!(
                     "branch {:?} in {:?} does not have a default remote set",
                     self.branch_name,
                     self.working_dir_path()
                 )
-            },
-        )
+            })
     }
 }
 

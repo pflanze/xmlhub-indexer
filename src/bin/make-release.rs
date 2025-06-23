@@ -19,7 +19,7 @@ use xmlhub_indexer::{
     changelog::CHANGELOG_FILE_NAME,
     checkout_context::CheckExpectedSubpathsExist,
     effect::{bind, Effect, NoOp},
-    git::{git, git_describe, git_push, git_stdout_string_trimmed, git_tag},
+    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
     installation::{
         app_info::AppInfo,
@@ -37,10 +37,6 @@ use xmlhub_indexer::{
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_BINARY_FILE_NAME},
 };
-
-fn get_head_commit_id_from<P: AsRef<Path>>(base_path: P) -> Result<String> {
-    git_stdout_string_trimmed(base_path.as_ref(), &["rev-parse", "HEAD"])
-}
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
@@ -207,8 +203,7 @@ impl Effect for UpdateChangelogWithTag {
 
         // Now also commit it. (Ah, passing around repositories in
         // globals, simply.)
-        if !git(
-            source_checkout.working_dir_path(),
+        if !source_checkout.git_working_dir().git(
             &[
                 OsString::from("commit"),
                 OsString::from("-m"),
@@ -221,7 +216,7 @@ impl Effect for UpdateChangelogWithTag {
             bail!("git commit for {changelog_path:?} returned false");
         }
 
-        let source_commit_id = get_head_commit_id_from(source_checkout.working_dir_path())?;
+        let source_commit_id = source_checkout.git_working_dir().get_head_commit_id()?;
 
         Ok(UpdatedChangelog {
             source_commit_id,
@@ -267,8 +262,7 @@ impl Effect for CreateTag {
             source_commit_id,
             tag_name,
         } = provided;
-        git_tag(
-            SOURCE_CHECKOUT.working_dir_path(),
+        SOURCE_CHECKOUT.git_working_dir().git_tag(
             &tag_name,
             None,
             "via make-release.rs",
@@ -318,8 +312,7 @@ impl Effect for PushSourceToRemote {
 
     fn run(self: Box<Self>, provided: Self::Requires) -> Result<Self::Provides> {
         let SourceReleaseTag { source_commit_id } = provided;
-        git_push(
-            SOURCE_CHECKOUT.working_dir_path(),
+        SOURCE_CHECKOUT.git_working_dir().git_push(
             &self.remote_name,
             &[SOURCE_CHECKOUT.branch_name, &self.tag_name],
             false,
@@ -459,7 +452,7 @@ struct ReleaseBinaries<'t> {
     // Include this path since it comes from a *checked*
     // `BINARIES_CHECKOUT`, and hey, do not tie together variables
     // past the fact:
-    binaries_checkout_working_dir_path: PathBuf,
+    binaries_checkout_working_dir: GitWorkingDir,
     source_version_tag: String,
     hostname: String,
     rustc_version: String,
@@ -484,7 +477,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
 
     fn show_bullet_points(&self) -> String {
         let Self {
-            binaries_checkout_working_dir_path,
+            binaries_checkout_working_dir,
             source_version_tag,
             hostname: _,
             rustc_version: _,
@@ -510,6 +503,8 @@ impl<'t> Effect for ReleaseBinaries<'t> {
         } else {
             format!("- do *not* git push binaries repository to upstream")
         };
+        let binaries_checkout_working_dir_path =
+            binaries_checkout_working_dir.working_dir_path_ref();
         format!(
             "  \
                  * copy the binaries into the right places below \
@@ -525,7 +520,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
 
     fn run(self: Box<Self>, required: Self::Requires) -> Result<Self::Provides> {
         let ReleaseBinaries {
-            binaries_checkout_working_dir_path,
+            binaries_checkout_working_dir,
             source_version_tag,
             hostname,
             rustc_version,
@@ -553,8 +548,8 @@ impl<'t> Effect for ReleaseBinaries<'t> {
         let timestamp = get_timestamp();
 
         for binary_with_sha256sum in &binaries_with_sha256sum {
-            let copied_to =
-                binary_with_sha256sum.copy_to_binaries_repo(&binaries_checkout_working_dir_path)?;
+            let copied_to = binary_with_sha256sum
+                .copy_to_binaries_repo(binaries_checkout_working_dir.working_dir_path_ref())?;
 
             let app_info = AppInfo {
                 sha256: binary_with_sha256sum.sha256sum.clone(),
@@ -587,8 +582,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
             action.run(())?;
         }
 
-        git(
-            &binaries_checkout_working_dir_path,
+        binaries_checkout_working_dir.git(
             // No worries about adding "." as check_status() was run
             // earlier, hence there are no other changes that might be
             // committed accidentally.
@@ -621,18 +615,15 @@ impl<'t> Effect for ReleaseBinaries<'t> {
         // {}" which is perfect.
         let binary_commit_message = &partial_commit_message;
 
-        git(
-            BINARIES_CHECKOUT.working_dir_path(),
-            &["commit", "-m", binary_commit_message],
-            false,
-        )?;
+        BINARIES_CHECKOUT
+            .git_working_dir()
+            .git(&["commit", "-m", binary_commit_message], false)?;
 
         if self.sign {
             // Again, leave out the sha256 sum(s). OK?
             let tag_message_if_signed = format!("{}", partial_commit_message);
 
-            if !git_tag(
-                BINARIES_CHECKOUT.working_dir_path(),
+            if !BINARIES_CHECKOUT.git_working_dir().git_tag(
                 &tag_name_if_signed,
                 None,
                 &tag_message_if_signed,
@@ -654,12 +645,9 @@ impl<'t> Effect for ReleaseBinaries<'t> {
             if self.sign {
                 branches_and_tags.push(&tag_name_if_signed)
             }
-            git_push(
-                BINARIES_CHECKOUT.working_dir_path(),
-                remote_name,
-                &branches_and_tags,
-                false,
-            )?;
+            BINARIES_CHECKOUT
+                .git_working_dir()
+                .git_push(remote_name, &branches_and_tags, false)?;
         }
         Ok(Done)
     }
@@ -747,16 +735,17 @@ fn main() -> Result<()> {
 
     // Pass "--tags ..." as in `build.rs`, keeping in sync by sharing the code
     let args = &include!("../../include/git_describe_arguments.rs")[1..];
-    let old_version: GitVersion<SemVersion> =
-        git_describe(source_checkout.working_dir_path(), args)?
-            .parse()
-            .with_context(|| {
-                anyhow!(
-                    "the version number from running `git describe` {args:?} in {:?} \
+    let old_version: GitVersion<SemVersion> = source_checkout
+        .git_working_dir()
+        .git_describe(args)?
+        .parse()
+        .with_context(|| {
+            anyhow!(
+                "the version number from running `git describe` {args:?} in {:?} \
                      uses an invalid format",
-                    source_checkout.working_dir_path()
-                )
-            })?;
+                source_checkout.working_dir_path()
+            )
+        })?;
 
     let (new_version_tag_string, need_tag_in_any_case) = {
         if let Some((_depth, _sha1)) = &old_version.past_tag {
@@ -805,7 +794,7 @@ fn main() -> Result<()> {
     let update_changelog_effect: Box<dyn Effect<Requires = (), Provides = UpdatedChangelog>> =
         if changelog_has_release {
             // Need to retrieve the source commit id *now*.
-            let source_commit_id = get_head_commit_id_from(source_checkout.working_dir_path())?;
+            let source_commit_id = source_checkout.git_working_dir().get_head_commit_id()?;
             NoOp::passing(
                 {
                     let tag_name = changelog_tag.tag_name.clone();
@@ -952,128 +941,125 @@ fn main() -> Result<()> {
     let app_signature_private_key;
 
     // Should we publish the binary?
-    let release_binary: Box<dyn Effect<Requires = BinariesWithSha256sum, Provides = Done>> = if opts
-        .no_publish_binary
-    {
-        NoOp::passing(
-            |BinariesWithSha256sum {
-                 source_commit_id: _,
-                 binaries_with_sha256sum: _,
-             }| Done,
-            "not publishing binary because --no-publish-binary option was given".into(),
-        )
-    } else {
-        let app_signature_private_key_path = opts.app_private_key.ok_or_else(|| {
-            anyhow!("when publishing the binary, `--app-private-key` is required")
-        })?;
-        app_signature_private_key = AppSignaturePrivateKey::load(&app_signature_private_key_path)
-            .with_context(|| {
-            anyhow!("loading private key from {app_signature_private_key_path:?}")
-        })?;
-
-        // XX Bug: this check is too 'early', I mean it fetches
-        // the remote even if !push. Not very important in
-        // practise since we'll always have a remote, OK?
-        let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
-        binaries_checkout.check_status()?;
-
-        let push_binaries_to_remote = if push_binaries {
-            // *Not* doing a git "pull" because that can lead to
-            // merges, also it's unclear how security should be
-            // treated: merging without requiring a tag signature
-            // check could lead to unsafe contents merged and
-            // subsequently signed.
-
-            // But, we can do a "remote update" and complain about the
-            // situation.
-            {
-                // FUTURE: proper abstraction for running git
-                // directly on checkout contexts, also,
-                // abstraction for making error checks with
-                // dry_run easier? `unless_dry_run` from above
-                // does not transfer values, and wouldn't make
-                // sense. and the macro from xmlhub.rs doesn't
-                // apply here because we still want to run the
-                // commands.
-                match git(
-                    binaries_checkout.working_dir_path(),
-                    &["remote", "update", &binaries_checkout.default_remote],
-                    false,
-                ) {
-                    Ok(did_it) => {
-                        if !did_it {
-                            if opts.dry_run {
-                                eprintln!(
-                                    "dry-run: would stop because git remote update \
-                                         on the binaries repository was not successful"
-                                );
-                            } else {
-                                bail!(
-                                    "git remote update on the binaries repository \
-                                         was not successful"
-                                )
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        if opts.dry_run {
-                            eprintln!("dry-run: would stop because of {e:#}");
-                        } else {
-                            Err(e)?
-                        }
-                    }
-                }
-
-                let branch = binaries_checkout.branch_name;
-                let remote_branch = format!("{}/{}", binaries_checkout.default_remote, branch);
-                let remote_branch_is_ancestor = git(
-                    binaries_checkout.working_dir_path(),
-                    &["merge-base", "--is-ancestor", "--", &remote_branch, branch],
-                    false,
-                )?;
-                if !remote_branch_is_ancestor {
-                    bail!(
-                        "the remote branch {remote_branch:?} is not an ancestor of \
-                             (or the same as the) the local branch {branch:?} in \
-                             the working directory {:?}",
-                        binaries_checkout.working_dir_path(),
-                    )
-                }
-            }
-
-            Some(binaries_checkout.default_remote.clone())
-        } else {
-            None
-        };
-
-        // _repo_section is now unused, since we get the paths
-        // from target triple stuff instead now. We still check if
-        // the OS is supported in the repository at all, though.
-        if let Ok(_repo_section) = BinariesRepoSection::from_local_os_and_arch() {
-            Box::new(ReleaseBinaries {
-                binaries_checkout_working_dir_path: binaries_checkout.working_dir_path().to_owned(),
-                source_version_tag: new_version_tag_string.clone(),
-                hostname: hostname.clone(),
-                sign,
-                local_user: opts.local_user.clone(),
-                push_binaries_to_remote,
-                rustc_version,
-                cargo_version,
-                build_os_arch: os_arch,
-                build_os_version: os_version,
-                app_signature_private_key_path,
-                app_signature_private_key: (&app_signature_private_key).into(),
-            })
-        } else {
+    let release_binary: Box<dyn Effect<Requires = BinariesWithSha256sum, Provides = Done>> =
+        if opts.no_publish_binary {
             NoOp::passing(
                 |BinariesWithSha256sum {
                      source_commit_id: _,
                      binaries_with_sha256sum: _,
                  }| Done,
-                "binaries are only published on macOS and Linux".into(),
+                "not publishing binary because --no-publish-binary option was given".into(),
             )
-        }
-    };
+        } else {
+            let app_signature_private_key_path = opts.app_private_key.ok_or_else(|| {
+                anyhow!("when publishing the binary, `--app-private-key` is required")
+            })?;
+            app_signature_private_key =
+                AppSignaturePrivateKey::load(&app_signature_private_key_path).with_context(
+                    || anyhow!("loading private key from {app_signature_private_key_path:?}"),
+                )?;
+
+            // XX Bug: this check is too 'early', I mean it fetches
+            // the remote even if !push. Not very important in
+            // practise since we'll always have a remote, OK?
+            let binaries_checkout = BINARIES_CHECKOUT.check2(CheckExpectedSubpathsExist::Yes)?;
+            binaries_checkout.check_status()?;
+
+            let push_binaries_to_remote = if push_binaries {
+                // *Not* doing a git "pull" because that can lead to
+                // merges, also it's unclear how security should be
+                // treated: merging without requiring a tag signature
+                // check could lead to unsafe contents merged and
+                // subsequently signed.
+
+                // But, we can do a "remote update" and complain about the
+                // situation.
+                {
+                    // FUTURE: proper abstraction for running git
+                    // directly on checkout contexts, also,
+                    // abstraction for making error checks with
+                    // dry_run easier? `unless_dry_run` from above
+                    // does not transfer values, and wouldn't make
+                    // sense. and the macro from xmlhub.rs doesn't
+                    // apply here because we still want to run the
+                    // commands.
+                    match binaries_checkout.git_working_dir().git(
+                        &["remote", "update", &binaries_checkout.default_remote],
+                        false,
+                    ) {
+                        Ok(did_it) => {
+                            if !did_it {
+                                if opts.dry_run {
+                                    eprintln!(
+                                        "dry-run: would stop because git remote update \
+                                         on the binaries repository was not successful"
+                                    );
+                                } else {
+                                    bail!(
+                                        "git remote update on the binaries repository \
+                                         was not successful"
+                                    )
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if opts.dry_run {
+                                eprintln!("dry-run: would stop because of {e:#}");
+                            } else {
+                                Err(e)?
+                            }
+                        }
+                    }
+
+                    let branch = binaries_checkout.branch_name;
+                    let remote_branch = format!("{}/{}", binaries_checkout.default_remote, branch);
+                    let remote_branch_is_ancestor = binaries_checkout.git_working_dir().git(
+                        &["merge-base", "--is-ancestor", "--", &remote_branch, branch],
+                        false,
+                    )?;
+                    if !remote_branch_is_ancestor {
+                        bail!(
+                            "the remote branch {remote_branch:?} is not an ancestor of \
+                             (or the same as the) the local branch {branch:?} in \
+                             the working directory {:?}",
+                            binaries_checkout.working_dir_path(),
+                        )
+                    }
+                }
+
+                Some(binaries_checkout.default_remote.clone())
+            } else {
+                None
+            };
+
+            // _repo_section is now unused, since we get the paths
+            // from target triple stuff instead now. We still check if
+            // the OS is supported in the repository at all, though.
+            if let Ok(_repo_section) = BinariesRepoSection::from_local_os_and_arch() {
+                Box::new(ReleaseBinaries {
+                    binaries_checkout_working_dir: binaries_checkout.git_working_dir(),
+                    source_version_tag: new_version_tag_string.clone(),
+                    hostname: hostname.clone(),
+                    sign,
+                    local_user: opts.local_user.clone(),
+                    push_binaries_to_remote,
+                    rustc_version,
+                    cargo_version,
+                    build_os_arch: os_arch,
+                    build_os_version: os_version,
+                    app_signature_private_key_path,
+                    app_signature_private_key: (&app_signature_private_key).into(),
+                })
+            } else {
+                NoOp::passing(
+                    |BinariesWithSha256sum {
+                         source_commit_id: _,
+                         binaries_with_sha256sum: _,
+                     }| Done,
+                    "binaries are only published on macOS and Linux".into(),
+                )
+            }
+        };
 
     let effect = bind(
         update_changelog_effect,

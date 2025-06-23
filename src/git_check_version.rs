@@ -9,7 +9,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    git::git_log,
+    git::GitWorkingDir,
     git_version::{GitVersion, SemVerOrd, SemVerOrdResult, SemVersion, UndecidabilityReason},
     ref_or_owned::RefOrOwned,
 };
@@ -309,12 +309,12 @@ impl<'t> GitLogVersionChecker<'t> {
     /// it is ignored if the error is due to something else.
     pub fn check_git_log<S: AsRef<OsStr> + Debug>(
         &self,
-        base_path: &Path,
+        git_working_dir: &GitWorkingDir,
         git_log_arguments: &[S],
         what_to_do: Option<String>,
     ) -> Result<Option<(Ordering, GitVersion<SemVersion>)>, GitCheckVersionErrorWithContext> {
         (|| {
-            for entry in git_log(base_path, git_log_arguments)? {
+            for entry in git_working_dir.git_log(git_log_arguments)? {
                 let entry = entry?;
                 if let Some(found_version) = self.parse_version_from_message(&entry.message) {
                     let ordering = check_version(&self.program_version, &found_version)?;
@@ -329,7 +329,7 @@ impl<'t> GitLogVersionChecker<'t> {
             } else {
                 None
             };
-            e.extend(base_path, what_to_do)
+            e.extend(git_working_dir.working_dir_path_ref(), what_to_do)
         })
     }
 }

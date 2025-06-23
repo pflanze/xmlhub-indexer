@@ -37,7 +37,7 @@ use xmlhub_indexer::{
     folder::Folder,
     forking_loop::forking_loop,
     get_terminal_width::get_terminal_width,
-    git::{git, git_ls_files, git_push, git_status, BaseAndRelPath, GitStatusItem},
+    git::{BaseAndRelPath, GitStatusItem, GitWorkingDir},
     git_version::{GitVersion, SemVersion},
     installation::{
         binaries_repo::Os,
@@ -985,7 +985,7 @@ fn build_index(
         if pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(xmlhub_checkout.working_dir_path(), &["pull"],
+                if !xmlhub_checkout.git_working_dir().git( &["pull"],
                         quietness.quiet())? {
                     bail!("git pull failed")
                 }
@@ -997,8 +997,8 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git remote update {default_remote:?}"),
-                if !git(
-                    xmlhub_checkout.working_dir_path(),
+                if !xmlhub_checkout.git_working_dir().git(
+
                     &["remote", "update", default_remote],
                     quietness.quiet()
                 )? {
@@ -1010,8 +1010,8 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git reset --hard {remote_banch_reference:?}"),
-                if !git(
-                    xmlhub_checkout.working_dir_path(),
+                if !xmlhub_checkout.git_working_dir().git(
+
                     &["reset", "--hard", &remote_banch_reference],
                     quietness.quiet()
                 )? {
@@ -1034,7 +1034,7 @@ fn build_index(
         // end in .xml
         let mut paths = if ignore_untracked {
             // Ask Git for the list of files
-            git_ls_files(xmlhub_checkout.working_dir_path())?
+            xmlhub_checkout.git_working_dir().git_ls_files()?
         } else {
             // Ask the filesystem for the list of files, but do not
             // waste time listing paths in the .git nor .xmlhub
@@ -1416,8 +1416,8 @@ fn build_index(
                     // Need to remember whether the file has changed
                     check_dry_run! {
                         message: "git diff",
-                        html_file_has_changed = !git(
-                            xmlhub_checkout.working_dir_path(),
+                        html_file_has_changed = !xmlhub_checkout.git_working_dir().git(
+
                             &["diff", "--no-patch", "--exit-code", "--",
                               HTML_FILE.path_from_repo_top],
                             false
@@ -1467,7 +1467,7 @@ fn build_index(
             let mut items: Vec<GitStatusItem> = vec![];
             check_dry_run! {
                 message: "git status",
-                items = git_status(xmlhub_checkout.working_dir_path())?
+                items = xmlhub_checkout.git_working_dir().git_status()?
             }
             let daemon_folder_name_with_slash = format!("{}/", *DAEMON_FOLDER_NAME);
             let ignore_path = |path: &str| -> bool {
@@ -1503,8 +1503,8 @@ fn build_index(
 
             check_dry_run! {
                 message: format!("git add -f -- {written_files:?}"),
-                git(
-                    xmlhub_checkout.working_dir_path(),
+                xmlhub_checkout.git_working_dir().git(
+
                     &append(&["add", "-f", "--"], &written_files),
                     quietness.quiet()
                 )?
@@ -1513,8 +1513,8 @@ fn build_index(
             let mut did_commit = true;
             check_dry_run! {
                 message: format!("git commit -m .. -- {written_files:?}"),
-                did_commit = git(
-                    xmlhub_checkout.working_dir_path(),
+                did_commit = xmlhub_checkout.git_working_dir().git(
+
                     &append(
                         &[
                             "commit",
@@ -1537,8 +1537,8 @@ fn build_index(
                 if did_commit {
                     check_dry_run! {
                         message: format!("git push {default_remote_for_push:?}"),
-                        git_push::<&str>(
-                            xmlhub_checkout.working_dir_path(),
+                        xmlhub_checkout.git_working_dir().git_push::<&str>(
+
                             default_remote_for_push,
                             &[],
                             quietness.quiet()
@@ -1715,7 +1715,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
     let git_log_version_checker = git_log_version_checker(
         program_version,
         no_version_check,
-        &xmlhub_checkout.working_dir_path(),
+        xmlhub_checkout.git_working_dir().into(),
     );
 
     let min_sleep_seconds = daemon_sleep_time.unwrap_or(MIN_SLEEP_SECONDS_DEFAULT);
@@ -1881,32 +1881,38 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
         })
         .collect::<Result<_>>()?;
 
-    let mut maybe_base_path: Option<&Path> = None;
-    for xmlhub_checkout in &xmlhub_checkouts {
-        if let Some(path) = maybe_base_path {
-            let path2 = xmlhub_checkout.working_dir_path();
-            if path != path2 {
-                bail!("`check` currently needs all FILE_PATHS arguments to be within the same Git clone")
+    let git_working_dir = {
+        let mut maybe_base_path: Option<&Path> = None;
+        for xmlhub_checkout in &xmlhub_checkouts {
+            if let Some(path) = maybe_base_path {
+                let path2 = xmlhub_checkout.working_dir_path();
+                if path != path2 {
+                    bail!(
+                        "`check` currently needs all FILE_PATHS arguments to be within \
+                         the same Git clone"
+                    )
+                }
+            } else {
+                maybe_base_path = Some(xmlhub_checkout.working_dir_path());
             }
-        } else {
-            maybe_base_path = Some(xmlhub_checkout.working_dir_path());
         }
-    }
-    let base_path =
-        maybe_base_path.ok_or_else(|| anyhow!("`check` needs at least one FILE_PATHS argument"))?;
+        let base_path = maybe_base_path
+            .ok_or_else(|| anyhow!("`check` needs at least one FILE_PATHS argument"))?;
+        GitWorkingDir::from(base_path.to_owned())
+    };
 
     let git_log_version_checker =
-        git_log_version_checker(program_version, no_version_check, base_path);
+        git_log_version_checker(program_version, no_version_check, (&git_working_dir).into());
 
     let maybe_checked_xmlhub_checkout = None;
 
     // First, check all the paths are XML files. Partial/adapted copy
     // of the code in build_index.
     let paths: Vec<BaseAndRelPath> = {
-        let shared_base_path = Arc::new(base_path.to_owned());
-        let canonicalized_base_path = base_path
+        let shared_base_path = git_working_dir.working_dir_path_arc();
+        let canonicalized_base_path = shared_base_path
             .canonicalize()
-            .with_context(|| anyhow!("canonicalizing the BASE_PATH {base_path:?}"))?;
+            .with_context(|| anyhow!("canonicalizing the BASE_PATH {shared_base_path:?}"))?;
         file_paths
             .into_iter()
             .map(|file_path| {
@@ -1918,8 +1924,8 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
                     .unwrap_or_else(|_| {
                         panic!(
                             "already checked to be in same repo directory; \
-                         file_path = {file_path:?}, \
-                         base_path = {base_path:?}"
+                             file_path = {file_path:?}, \
+                             base_path = {shared_base_path:?}"
                         )
                     });
                 let barp = BaseAndRelPath::new(
@@ -2262,7 +2268,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
     let git_log_version_checker = git_log_version_checker(
         program_version,
         no_version_check,
-        &xmlhub_checkout.working_dir_path,
+        xmlhub_checkout.git_working_dir().into(),
     );
     git_log_version_checker.check_git_log()?;
 

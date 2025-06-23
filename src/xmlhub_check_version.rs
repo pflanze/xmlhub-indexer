@@ -4,11 +4,10 @@
 
 //! Wrapper around git_check_version.rs for the xmlhub specific parts.
 
-use std::{borrow::Cow, path::Path};
-
 use anyhow::Result;
 
 use crate::{
+    git::GitWorkingDir,
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     ref_or_owned::RefOrOwned,
@@ -19,7 +18,7 @@ pub struct XmlhubCheckVersion<'s> {
     pub program_name: &'s str,
     pub program_version: RefOrOwned<'s, GitVersion<SemVersion>>,
     pub no_version_check: bool,
-    pub base_path: Cow<'s, Path>,
+    pub git_working_dir: RefOrOwned<'s, GitWorkingDir>,
     pub html_file: RefOrOwned<'s, OutputFile>,
     pub md_file: RefOrOwned<'s, OutputFile>,
 }
@@ -39,7 +38,7 @@ impl<'s> XmlhubCheckVersion<'s> {
             let program_name = self.program_name;
 
             let found = git_log_version_checker.check_git_log(
-                self.base_path.as_ref(),
+                self.git_working_dir.as_ref(),
                 &[
                     self.html_file.path_from_repo_top,
                     self.md_file.path_from_repo_top,

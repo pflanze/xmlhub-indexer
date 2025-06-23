@@ -1,11 +1,11 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 
 use crate::{
     checkout_context::{CheckExpectedSubpathsExist, CheckoutContext},
     fixup_path::FixupPath,
-    git::git,
+    git::git_clone,
     git_version::{GitVersion, SemVersion},
     path_util::AppendToPath,
     xmlhub_global_opts::{DrynessOpt, VersionCheckOpt},
@@ -169,9 +169,11 @@ pub fn clone_to_command(
                              parent_dir,
                              url,
                              subfolder_name),
-            git(
+            git_clone(
                 &parent_dir,
-                &[ OsString::from("clone"), OsString::from(url), subfolder_name.into() ],
+                [],
+                url,
+                subfolder_name,
                 false
             )?
         }
@@ -194,8 +196,7 @@ pub fn clone_to_command(
     check_dry_run! {
         message: format!("cd {:?} && git config pull.rebase false",
                          target.checkout.working_dir_path()),
-        git(
-            &target.checkout.working_dir_path(),
+        target.checkout.git_working_dir().git(
             &[ "config", "pull.rebase", "false" ],
             false
         )?
@@ -205,7 +206,7 @@ pub fn clone_to_command(
     let git_log_version_checker = git_log_version_checker(
         program_version,
         no_version_check,
-        target.checkout.working_dir_path(),
+        target.checkout.git_working_dir().into(),
     );
 
     git_log_version_checker.check_git_log()?;

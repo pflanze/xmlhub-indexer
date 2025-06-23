@@ -3,7 +3,7 @@
 
 //! `xmlhub_indexer_defaults` was supposed to be xmlhub specific but
 //! is also covering application upgrades now. (TODO: clean up)
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use ahtml::{att, AId, HtmlAllocator, HtmlAllocatorPool, Node};
 use anyhow::Result;
@@ -11,7 +11,9 @@ use lazy_static::lazy_static;
 
 use crate::{
     checkout_context::CheckoutContext,
+    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
+    ref_or_owned::RefOrOwned,
     xmlhub_check_version::XmlhubCheckVersion,
     xmlhub_types::OutputFile,
 };
@@ -76,16 +78,16 @@ pub const MD_FILE: OutputFile = OutputFile {
     path_from_repo_top: "README.md",
 };
 
-pub fn git_log_version_checker(
+pub fn git_log_version_checker<'t>(
     program_version: GitVersion<SemVersion>,
     no_version_check: bool,
-    base_path: &Path,
-) -> XmlhubCheckVersion {
+    git_working_dir: RefOrOwned<'t, GitWorkingDir>,
+) -> XmlhubCheckVersion<'t> {
     XmlhubCheckVersion {
         program_name: PROGRAM_NAME,
         program_version: program_version.into(),
         no_version_check,
-        base_path: base_path.into(),
+        git_working_dir,
         html_file: (&HTML_FILE).into(),
         md_file: (&MD_FILE).into(),
     }

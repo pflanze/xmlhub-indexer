@@ -12,7 +12,7 @@ use chrono::Local;
 
 use crate::{
     changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle, CHANGELOG_FILE_NAME},
-    git::git,
+    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
     installation::shell::AppendToShellFileDone,
     path_util::{add_extension_mut, AppendToPath},
@@ -49,7 +49,7 @@ pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
 
     if binaries_checkout.working_dir_path().is_dir() {
         println!("Updating the {binaries_repo_name} repository via git pull.");
-        git(binaries_checkout.working_dir_path(), &["pull"], false)?;
+        binaries_checkout.git_working_dir().git(&["pull"], false)?;
     } else {
         println!("Cloning the {binaries_repo_name} repository.");
         let parent_dir = binaries_checkout
@@ -62,8 +62,7 @@ pub fn pull_verified_executable() -> Result<VerifiedExecutable> {
             .file_name()
             .expect("ditto");
         // ^ XX ditto
-        git(
-            &parent_dir,
+        GitWorkingDir::from(parent_dir.to_owned()).git(
             &[
                 "clone".into(),
                 // Save on volume; do not expect to need history, and
