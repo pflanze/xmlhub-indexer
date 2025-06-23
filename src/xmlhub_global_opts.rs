@@ -10,12 +10,38 @@ pub struct VerbosityOpt {
     pub verbose: bool,
 }
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args, Debug, Clone)]
 pub struct QuietOpt {
     /// Suppress some unimportant output. (Note that this does
-    /// not disable `--verbose` if that option is allowed.)
+    /// not disable `--verbose` if that option is given.)
     #[clap(short, long)]
-    pub quiet: bool,
+    // Private fields to enforce going through the accessor method!
+    quiet: bool,
+
+    /// In batch/daemon mode, `--quiet` is the default; this disables
+    /// that.
+    #[clap(short, long)]
+    no_quiet: bool,
+}
+
+impl QuietOpt {
+    /// Enable the --quiet setting by default
+    pub fn interpret_for_batch_mode(self) -> Self {
+        let Self { quiet: _, no_quiet } = self;
+        Self {
+            quiet: true,
+            no_quiet,
+        }
+    }
+
+    pub fn quiet(&self) -> bool {
+        let Self { quiet, no_quiet } = self;
+        if *no_quiet {
+            false
+        } else {
+            *quiet
+        }
+    }
 }
 
 #[derive(clap::Args, Debug, Clone)]

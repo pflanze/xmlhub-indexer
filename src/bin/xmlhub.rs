@@ -949,7 +949,7 @@ fn build_index(
     let BuildIndexOpts {
         dryness: DrynessOpt { dry_run },
         verbosity: VerbosityOpt { verbose },
-        quietness: QuietOpt { quiet },
+        quietness,
         pull,
         batch,
         ignore_untracked,
@@ -985,7 +985,8 @@ fn build_index(
         if pull {
             check_dry_run! {
                 message: "git pull",
-                if !git(xmlhub_checkout.working_dir_path(), &["pull"], quiet)? {
+                if !git(xmlhub_checkout.working_dir_path(), &["pull"],
+                        quietness.quiet())? {
                     bail!("git pull failed")
                 }
             }
@@ -999,7 +1000,7 @@ fn build_index(
                 if !git(
                     xmlhub_checkout.working_dir_path(),
                     &["remote", "update", default_remote],
-                    quiet
+                    quietness.quiet()
                 )? {
                     bail!("git remote update {default_remote:?} failed")
                 }
@@ -1012,7 +1013,7 @@ fn build_index(
                 if !git(
                     xmlhub_checkout.working_dir_path(),
                     &["reset", "--hard", &remote_banch_reference],
-                    quiet
+                    quietness.quiet()
                 )? {
                     bail!("git reset --hard {remote_banch_reference:?} failed")
                 }
@@ -1505,7 +1506,7 @@ fn build_index(
                 git(
                     xmlhub_checkout.working_dir_path(),
                     &append(&["add", "-f", "--"], &written_files),
-                    quiet
+                    quietness.quiet()
                 )?
             }
 
@@ -1527,7 +1528,7 @@ fn build_index(
                         ],
                         &written_files,
                     ),
-                    quiet
+                    quietness.quiet()
                 )?
             }
 
@@ -1540,11 +1541,11 @@ fn build_index(
                             xmlhub_checkout.working_dir_path(),
                             default_remote_for_push,
                             &[],
-                            quiet
+                            quietness.quiet()
                         )?
                     }
                 } else {
-                    if !quiet {
+                    if !quietness.quiet() {
                         println!("There were no changes to commit, thus not pushing.")
                     }
                 }
@@ -1669,7 +1670,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
         dryness,
         verbosity,
         versioncheck: VersionCheckOpt { no_version_check },
-        quietness: QuietOpt { quiet },
+        quietness,
         write_errors,
         no_commit_errors,
         ok_on_written_errors,
@@ -1724,7 +1725,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             BuildIndexOpts {
                 dryness: dryness.clone(),
                 verbosity: verbosity.clone(),
-                quietness: QuietOpt { quiet },
+                quietness: quietness.clone(),
                 pull,
                 batch,
                 ignore_untracked,
@@ -1767,74 +1768,80 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             use_local_time: localtime,
             max_log_file_size: max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
             max_log_files: max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
-            run: move || {
-                let _main_lock = get_main_lock()?;
+            run: {
+                let quietness = quietness.clone();
+                move || {
+                    let _main_lock = get_main_lock()?;
 
-                // Daemon: repeatedly carry out the work by starting a new
-                // child process to do it (so that the child crashing or being
-                // killed due to out of memory conditions does not stop the
-                // daemon).
-                forking_loop(
-                    LoopWithBackoff {
-                        min_sleep_seconds,
-                        max_sleep_seconds: MAX_SLEEP_SECONDS,
-                        verbosity: if quiet {
-                            LoopVerbosity::LogActivityInterval {
-                                every_n_seconds: DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS,
-                            }
-                        } else {
-                            LoopVerbosity::LogEveryIteration
+                    // Daemon: repeatedly carry out the work by starting a new
+                    // child process to do it (so that the child crashing or being
+                    // killed due to out of memory conditions does not stop the
+                    // daemon).
+                    forking_loop(
+                        LoopWithBackoff {
+                            min_sleep_seconds,
+                            max_sleep_seconds: MAX_SLEEP_SECONDS,
+                            verbosity: if quietness.quiet() {
+                                LoopVerbosity::LogActivityInterval {
+                                    every_n_seconds: DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS,
+                                }
+                            } else {
+                                LoopVerbosity::LogEveryIteration
+                            },
+                            ..Default::default()
                         },
-                        ..Default::default()
-                    },
-                    // The action run in the child process
-                    || {
-                        let os = Os::from_local()?;
+                        // The action run in the child process
+                        || {
+                            let os = Os::from_local()?;
 
-                        match os {
-                            Os::MacOS => {
-                                // Apparently
-                                // setrlimit(Resource::RLIMIT_AS, ) is
-                                // broken on macOS (always returns
-                                // `EINVAL`, and the internet seems to
-                                // indicate that it just doesn't work), thus ignore.
+                            match os {
+                                Os::MacOS => {
+                                    // Apparently
+                                    // setrlimit(Resource::RLIMIT_AS, ) is
+                                    // broken on macOS (always returns
+                                    // `EINVAL`, and the internet seems to
+                                    // indicate that it just doesn't work), thus ignore.
+                                }
+                                Os::Linux => {
+                                    // Set resource limits in case there are issues that
+                                    // lead to overuse of CPU or memory
+                                    let limit_as =
+                                        limit_as.unwrap_or(AS_BYTES_LIMIT_IN_WORKER_CHILD);
+                                    setrlimit(Resource::RLIMIT_AS, limit_as, limit_as)
+                                        .with_context(|| {
+                                            anyhow!("setting RLIMIT_AS to {limit_as}")
+                                        })?;
+                                }
                             }
-                            Os::Linux => {
-                                // Set resource limits in case there are issues that
-                                // lead to overuse of CPU or memory
-                                let limit_as = limit_as.unwrap_or(AS_BYTES_LIMIT_IN_WORKER_CHILD);
-                                setrlimit(Resource::RLIMIT_AS, limit_as, limit_as)
-                                    .with_context(|| anyhow!("setting RLIMIT_AS to {limit_as}"))?;
-                            }
-                        }
 
-                        setrlimit(
-                            Resource::RLIMIT_CPU,
-                            CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
-                            CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1,
-                        )
-                        .with_context(|| {
-                            anyhow!(
+                            setrlimit(
+                                Resource::RLIMIT_CPU,
+                                CPU_SECONDS_LIMIT_IN_WORKER_CHILD,
+                                CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1,
+                            )
+                            .with_context(|| {
+                                anyhow!(
                                 "setting RLIMIT_CPU to {CPU_SECONDS_LIMIT_IN_WORKER_CHILD} / {}",
                                 CPU_SECONDS_LIMIT_IN_WORKER_CHILD + 1
                             )
-                        })?;
+                            })?;
 
-                        // Set nicety (scheduling priority):
-                        possibly_setpriority(PriorityWhich::Process(0), 10)?;
+                            // Set nicety (scheduling priority):
+                            possibly_setpriority(PriorityWhich::Process(0), 10)?;
 
-                        // hack09()?;
+                            // hack09()?;
 
-                        // Build the index once, throwing away the Ok
-                        // return value (replacing it with `()`, since
-                        // `forking_loop` expects that (it exits the
-                        // child with exit code 0 whenever the action
-                        // returned Ok, and that's OK for us, thus we
-                        // can and need to drop the code from
-                        // `build_index`).
-                        build_index_once().map(|_exit_code| ())
-                    },
-                )
+                            // Build the index once, throwing away the Ok
+                            // return value (replacing it with `()`, since
+                            // `forking_loop` expects that (it exits the
+                            // child with exit code 0 whenever the action
+                            // returned Ok, and that's OK for us, thus we
+                            // can and need to drop the code from
+                            // `build_index`).
+                            build_index_once().map(|_exit_code| ())
+                        },
+                    )
+                }
             },
         };
         daemon.execute(daemon_mode)?;
@@ -1853,7 +1860,7 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
         versioncheck: VersionCheckOpt { no_version_check },
         dryness: DrynessOpt { dry_run },
         verbosity: VerbosityOpt { verbose },
-        quietness: QuietOpt { quiet },
+        quietness,
         file_paths,
         open,
         open_if_changed,
@@ -1942,7 +1949,7 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
         BuildIndexOpts {
             dryness: DrynessOpt { dry_run },
             verbosity: VerbosityOpt { verbose },
-            quietness: QuietOpt { quiet },
+            quietness,
             pull: false,
             batch: false,
             ignore_untracked: false,
@@ -2167,7 +2174,7 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
 /// Execute a `prepare` command.
 fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     let PrepareOpts {
-        quietness: QuietOpt { quiet },
+        quietness,
         files_to_prepare,
         blinding,
         ignore_version,
@@ -2186,7 +2193,7 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
                     source_path,
                     blinding: &blinding,
                     ignore_version,
-                    quiet,
+                    quiet: quietness.quiet(),
                 })?,
             ))
         })
@@ -2196,9 +2203,13 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
     // them out. With regards to IO, only writing happens here.
     for (target_path, prepared_file) in converted {
         if prepared_file.content_has_changed {
-            write_file_moving_to_trash_if_exists(&target_path, &prepared_file.content, quiet)?;
+            write_file_moving_to_trash_if_exists(
+                &target_path,
+                &prepared_file.content,
+                quietness.quiet(),
+            )?;
         } else {
-            if !quiet {
+            if !quietness.quiet() {
                 println!("File is unchanged (already prepared): {target_path:?}");
             }
         }
@@ -2210,7 +2221,7 @@ fn prepare_command(command_opts: PrepareOpts) -> Result<()> {
 fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOpts) -> Result<()> {
     let AddToOpts {
         versioncheck: VersionCheckOpt { no_version_check },
-        quietness: QuietOpt { quiet },
+        quietness,
         blinding,
         target_directory,
         files_to_add,
@@ -2256,12 +2267,12 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
     git_log_version_checker.check_git_log()?;
 
     if files_to_add.is_empty() {
-        if !quiet {
+        if !quietness.quiet() {
             println!("No files given, thus nothing to do.");
         }
     } else {
         pluralized! { files_to_add.len() => files }
-        if !quiet {
+        if !quietness.quiet() {
             println!("Reading the {files}...");
         }
 
@@ -2278,7 +2289,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
                         source_path,
                         blinding: &blinding,
                         ignore_version,
-                        quiet,
+                        quiet: quietness.quiet(),
                     })?,
                 ))
             })
@@ -2316,7 +2327,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
             }
         }
 
-        if !quiet {
+        if !quietness.quiet() {
             println!("Writing the {files}...");
         }
 
@@ -2330,10 +2341,14 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
             // time!
 
             // Keep existing files in trash, even with --force?
-            write_file_moving_to_trash_if_exists(target_path, &prepared_file.content, quiet)?;
+            write_file_moving_to_trash_if_exists(
+                target_path,
+                &prepared_file.content,
+                quietness.quiet(),
+            )?;
         }
 
-        if !quiet {
+        if !quietness.quiet() {
             println!(
                 "Done.\n\
                  Now edit the new {files} in {target_directory:?} to complete \
@@ -2389,7 +2404,7 @@ fn main() -> Result<()> {
                     dryness,
                     verbosity,
                     versioncheck: VersionCheckOpt { no_version_check },
-                    quietness: QuietOpt { quiet },
+                    quietness: quietness_,
                     write_errors: write_errors_,
                     no_commit_errors: no_commit_errors_,
                     ok_on_written_errors,
@@ -2422,6 +2437,7 @@ fn main() -> Result<()> {
                         no_commit_errors,
                         silent_on_written_errors,
                         batch,
+                        quietness,
                     );
                     if daemon.is_some() {
                         batch = true;
@@ -2435,6 +2451,7 @@ fn main() -> Result<()> {
                         write_errors = true;
                         no_commit_errors = false;
                         silent_on_written_errors = true;
+                        quietness = quietness_.interpret_for_batch_mode();
                         // Should we force `ignore_untracked` false?
                         // No, rather, would want it to be true
                         // because stale files from crashed git runs,
@@ -2450,6 +2467,7 @@ fn main() -> Result<()> {
                         write_errors = write_errors_;
                         no_commit_errors = no_commit_errors_;
                         silent_on_written_errors = silent_on_written_errors_;
+                        quietness = quietness_;
                     }
 
                     // Pack the variables into a new struct
@@ -2460,7 +2478,7 @@ fn main() -> Result<()> {
                             dryness,
                             verbosity,
                             versioncheck: VersionCheckOpt { no_version_check },
-                            quietness: QuietOpt { quiet },
+                            quietness,
                             write_errors,
                             no_commit_errors,
                             ok_on_written_errors,
