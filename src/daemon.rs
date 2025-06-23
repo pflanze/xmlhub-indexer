@@ -34,6 +34,9 @@ pub enum DaemonMode {
     Run,
     /// Start daemon into background.
     Start,
+    /// Same as Start but silently do nothing if daemon is already
+    /// running.
+    StartIfNotRunning,
     /// Stop existing daemon running in background (does not stop
     /// daemons in `Run` mode, only those in `Start` mode).
     Stop,
@@ -44,7 +47,10 @@ pub enum DaemonMode {
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("please give one of the strings `run`, `start`, `stop`, `restart` or `status`")]
+#[error(
+    "please give one of the strings `run`, `start`, `start-if-not-running`, \
+     `stop`, `restart` or `status`"
+)]
 pub struct DaemonModeError;
 
 impl FromStr for DaemonMode {
@@ -59,12 +65,14 @@ impl FromStr for DaemonMode {
                 Stop => (),
                 Restart => (),
                 Status => (),
+                StartIfNotRunning => (),
             }
         }
         use DaemonMode::*;
         match s {
             "run" => Ok(Run),
             "start" => Ok(Start),
+            "start-if-not-running" => Ok(StartIfNotRunning),
             "stop" => Ok(Stop),
             "restart" => Ok(Restart),
             "status" => Ok(Status),
@@ -106,6 +114,29 @@ pub struct PathIOError {
     what: &'static str,
     path: PathBuf,
     error: InOutError,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DaemonError {
+    #[error("service {0:?} is already running")]
+    AlreadyRunning(PathBuf),
+    #[error("can't lock file {is_running_path:?}: {error}")]
+    LockError {
+        is_running_path: PathBuf,
+        error: String,
+    },
+    #[error("{context}: IO error: {error}")]
+    IoError {
+        context: &'static str,
+        error: std::io::Error,
+    },
+    #[error("{context}: {error}")]
+    ErrnoError {
+        context: &'static str,
+        error: nix::errno::Errno,
+    },
+    #[error("{0}")]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
@@ -297,7 +328,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
 
     /// Note: must be run while there are no running threads, panics
     /// otherwise!
-    pub fn start(self) -> anyhow::Result<()> {
+    pub fn start(self) -> Result<(), DaemonError> {
         // 1. get exclusive lock on pid file; 2. get exclusive
         // `is_running` lock; 3. empty the pid file ASAP to invalidate
         // the stale pid (sigh, there's still a race here). 4. fork;
@@ -309,7 +340,11 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
         // 1. get exclusive lock on pid file, without modifying it yet
         let pid_path = self.pid_path();
         let mut pid_file = open_rw(&pid_path)?;
-        let mut pid_lock = easy_flock_blocking(&mut pid_file, true)?;
+        let mut pid_lock =
+            easy_flock_blocking(&mut pid_file, true).map_err(|error| DaemonError::ErrnoError {
+                context: "flock",
+                error,
+            })?;
 
         // 2. get exclusive `is_running` lock
         let is_running_path = self.is_running_path();
@@ -317,20 +352,35 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
             Ok(lock) => lock,
             Err(e) => match e {
                 FileLockError::AlreadyLocked => {
-                    // XXX instead of error keep silent, or report special error
-                    bail!("service {:?} is already running", self.base_dir())
+                    return Err(DaemonError::AlreadyRunning(self.base_dir()))
                 }
-                _ => bail!("can't lock file {is_running_path:?}: {e}"),
+                _ => {
+                    return Err(DaemonError::LockError {
+                        is_running_path,
+                        error: e.to_string(),
+                    })
+                }
             },
         };
         // 3. ASAP truncate the pid file (there is still a small race
         // window here!)
-        pid_lock.set_len(0)?;
+        pid_lock.set_len(0).map_err(|error| DaemonError::IoError {
+            context: "pid_lock.set_len",
+            error,
+        })?;
         // Is this necessary?
-        pid_lock.seek(std::io::SeekFrom::Start(0))?;
+        pid_lock
+            .seek(std::io::SeekFrom::Start(0))
+            .map_err(|error| DaemonError::IoError {
+                context: "pid_lock.seek",
+                error,
+            })?;
 
         // 4. fork
-        if let Some(_pid) = easy_fork()? {
+        if let Some(_pid) = easy_fork().map_err(|error| DaemonError::ErrnoError {
+            context: "fork",
+            error,
+        })? {
             // The child is holding onto the locks; apparently flock
             // acts globally when on the same filehandle, so we have
             // to disable the locks here.
@@ -342,7 +392,10 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
             match (|| -> anyhow::Result<()> {
                 // Start a new session, so that signals can be sent to
                 // the whole group and will kill child processes, too.
-                let session_pid = setsid()?;
+                let session_pid = setsid().map_err(|error| DaemonError::ErrnoError {
+                    context: "setsid",
+                    error,
+                })?;
 
                 // 5. write the new pid / session group leader to the pid file
                 pid_lock.write_fmt(format_args!("{session_pid}\n"))?;
@@ -471,6 +524,11 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
             DaemonMode::Start => {
                 self.start()?;
             }
+            DaemonMode::StartIfNotRunning => match self.start() {
+                Ok(()) => (),
+                Err(DaemonError::AlreadyRunning(_)) => (),
+                Err(e) => Err(e)?,
+            },
             DaemonMode::Stop => {
                 self.stop()?;
             }
