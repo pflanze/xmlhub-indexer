@@ -2405,7 +2405,7 @@ fn main() -> Result<()> {
                     daemon_sleep_time,
                     base_path,
                     ignore_untracked,
-                    no_repo_check: no_repo_check_,
+                    no_repo_check,
                     localtime,
                     max_log_file_size,
                     max_log_files,
@@ -2422,7 +2422,6 @@ fn main() -> Result<()> {
                         no_commit_errors,
                         silent_on_written_errors,
                         batch,
-                        no_repo_check,
                     );
                     if daemon.is_some() {
                         batch = true;
@@ -2436,7 +2435,6 @@ fn main() -> Result<()> {
                         write_errors = true;
                         no_commit_errors = false;
                         silent_on_written_errors = true;
-                        no_repo_check = true;
                         // Should we force `ignore_untracked` false?
                         // No, rather, would want it to be true
                         // because stale files from crashed git runs,
@@ -2452,7 +2450,6 @@ fn main() -> Result<()> {
                         write_errors = write_errors_;
                         no_commit_errors = no_commit_errors_;
                         silent_on_written_errors = silent_on_written_errors_;
-                        no_repo_check = no_repo_check_;
                     }
 
                     // Pack the variables into a new struct
