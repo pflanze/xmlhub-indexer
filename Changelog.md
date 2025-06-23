@@ -288,3 +288,5 @@ v9.7 - 2025-04-25
 - `xmlhub prepare`: check that the file size is below 5 MB, provide an option to override
 - for `xmlhub docs`: implement variables for repository urls and version information that documentation pages can use
 - `xmlhub docs`: add a (preliminary) logo, link to the BEAST2 website, add link to XML Hub repository to the navigation bar, add description about XML Hub and the xmlhub tool, add a preliminary macOS user page, add an "about" page with version info, add "signatures verification" page
+- Implement attributes which are derived from other attributes. Also adds attribute "Citation via DOI", but unfinished, currently just shows a copy of the DOI itself.
+- Add extracted attributes, and "Contains sequence data" attribute (finished)
