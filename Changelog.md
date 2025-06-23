@@ -290,3 +290,6 @@ v9.7 - 2025-04-25
 - `xmlhub docs`: add a (preliminary) logo, link to the BEAST2 website, add link to XML Hub repository to the navigation bar, add description about XML Hub and the xmlhub tool, add a preliminary macOS user page, add an "about" page with version info, add "signatures verification" page
 - Implement attributes which are derived from other attributes. Also adds attribute "Citation via DOI", but unfinished, currently just shows a copy of the DOI itself.
 - Add extracted attributes, and "Contains sequence data" attribute (finished)
+
+v10 - 2025-06-23
+
