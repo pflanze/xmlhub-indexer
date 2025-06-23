@@ -1,13 +1,12 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use run_git::{git::git_clone, path_util::AppendToPath};
 
 use crate::{
     checkout_context::{CheckExpectedSubpathsExist, CheckoutContext},
     fixup_path::FixupPath,
-    git::git_clone,
     git_version::{GitVersion, SemVersion},
-    path_util::AppendToPath,
     xmlhub_global_opts::{DrynessOpt, VersionCheckOpt},
     xmlhub_indexer_defaults::{
         git_log_version_checker, XMLHUB_CHECKOUT, XMLHUB_EXPERIMENTS_CHECKOUT,

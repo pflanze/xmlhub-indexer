@@ -9,9 +9,9 @@ use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator,
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use pluraless::pluralized;
+use run_git::git::BaseAndRelPath;
 
 use crate::{
-    git::BaseAndRelPath,
     util::{self, bool_to_yes_no, list_get_by_key},
     xml_document::XMLDocument,
     xmlhub_attributes::{

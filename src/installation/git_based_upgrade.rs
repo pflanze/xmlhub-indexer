@@ -9,13 +9,15 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
+use run_git::{
+    git::GitWorkingDir,
+    path_util::{add_extension_mut, AppendToPath},
+};
 
 use crate::{
     changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle, CHANGELOG_FILE_NAME},
-    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
     installation::shell::AppendToShellFileDone,
-    path_util::{add_extension_mut, AppendToPath},
     sha256::sha256sum,
     util::ask_yn,
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, PROGRAM_NAME, XMLHUB_BINARY_FILE_NAME},

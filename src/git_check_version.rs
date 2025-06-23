@@ -6,10 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use run_git::git::GitWorkingDir;
 use thiserror::Error;
 
 use crate::{
-    git::GitWorkingDir,
     git_version::{GitVersion, SemVerOrd, SemVerOrdResult, SemVersion, UndecidabilityReason},
     ref_or_owned::RefOrOwned,
 };

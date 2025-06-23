@@ -20,11 +20,11 @@ use nix::{
     sys::signal::{kill, Signal},
     unistd::{close, dup2, pipe, setsid, Pid},
 };
+use run_git::path_util::AppendToPath;
 
 use crate::{
     file_lock::{file_lock_nonblocking, FileLockError},
     file_util::{open_append, open_rw},
-    path_util::AppendToPath,
     unix::{easy_flock_blocking, easy_fork},
 };
 

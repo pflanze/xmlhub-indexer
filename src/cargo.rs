@@ -5,12 +5,10 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use run_git::command::{run, Capturing};
 use toml::Value;
 
-use crate::{
-    command::{run, Capturing},
-    installation::binaries_repo,
-};
+use crate::installation::binaries_repo;
 
 pub fn check_cargo_toml_no_path<P: AsRef<Path> + Debug>(cargo_toml_path: P) -> Result<()> {
     (|| -> Result<()> {

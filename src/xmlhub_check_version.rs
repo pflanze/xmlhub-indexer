@@ -5,9 +5,9 @@
 //! Wrapper around git_check_version.rs for the xmlhub specific parts.
 
 use anyhow::Result;
+use run_git::git::GitWorkingDir;
 
 use crate::{
-    git::GitWorkingDir,
     git_check_version::GitLogVersionChecker,
     git_version::{GitVersion, SemVersion},
     ref_or_owned::RefOrOwned,

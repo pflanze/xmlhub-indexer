@@ -7,9 +7,9 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use run_git::command::{run_outputs, spawn, Capturing};
 
 use crate::{
-    command::{run_outputs, spawn, Capturing},
     fixup_path::CURRENT_DIRECTORY,
     util::{append, to_owned_items},
 };

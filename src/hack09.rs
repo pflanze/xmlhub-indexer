@@ -1,12 +1,9 @@
 use std::os::unix::fs::symlink;
 
 use anyhow::{anyhow, Context, Result};
+use run_git::path_util::{canonicalize, AppendToPath};
 
-use crate::{
-    path_util::{canonicalize, AppendToPath},
-    unix_passwd::getpwuid_home,
-    utillib::home::home_dir,
-};
+use crate::{unix_passwd::getpwuid_home, utillib::home::home_dir};
 
 /// Hack for stadler09 server: we run on a local file system
 /// (`/local0/$USER/`), because `$HOME` is on a mounted file

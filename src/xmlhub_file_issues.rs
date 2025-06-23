@@ -7,8 +7,9 @@ use std::io::Write;
 
 use ahtml::{att, flat::Flat, util::SoftPre, HtmlAllocator, Node};
 use anyhow::Result;
+use run_git::git::BaseAndRelPath;
 
-use crate::{git::BaseAndRelPath, xmlhub_indexer_defaults::document_symbol};
+use crate::xmlhub_indexer_defaults::document_symbol;
 
 /// An error report with all errors that happened while processing one
 /// particular file. An error prevents the file from being included in

@@ -8,10 +8,10 @@ use std::sync::Arc;
 use ahtml::{att, AId, HtmlAllocator, HtmlAllocatorPool, Node};
 use anyhow::Result;
 use lazy_static::lazy_static;
+use run_git::git::GitWorkingDir;
 
 use crate::{
     checkout_context::CheckoutContext,
-    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
     ref_or_owned::RefOrOwned,
     xmlhub_check_version::XmlhubCheckVersion,

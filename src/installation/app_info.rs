@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
+use run_git::path_util::add_extension_mut;
 use serde::{Deserialize, Serialize};
 
-use crate::{path_util::add_extension_mut, sha256::sha256sum};
+use crate::sha256::sha256sum;
 
 use super::json_file::{JsonFile, JsonFileHeader};
 

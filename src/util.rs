@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
+use run_git::command::run_stdout_string;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
@@ -8,8 +9,6 @@ use std::{
     io::{BufReader, BufWriter},
     path::Path,
 };
-
-use crate::command::run_stdout_string;
 
 pub trait InsertValue<K, V> {
     /// Insert a value into a collection of value that `key` maps to,
@@ -175,15 +174,6 @@ pub fn with_output_to_file(
         Ok(())
     })()
     .with_context(|| anyhow!("writing to file {output_path:?}"))
-}
-
-/// Does the same for bytes that `haystack.contains(needle)` does for
-/// strings. (This will be in std in the future:
-/// <https://github.com/rust-lang/rust/issues/134149>)
-pub fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|window| window == needle)
 }
 
 /// Format a sequence of items that can be represented as &str to a

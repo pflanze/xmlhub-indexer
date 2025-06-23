@@ -19,6 +19,10 @@ use lazy_static::lazy_static;
 use nix::sys::resource::{setrlimit, Resource};
 use pluraless::pluralized;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use run_git::{
+    git::{BaseAndRelPath, GitStatusItem, GitWorkingDir},
+    path_util::AppendToPath,
+};
 use walkdir::WalkDir;
 
 // Use from src/*.rs
@@ -37,7 +41,6 @@ use xmlhub_indexer::{
     folder::Folder,
     forking_loop::forking_loop,
     get_terminal_width::get_terminal_width,
-    git::{BaseAndRelPath, GitStatusItem, GitWorkingDir},
     git_version::{GitVersion, SemVersion},
     installation::{
         binaries_repo::Os,
@@ -46,7 +49,6 @@ use xmlhub_indexer::{
     },
     markdown_paragraphs,
     modified_xml_document::{ClearAction, ClearElementsOpts, ModifiedXMLDocument},
-    path_util::AppendToPath,
     rayon_util::ParRun,
     section::{Highlight, NumberPath, Section},
     string_tree::StringTree,

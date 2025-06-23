@@ -8,6 +8,7 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, Context, Result};
+use run_git::path_util::AppendToPath;
 
 use crate::{
     browser::{spawn_browser, spawn_browser_on_path},
@@ -15,7 +16,6 @@ use crate::{
     git_version::{GitVersion, SemVersion},
     installation::defaults::global_app_state_dir,
     modified_document::{Modification, ModifiedDocument},
-    path_util::AppendToPath,
     string_tree::StringTree,
     version_info::VersionInfo,
     xmlhub_attributes::{specifications_to_html, METADATA_SPECIFICATION},

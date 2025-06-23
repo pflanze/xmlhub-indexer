@@ -7,8 +7,9 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use run_git::path_util::AppendToPath;
 
-use crate::{effect::Effect, path_util::AppendToPath, util::prefix_lines, utillib::home::home_dir};
+use crate::{effect::Effect, util::prefix_lines, utillib::home::home_dir};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ShellType {

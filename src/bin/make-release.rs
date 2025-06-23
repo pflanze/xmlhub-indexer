@@ -9,8 +9,9 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
-
 use debug_ignore::DebugIgnore;
+use run_git::{git::GitWorkingDir, path_util::AppendToPath};
+
 use xmlhub_indexer::{
     cargo::{
         check_cargo_toml_no_path, run_cargo, CompilationProfile, CompilationTarget, Env,
@@ -19,7 +20,6 @@ use xmlhub_indexer::{
     changelog::CHANGELOG_FILE_NAME,
     checkout_context::CheckExpectedSubpathsExist,
     effect::{bind, Effect, NoOp},
-    git::GitWorkingDir,
     git_version::{GitVersion, SemVersion},
     installation::{
         app_info::AppInfo,
@@ -32,7 +32,6 @@ use xmlhub_indexer::{
         json_file::JsonFile,
         util::{get_creator, get_timestamp},
     },
-    path_util::AppendToPath,
     sha256::sha256sum_paranoid,
     util::{ask_yn, create_dir_levels_if_necessary, hostname, prog_version, stringify_error},
     xmlhub_indexer_defaults::{BINARIES_CHECKOUT, SOURCE_CHECKOUT, XMLHUB_BINARY_FILE_NAME},

@@ -1,12 +1,10 @@
 use std::{fs::File, io::Read, path::Path};
 
 use anyhow::Result;
+use run_git::command::run_stdout_string;
 use sha2::{Digest, Sha256};
 
-use crate::{
-    command::run_stdout_string, fixup_path::CURRENT_DIRECTORY, rayon_util::ParRun,
-    utillib::hex::to_hex_string,
-};
+use crate::{fixup_path::CURRENT_DIRECTORY, rayon_util::ParRun, utillib::hex::to_hex_string};
 
 /// Calculate SHA-256 hash sum for the given path as hex string.
 pub fn sha256sum<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {

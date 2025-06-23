@@ -8,8 +8,9 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use lazy_static::lazy_static;
+use run_git::path_util::AppendToPath;
 
-use crate::{path_util::AppendToPath, utillib::home::home_dir};
+use crate::utillib::home::home_dir;
 
 /// Relative path to directory from $HOME in which to keep state for
 /// the installation, e.g. keys, or a clone of the binaries

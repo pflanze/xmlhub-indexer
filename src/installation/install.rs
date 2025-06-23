@@ -5,10 +5,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use run_git::path_util::AppendToPath;
 
 use crate::{
     effect::{bind, Effect, NoOp},
-    path_util::AppendToPath,
     utillib::home::{home_dir, HomeError},
 };
 

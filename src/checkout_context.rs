@@ -10,10 +10,9 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use nix::NixPath;
+use run_git::{git::GitWorkingDir, path_util::AppendToPath};
 
-use crate::{
-    const_util::file_name, fixup_path::FixupPath, git::GitWorkingDir, path_util::AppendToPath,
-};
+use crate::{const_util::file_name, fixup_path::FixupPath};
 
 #[derive(Debug, Clone)]
 pub struct CheckoutContext<'s, P: AsRef<Path>> {
