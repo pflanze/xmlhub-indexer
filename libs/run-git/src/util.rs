@@ -1,4 +1,3 @@
-
 /// Does the same for bytes that `haystack.contains(needle)` does for
 /// strings. (This will be in std in the future:
 /// <https://github.com/rust-lang/rust/issues/134149>)
