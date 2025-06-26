@@ -82,8 +82,3 @@ to adapt them in case you need to do things a bit differently.
 For more information on contributing, see [CONTRIBUTE](https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md) -- NOTE: currently this page is partially outdated! (XX TODO)
 
 Don't hesitate to contact your XML Hub maintainer if you have any questions or suggestions!
-
-<!--
-For longer documentation, see ...XX TODO
-e.g. set up ssh-agent
--->
