@@ -75,11 +75,10 @@ fn replace_all_url_and_link(
 
 /// Replace variables in markdown string, then convert the resulting
 /// string to HTML
-fn markdown_with_variables_to_html<'s>(
+fn markdown_with_variables_expanded<'s>(
     page: &'s str,
     program_version: &GitVersion<SemVersion>,
-    html: &HtmlAllocator,
-) -> Result<AId<Node>> {
+) -> Result<Cow<'s, str>> {
     let mut page: Cow<str> = page.into();
     replace_all_url_and_link(
         &mut page,
@@ -119,6 +118,17 @@ fn markdown_with_variables_to_html<'s>(
         },
     )?;
 
+    Ok(page)
+}
+
+/// Replace variables in markdown string, then convert the resulting
+/// string to HTML
+fn markdown_with_variables_to_html<'s>(
+    page: &'s str,
+    program_version: &GitVersion<SemVersion>,
+    html: &HtmlAllocator,
+) -> Result<AId<Node>> {
+    let page = markdown_with_variables_expanded(page, program_version)?;
     Ok(markdown_to_html(page.as_ref(), html)?.html())
 }
 
