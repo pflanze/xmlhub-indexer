@@ -687,6 +687,53 @@ impl GitWorkingDir {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GitObjectType {
+    Blob,
+    Tree,
+    Commit,
+    /// Annotated tag object (includes metadata and can point to any other object).
+    Tag,
+}
+impl GitObjectType {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            GitObjectType::Blob => "blob",
+            GitObjectType::Tree => "tree",
+            GitObjectType::Commit => "commit",
+            GitObjectType::Tag => "tag",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GitCatFileMode {
+    ShowType,
+    ShowSize,
+    ShowExists,
+    ShowPretty,
+    Type(GitObjectType),
+}
+
+impl GitCatFileMode {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            GitCatFileMode::ShowType => "-t",
+            GitCatFileMode::ShowSize => "-s",
+            GitCatFileMode::ShowExists => "-e",
+            GitCatFileMode::ShowPretty => "-p",
+            GitCatFileMode::Type(t) => t.to_str(),
+        }
+    }
+}
+
+impl GitWorkingDir {
+    pub fn git_cat_file(&self, mode: GitCatFileMode, object: &str) -> Result<bool> {
+        let args = &["cat-file", mode.to_str(), object];
+        self.git(args, true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
