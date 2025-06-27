@@ -641,6 +641,52 @@ impl GitWorkingDir {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GitResetMode {
+    Soft,
+    Mixed,
+    Hard,
+    Merge,
+    Keep,
+}
+
+impl GitResetMode {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            GitResetMode::Soft => "--soft",
+            GitResetMode::Mixed => "--mixed",
+            GitResetMode::Hard => "--hard",
+            GitResetMode::Merge => "--merge",
+            GitResetMode::Keep => "--keep",
+        }
+    }
+}
+
+impl Default for GitResetMode {
+    fn default() -> Self {
+        Self::Mixed
+    }
+}
+
+impl GitWorkingDir {
+    pub fn git_reset<S: AsRef<OsStr> + Debug>(
+        &self,
+        mode: GitResetMode,
+        options: &[S],
+        refspec: &str,
+        quiet: bool,
+    ) -> Result<()> {
+        let mut args: Vec<&OsStr> = vec!["reset".as_ref(), mode.to_str().as_ref()];
+        for opt in options {
+            args.push(opt.as_ref())
+        }
+        // Add *no* "--" before the refspec or it would mean a path!
+        args.push(refspec.as_ref());
+        self.git(&args, quiet)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
