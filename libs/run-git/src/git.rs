@@ -483,9 +483,11 @@ impl GitWorkingDir {
         })
     }
 
-    /// Resolve the given reference. If `to_commit` is true, resolves to a
-    /// commit id. Returns None if the reference doesn't exist / can't be
-    /// resolved (details?).
+    /// Resolve the given reference. If `to_commit` is true, resolves
+    /// to a commit id. Returns None if the reference doesn't exist /
+    /// can't be resolved (details?). Note that it's not possible to
+    /// check commit ids for existence, use `git_cat_file` with
+    /// `GitCatFileMode::ShowExists` instead.
     pub fn git_rev_parse(&self, name: &str, to_commit: bool) -> Result<Option<String>> {
         let full_name: Cow<str> = if to_commit {
             format!("{name}^{{commit}}").into()
@@ -731,6 +733,12 @@ impl GitWorkingDir {
     pub fn git_cat_file(&self, mode: GitCatFileMode, object: &str) -> Result<bool> {
         let args = &["cat-file", mode.to_str(), object];
         self.git(args, true)
+    }
+
+    /// Shortcut for git_cat_file(GitCatFileMode::ShowExists, ..) for
+    /// easy reach
+    pub fn contains_reference(&self, object: &str) -> Result<bool> {
+        self.git_cat_file(GitCatFileMode::ShowExists, object)
     }
 }
 
