@@ -18,5 +18,25 @@ Both Git and the xmlhub tool rely on the `EDITOR` environment variable. XXX how 
 
 ## SSH public key logins
 
-ssh-agent XXX
+For frequent access to the git repository via ssh, it is more convenient to setup the ssh-agent.
 
+Have a look at [this tutorial](https://usercomp.com/news/1044072/using-ssh-agent-on-mac).
+
+The following code is a bit shorter and also works.
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.ssh-agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/ssh-agent</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+```

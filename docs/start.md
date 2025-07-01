@@ -22,11 +22,13 @@ terminal: run `xmlhub --help` for an overview over all subcommands, or
 ## Making sure you have the tool
 
 1. You should install the `xmlhub` tool if you haven't already, so
-   that you can run it without having to give the path: `xmlhub install`.
-   (If you want to tell someone else how to download the tool the first time:
-   `git clone git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git`,
-   then `cd xmlhub-indexer-binaries/macOS/x86_64/`, then `./xmlhub install`.
-   XX TODO: link to document on how to verify the PGP fingerprint)
+   that you can run it without having to give the path: `xmlhub
+   install`.  (If you want to tell someone else how to download the
+   tool the first time: `git clone
+   git@cevo-git.ethz.ch:cevo-resources/xmlhub-indexer-binaries.git`,
+   then `cd xmlhub-indexer-binaries/macOS/x86_64/`, then `./xmlhub
+   install`.  If you would like more assurance that you're installing
+   our binary, you can [verify our PGP signatures](signatures.html).)
 
 2. You should run a recent version. Run `xmlhub upgrade` to have it
    fetch and install the newest version. (This is secure, the upgrade
@@ -80,8 +82,3 @@ to adapt them in case you need to do things a bit differently.
 For more information on contributing, see [CONTRIBUTE](https://cevo-git.ethz.ch/cevo-resources/xmlhub/-/blob/master/CONTRIBUTE.md) -- NOTE: currently this page is partially outdated! (XX TODO)
 
 Don't hesitate to contact your XML Hub maintainer if you have any questions or suggestions!
-
-<!--
-For longer documentation, see ...XX TODO
-e.g. set up ssh-agent
--->
