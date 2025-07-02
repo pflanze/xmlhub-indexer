@@ -298,28 +298,28 @@ impl WhichPage {
                 program_version,
                 html,
             )
-            .context("../docs/start.md"),
+            .context("docs/start.md"),
             WhichPage::Todo => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/todo.md"),
                 program_version,
                 html,
             )
-            .context("../docs/todo.md"),
+            .context("docs/todo.md"),
             WhichPage::Contribute => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/contribute.md"),
                 program_version,
                 html,
             )
-            .context("../docs/contribute.md"),
+            .context("docs/contribute.md"),
             WhichPage::Tool => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/tool.md"),
                 program_version,
                 html,
             )
-            .context("../docs/tool.md"),
+            .context("docs/tool.md"),
             WhichPage::Attributes => (|| -> Result<_> {
                 Ok(markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html())
             })()
@@ -330,21 +330,21 @@ impl WhichPage {
                 program_version,
                 html,
             )
-            .context("../docs/macos.md"),
+            .context("docs/macos.md"),
             WhichPage::About => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/about.md"),
                 program_version,
                 html,
             )
-            .context("../docs/about.md"),
+            .context("docs/about.md"),
             WhichPage::Signatures => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/signatures.md"),
                 program_version,
                 html,
             )
-            .context("../docs/signatures.md"),
+            .context("docs/signatures.md"),
         }
     }
 }
