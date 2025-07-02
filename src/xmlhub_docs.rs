@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     ffi::OsString,
     io::{stdout, Write},
     path::PathBuf,
@@ -8,6 +9,7 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, Context, Result};
+use lazy_static::lazy_static;
 use run_git::path_util::AppendToPath;
 
 use crate::{
@@ -37,6 +39,24 @@ macro_rules! markdown_paragraphs {
             ).collect::<Vec<$crate::string_tree::StringTree>>()
         )
     }
+}
+
+lazy_static! {
+    static ref PUBLIC: Result<bool, String> = match std::env::var("XMLHUB_PUBLIC") {
+        Ok(s) => match s.as_bytes() {
+            b"0" => Ok(false),
+            b"1" => Ok(true),
+            _ => Err("invalid PUBLIC env var value, accepting 0 or 1 only".into()),
+        },
+        Err(e) => match e {
+            std::env::VarError::NotPresent => Ok(false),
+            std::env::VarError::NotUnicode(_) => {
+                Err(e)
+                    .with_context(|| anyhow!("can't decode PUBLIC env var"))
+                    .map_err(|e| e.to_string())
+            }
+        },
+    };
 }
 
 /// Replace key with val where val is only generated when key is
@@ -73,8 +93,8 @@ fn replace_all_url_and_link(
     Ok(())
 }
 
-/// Replace variables in markdown string, then convert the resulting
-/// string to HTML
+/// Replace variables in markdown string. Todo: replace those with
+/// handlebars?
 fn markdown_with_variables_expanded<'s>(
     page: &'s str,
     program_version: &GitVersion<SemVersion>,
@@ -121,14 +141,27 @@ fn markdown_with_variables_expanded<'s>(
     Ok(page)
 }
 
+fn markdown_with_handlebars_expanded<'s>(source: &'s str, public: bool) -> Result<String> {
+    let mut handlebars = handlebars::Handlebars::new();
+    // Oddly has no effect on "{{#if publicmistyped}}":
+    handlebars.set_strict_mode(true);
+    handlebars.register_template_string("t1", source)?;
+    let mut data: BTreeMap<&str, bool> = BTreeMap::new();
+    data.insert("public", public);
+    let res = handlebars.render("t1", &data)?;
+    Ok(res)
+}
+
 /// Replace variables in markdown string, then convert the resulting
 /// string to HTML
 fn markdown_with_variables_to_html<'s>(
+    public: bool,
     page: &'s str,
     program_version: &GitVersion<SemVersion>,
     html: &HtmlAllocator,
 ) -> Result<AId<Node>> {
     let page = markdown_with_variables_expanded(page, program_version)?;
+    let page = markdown_with_handlebars_expanded(&*page, public)?;
     Ok(markdown_to_html(page.as_ref(), html)?.html())
 }
 
@@ -239,8 +272,10 @@ impl WhichPage {
         program_version: &GitVersion<SemVersion>,
         html: &HtmlAllocator,
     ) -> Result<AId<Node>> {
+        let public = *PUBLIC.as_ref().map_err(|e| anyhow!("{e}"))?;
         match self {
             WhichPage::Start => markdown_with_variables_to_html(
+                public,
                 include_str!("../docs/start.md"),
                 program_version,
                 html,
@@ -249,16 +284,19 @@ impl WhichPage {
                 Ok(markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html())
             }
             WhichPage::MacOS => markdown_with_variables_to_html(
+                public,
                 include_str!("../docs/macos.md"),
                 program_version,
                 html,
             ),
             WhichPage::About => markdown_with_variables_to_html(
+                public,
                 include_str!("../docs/about.md"),
                 program_version,
                 html,
             ),
             WhichPage::Signatures => markdown_with_variables_to_html(
+                public,
                 include_str!("../docs/signatures.md"),
                 program_version,
                 html,
