@@ -230,6 +230,8 @@ macro_rules! def_enum_with_list{
 // Choice of a particular page from the set of help pages.
 def_enum_with_list!(WhichPage {
     Start,
+    Todo,
+    Tool,
     Attributes,
     MacOS,
     Signatures,
@@ -243,6 +245,16 @@ impl WhichPage {
                 which_page: self,
                 file_name: "start.html",
                 title: "Start",
+            },
+            WhichPage::Todo => PageInfo {
+                which_page: self,
+                file_name: "todo.html",
+                title: "Planned changes",
+            },
+            WhichPage::Tool => PageInfo {
+                which_page: self,
+                file_name: "tool.html",
+                title: "The tool",
             },
             WhichPage::Attributes => PageInfo {
                 which_page: self,
@@ -279,28 +291,47 @@ impl WhichPage {
                 include_str!("../docs/start.md"),
                 program_version,
                 html,
-            ),
-            WhichPage::Attributes => {
+            )
+            .context("../docs/start.md"),
+            WhichPage::Todo => markdown_with_variables_to_html(
+                public,
+                include_str!("../docs/todo.md"),
+                program_version,
+                html,
+            )
+            .context("../docs/todo.md"),
+            WhichPage::Tool => markdown_with_variables_to_html(
+                public,
+                include_str!("../docs/tool.md"),
+                program_version,
+                html,
+            )
+            .context("../docs/tool.md"),
+            WhichPage::Attributes => (|| -> Result<_> {
                 Ok(markdown_to_html(&make_attributes_md(false)?.to_string(), &html)?.html())
-            }
+            })()
+            .context("attributes page"),
             WhichPage::MacOS => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/macos.md"),
                 program_version,
                 html,
-            ),
+            )
+            .context("../docs/macos.md"),
             WhichPage::About => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/about.md"),
                 program_version,
                 html,
-            ),
+            )
+            .context("../docs/about.md"),
             WhichPage::Signatures => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/signatures.md"),
                 program_version,
                 html,
-            ),
+            )
+            .context("../docs/signatures.md"),
         }
     }
 }
@@ -431,6 +462,7 @@ fn create_help_pages(
         )
     };
 
+    // XX should this now be WhichPage::Tool ?
     let start_url = WhichPage::Start.page_info().file_name;
 
     let pages: Vec<(WhichPage, PathBuf)> = page_infos
@@ -477,7 +509,7 @@ pub fn open_help_page(
 }
 
 pub fn docs_command(program_version: GitVersion<SemVersion>) -> Result<()> {
-    open_help_page(WhichPage::Start, &program_version)
+    open_help_page(WhichPage::Tool, &program_version)
 }
 
 pub fn help_contributing_command() -> Result<()> {
