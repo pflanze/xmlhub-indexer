@@ -1,8 +1,8 @@
 # Contributing to XML Hub with the `xmlhub` tool
 
-> See the [start](start.html) page for an overview on XML Hub. This page
-> describes how to contribute to XML Hub with the help of the `xmlhub`
-> command line tool.
+See the [start](start.html) page for an overview on XML Hub. This page
+describes how to contribute to XML Hub with the help of the `xmlhub`
+command line tool.
 
 *<span style="color: red">Note:</span> we do have [some ideas](todo.html) for improving the
 user experience. Let [us](about.html) know if you have inputs, or if
@@ -18,10 +18,11 @@ The `xmlhub` tool serves two purposes:
 1. It helps contributing your own XML files to the repository.
 
 It is currently a command line tool meant to be downloaded and used
-locally.  While you can work without it--either with just Git and a
-text editor or even by using the GitLab web user interface--using the
-tool will make you more efficient. Here are the steps for how to
-contribute with its help.
+locally (Note: currently only macOS and Linux versions available; let
+us know if you're a Windows user).  While you can work without
+it--either with just Git and a text editor or even by using the GitLab
+web user interface--using the tool will make you more efficient. Here
+are the steps for how to contribute with its help.
 
 Note that all `xmlhub` subcommands also have help directly in the
 terminal: run `xmlhub --help` (or `xmlhub help`) for an overview over
