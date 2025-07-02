@@ -231,6 +231,7 @@ macro_rules! def_enum_with_list{
 def_enum_with_list!(WhichPage {
     Start,
     Todo,
+    Contribute,
     Tool,
     Attributes,
     MacOS,
@@ -250,6 +251,11 @@ impl WhichPage {
                 which_page: self,
                 file_name: "todo.html",
                 title: "Planned changes",
+            },
+            WhichPage::Contribute => PageInfo {
+                which_page: self,
+                file_name: "contribute.html",
+                title: "Contribute",
             },
             WhichPage::Tool => PageInfo {
                 which_page: self,
@@ -300,6 +306,13 @@ impl WhichPage {
                 html,
             )
             .context("../docs/todo.md"),
+            WhichPage::Contribute => markdown_with_variables_to_html(
+                public,
+                include_str!("../docs/contribute.md"),
+                program_version,
+                html,
+            )
+            .context("../docs/contribute.md"),
             WhichPage::Tool => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/tool.md"),
