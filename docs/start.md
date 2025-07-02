@@ -16,8 +16,9 @@ the tool will make you more efficient. Here are the steps to
 follow to contribute using it.
 
 Note that all `xmlhub` subcommands also have help directly in the
-terminal: run `xmlhub --help` for an overview over all subcommands, or
-`xmlhub <subcommand> --help` for the help on a particular subcommand.
+terminal: run `xmlhub --help` (or `xmlhub help`) for an overview over
+all subcommands, or `xmlhub <subcommand> --help` (or `xmlhub help
+<subcommand>`) for the help on a particular subcommand.
 
 ## Making sure you have the tool
 
