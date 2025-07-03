@@ -236,6 +236,7 @@ def_enum_with_list!(WhichPage {
     Attributes,
     MacOS,
     Signatures,
+    BlinderScripts,
     About,
 });
 
@@ -272,15 +273,20 @@ impl WhichPage {
                 file_name: "macos.html",
                 title: "macOS",
             },
-            WhichPage::About => PageInfo {
-                which_page: self,
-                file_name: "about.html",
-                title: "About",
-            },
             WhichPage::Signatures => PageInfo {
                 which_page: self,
                 file_name: "signatures.html",
                 title: "Code signatures",
+            },
+            WhichPage::BlinderScripts => PageInfo {
+                which_page: self,
+                file_name: "blinder-scripts.html",
+                title: "Blinder scripts",
+            },
+            WhichPage::About => PageInfo {
+                which_page: self,
+                file_name: "about.html",
+                title: "About",
             },
         }
     }
@@ -331,13 +337,6 @@ impl WhichPage {
                 html,
             )
             .context("docs/macos.md"),
-            WhichPage::About => markdown_with_variables_to_html(
-                public,
-                include_str!("../docs/about.md"),
-                program_version,
-                html,
-            )
-            .context("docs/about.md"),
             WhichPage::Signatures => markdown_with_variables_to_html(
                 public,
                 include_str!("../docs/signatures.md"),
@@ -345,6 +344,20 @@ impl WhichPage {
                 html,
             )
             .context("docs/signatures.md"),
+            WhichPage::BlinderScripts => markdown_with_variables_to_html(
+                public,
+                include_str!("../docs/blinder-scripts.md"),
+                program_version,
+                html,
+            )
+            .context("docs/blinder-scripts.md"),
+            WhichPage::About => markdown_with_variables_to_html(
+                public,
+                include_str!("../docs/about.md"),
+                program_version,
+                html,
+            )
+            .context("docs/about.md"),
         }
     }
 }
