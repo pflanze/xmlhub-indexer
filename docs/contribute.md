@@ -2,7 +2,7 @@
 
 ## Browsing the files
 
-There is an [index over all the XML files](file_index.md).
+There is an [index over all the XML files](https://cevo-git.ethz.ch/cevo-resources/xmlhub). This is the latest published version of the index, representing the latest published documents. If you are working locally, you can use the [xmlhub tool](tool.html) to generate an index for the local files.
 
 You can also search the contents of all files via the GitLab search
 form, which you can find towards the top left corner of this page (the
@@ -35,18 +35,7 @@ replacing placeholders between `< >` with content.
 
 To help other users find relevant files, before uploading your files to the hub, please add a header to each XML file, between `<?xml..>` (XML declaration) and `<beast ..` (the first XML opening tag), using the template below. Please try to fill out as many of the fields as possible and leave the others marked `NA`. The keyword section is particularly important, to help other users find XML files that are useful for them. Further, the contact person section is essential, indicating the cEvo member who should be contacted if someone wants to learn more about a particular XML file.
 
-Template:
-
-```xml
-<!--Keywords: ... -->
-<!--Version: BEAST 2.7.? -->
-<!--Packages: base, -->
-<!--Description: NA -->
-<!--Comments: NA -->
-<!--Citation: NA -->
-<!--DOI: NA -->
-<!--Contact: ... -->
-```
+You can copy a template of the required attributes from the [Attributes list](attributes.html) page. Alternatively, you can use the [xmlhub tool](tool.html) to automatically add the attributes to your XML files when you add them to your local repository.
 
 Please add the minor version of BEAST used as far as possible, since the XML metadata only contains the major version (e.g. 2.6) and only if it was created by BEAUti. Please also add package versions as far as possible (give the package name followed by space then the version number)! 
 
@@ -56,7 +45,7 @@ line breaks and tabs for attributes that are not lists (like comments
 and description), so you're free to choose. But it's important to put
 every attribute into a separate `<!--` ... `-->` pair.
 
-See [attributes](attributes.md) for how each attribute is processed
+See [attributes](attributes.html) for how each attribute is processed
 exactly.
 
 A full (mostly fictional) example:
@@ -100,7 +89,7 @@ It is not essential to provide working data within the XML, particularly if the 
 
 If you wish to be more helpful to your fellow users, you could also replace the data with "dummy" data, indicating the required data format (and potentially even allowing the BEAST2 analysis to run).
 
-If your XML file contains a lot of data, or you have a lot of XML files to add, you can use the supplied Python script inside the `scripts/` folder to "blind" your file. These scripts will replace the genetic sequences with a dummy all-gap alignment while keeping everything else (e.g. tip-dates) intact so the XML file still runs. If your XML file contains other non-sequence private data these scripts are not applicable! Keep in mind that `beast2blinder.py` and `beast1blinder.py` were written for BEAST 2.6 and BEAST 1.10, respectively, and have not been tested on other versions!
+If your XML file contains a lot of data, or you have a lot of XML files to add, you can use the [xmlhub tool](tool.html) or the [Blinder scripts](blinder-scripts.html) page to "blind" your file. These scripts will replace the genetic sequences with a dummy all-gap alignment while keeping everything else (e.g. tip-dates) intact so the XML file still runs. If your XML file contains other non-sequence private data these scripts are not applicable! Keep in mind that `beast2blinder.py` and `beast1blinder.py` were written for BEAST 2.6 and BEAST 1.10, respectively, and have not been tested on other versions!
 
 ### Versioning and Backup
 
