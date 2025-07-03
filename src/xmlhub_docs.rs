@@ -227,7 +227,9 @@ macro_rules! def_enum_with_list{
     }
 }
 
-// Choice of a particular page from the set of help pages.
+// Choice of a particular page from the set of help pages. NOTE: for
+// non-html/generated pages (image and other files) you want to use
+// `IncludedImage` instead!
 def_enum_with_list!(WhichPage {
     Start,
     Todo,
@@ -372,6 +374,23 @@ pub const XMLHUB_LOGO: IncludedImage = IncludedImage {
     image_bytes: include_bytes!("../docs/XMLHub-1s.png"),
 };
 
+pub const BLINDER_SCRIPTS: &[IncludedImage] = &[
+    IncludedImage {
+        file_name: "beast1blinder.py",
+        image_bytes: include_bytes!("../docs/beast1blinder.py"),
+    },
+    IncludedImage {
+        file_name: "beast2blinder.py",
+        image_bytes: include_bytes!("../docs/beast2blinder.py"),
+    },
+];
+
+fn help_pages_images() -> Vec<&'static IncludedImage> {
+    let mut res: Vec<_> = BLINDER_SCRIPTS.iter().collect();
+    res.push(&XMLHUB_LOGO);
+    res
+}
+
 /// Page head for help pages 'site', with logo. `home_url`: where to
 /// go to when clicking the logo. `subtitle`: put below "XML Hub" logo
 /// lettering.
@@ -423,8 +442,6 @@ pub fn help_pages_page_head(
         ],
     )
 }
-
-const HELP_PAGES_IMAGES: &[&IncludedImage] = &[&XMLHUB_LOGO];
 
 // Create multiple/all help pages, so that they can link to each
 // other! Returns the path to the page for which you passed the
@@ -512,7 +529,7 @@ fn create_help_pages(
     for IncludedImage {
         file_name,
         image_bytes,
-    } in HELP_PAGES_IMAGES
+    } in help_pages_images()
     {
         let output_path = (&output_path_base).append(*file_name);
         std::fs::write(&*output_path, *image_bytes)
