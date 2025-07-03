@@ -4,7 +4,7 @@ See the [start](start.html) page for an overview on XML Hub. This page
 describes how to contribute to XML Hub with the help of the `xmlhub`
 command line tool.
 
-*<span style="color: red">Note:</span> we do have [some ideas](todo.html) for improving the
+*<span style="color: red">**Note:**</span> we do have [some ideas](todo.html) for improving the
 user experience. Let [us](about.html) know if you have inputs, or if
 you'd like us to inform you when those changes are done.*
 
