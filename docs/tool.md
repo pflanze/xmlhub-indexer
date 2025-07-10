@@ -1,8 +1,8 @@
 # Contributing to XML Hub with the `xmlhub` tool
 
-See the [start](start.html) page for an overview on XML Hub. This page
-describes how to contribute to XML Hub with the help of the `xmlhub`
-command line tool.
+This page describes how to contribute to XML Hub with the help of the
+`xmlhub` command line tool. If you want to get an overview about XML
+Hub, see the [start](start.html) page instead.
 
 *<span style="color: red">**Note:**</span> we do have [some ideas](todo.html) for improving the
 user experience. Let [us](about.html) know if you have inputs, or if
