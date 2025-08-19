@@ -3,7 +3,7 @@
 ## General design
 
 - Do *not* have "want" versus "is" state, just one state: start the
-  daemon, presumed running. start it, and it gets killed, it will be
+  daemon, presumed running. start it, and if it gets killed, it will be
   stopped again. Keep it simple. (Instead, use `forking_loop` with a
   small and reliable parent to minimize the risk of getting killed.)
 
