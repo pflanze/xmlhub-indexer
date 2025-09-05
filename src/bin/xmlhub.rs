@@ -685,7 +685,7 @@ fn read_file_infos(
                         BeastVersion::from_str(user_specified_version_str)?;
                     let user_specified_major: u16 = user_specified_version.major.context(
                         "provided 'Version' has no BEAST2-major number part \
-                     or is not a BEAST2 version",
+                         or is not a BEAST2 version",
                     )?;
 
                     let document_version =
@@ -695,9 +695,9 @@ fn read_file_infos(
                         if found_major != user_specified_major {
                             warnings.push(format!(
                                 "the <beast> element in the document specifies version \
-                             {document_version} with major {found_major}, but the \
-                             user-provided version {user_specified_version} has \
-                             major {user_specified_major}"
+                                 {document_version} with major {found_major}, but the \
+                                 user-provided version {user_specified_version} has \
+                                 major {user_specified_major}"
                             ));
                         }
                         Some(())
@@ -2164,11 +2164,11 @@ fn prepare_file(opts: PrepareFileOpts) -> Result<PreparedFile> {
     if len > *recommended_max_file_size_bytes {
         bail!(
             "this file is larger than the recommended maximum file size \
-                 ({len} > {recommended_max_file_size_bytes} bytes): {source_path:?}.\n\
-                 Please consider *not* using the `--no-blind` option, or if you \
-                 are convinced it's worth adding such a large file to the repository, \
-                 re-run with the `--recommended_max_file_size_bytes` option \
-                 and a high enough value."
+             ({len} > {recommended_max_file_size_bytes} bytes): {source_path:?}.\n\
+             Please consider *not* using the `--no-blind` option, or if you \
+             are convinced it's worth adding such a large file to the repository, \
+             re-run with the `--recommended_max_file_size_bytes` option \
+             and a high enough value."
         )
     }
 
