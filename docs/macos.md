@@ -14,7 +14,24 @@ Run `man gitk` for the options it takes. Run e.g. `gitk --all &`.
 
 ## Configure editor
 
-Both Git and the xmlhub tool rely on the `EDITOR` environment variable. XXX how to change, how to use e.g. vscode.
+Both Git and the xmlhub tool rely on the standard `EDITOR` environment
+variable to choose the editor to run when needed. For editors that
+wait by default until the edited file is closed, you can just set that
+environment variable, which you can do in the `.zshenv` file in your
+home directory: e.g. `export EDITOR=vim` on its own line.
+
+For editors that immediately return and do not wait for the file to be
+closed, but allow to wait by giving command line arguments, you can
+make a wrapper script and set `EDITOR` to point to that
+script. E.g. for VS code:
+
+1. Create a directory `bin` in your home if you don't have it
+   already. Create a file `code-wait` inside it, and add the following:
+   
+        #!/bin/bash
+        exec code --wait "$@"
+
+2. Add `export EDITOR=~/bin/code-wait` to `.zshenv` as mentioned above.
 
 ## SSH public key logins
 

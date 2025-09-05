@@ -36,6 +36,3 @@ back into the Git repositories. The repositories will then be
 will happen on the server(s), or on the fly when run on the user's
 local machine for preview.
 
-## Anticipated changes in detail
-
-XXX

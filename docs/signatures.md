@@ -13,9 +13,9 @@ If you assume that the Git repository can only be written to by us (we try to ma
 
 We create PGP signatures on Git tags in the source ({xmlhubIndexerRepoLink}) and binaries ({xmlhubIndexerBinariesRepoLink}) repositories.
 
-These use the standard git tag tooling, but you need GnuPG installed for it to work. The steps are:
+These use the standard `git tag` tool, but this needs GnuPG installed for it to work. The steps are:
 
-1. Install GnuPG, either from (ETH shop XX)  or from upstream source XX.
+1. Install GnuPG, via [brew](https://brew.sh/) (run `brew install gpg`) or see [gnupg.org/download/](https://gnupg.org/download/index.html).
 
 2. Import our PGP public keys:
 
