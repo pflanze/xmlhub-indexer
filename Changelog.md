@@ -301,3 +301,5 @@ v10.1 - 2025-06-23
 
 - Added new script examples/start-xmlhub-via-crontab
 - `xmlhub docs` now supports handlebars templates for markdown files, with currently just one variable, a boolean `public`, which is true when the environment variable `XMLHUB_PUBLIC` is set to `1`.
+- Add blinder Python scripts in case anyone prefers to use those over the same functionality in the `xmlhub` tool.
+- Various documentation improvements in `xmlhub docs`.
