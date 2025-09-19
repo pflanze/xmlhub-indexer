@@ -83,6 +83,7 @@ pub trait FileIssues {
             tabs_to_nbsp: Some(4),
             autolink: true,
             input_line_separator: "\n",
+            trailing_br: false,
         };
 
         let mut dt_body = html.new_vec();

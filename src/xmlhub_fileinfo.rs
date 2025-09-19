@@ -190,6 +190,7 @@ impl AttributeValue {
                         Autolink::Doi => false,
                     },
                     input_line_separator: "\n",
+                    trailing_br: false,
                 };
                 let body = softpre.format(value.trim(), html)?;
                 let body_node: &Node = html.get_node(body).expect("just allocated");

@@ -19,28 +19,24 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "ahtml"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52692994c87cff2cfe92da29b1bc205c79fc871b89a55817488f63af857a7283"
+version = "0.8.0"
 dependencies = [
  "ahtml_html",
  "anyhow",
  "backtrace",
- "chj-util",
+ "chj-util 0.2.1",
  "kstring",
  "lazy_static",
 ]
 
 [[package]]
 name = "ahtml-from-markdown"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11efe1750d1ca1a4ea41689205da943e16d097d6bb1d73a6785db3e413db4f5e"
+version = "0.2.0"
 dependencies = [
  "ahtml",
  "ahtml_html",
  "anyhow",
- "chj-util",
+ "chj-util 0.2.1",
  "html5gum",
  "kstring",
  "num",
@@ -51,8 +47,6 @@ dependencies = [
 [[package]]
 name = "ahtml_html"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc8a5b6a3f26a4a0f511fd41e322a239618be95b4df358527a939b740f2788a0"
 dependencies = [
  "anyhow",
  "kstring",
@@ -104,13 +98,11 @@ dependencies = [
 
 [[package]]
 name = "auri"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ca9b6aa72c2f7696a3040e136e20ec88cb76abe01dc69cd12ac2f17b66d7c21"
+version = "0.2.0"
 dependencies = [
  "ahtml",
  "anyhow",
- "chj-util",
+ "chj-util 0.2.1",
  "itertools 0.10.5",
  "kstring",
  "pct-str",
@@ -170,6 +162,14 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chj-util"
+version = "0.2.1"
+dependencies = [
+ "backtrace",
+ "kstring",
+]
 
 [[package]]
 name = "chj-util"
@@ -1554,7 +1554,7 @@ dependencies = [
  "ahtml-from-markdown",
  "anyhow",
  "auri",
- "chj-util",
+ "chj-util 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono",
  "clap",
  "debug-ignore",

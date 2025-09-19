@@ -20,10 +20,10 @@ opt-level = "s"
 overflow-checks = true
 
 [dependencies]
-ahtml = { version = "0.7.0" }
-auri = { version = "0.1.1" }
+ahtml = { path = "../website/libs/ahtml", version = "0.8.0" }
+auri = { path = "../website/libs/auri", version = "0.2.0" }
 chj-util = { version = "0.2.1" }
-ahtml-from-markdown = { version = "0.1.0" }
+ahtml-from-markdown = { path = "../website/libs/ahtml-from-markdown", version = "0.2.0" }
 
 pluraless = { path = "libs/pluraless" }
 run-git = { path = "libs/run-git" }
