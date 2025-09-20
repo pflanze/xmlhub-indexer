@@ -509,10 +509,11 @@ impl<H: HavingDerivedValues> FileInfo<H> {
                                     "box", &mut hints, html,
                                 )?;
                                 let hints_html = hints.to_html(html)?;
+                                let mut body = items.to_vec(html)?;
+                                body.push(hints_html)?;
                                 [
                                     html.div([], html.b([], html.text(format!("{Warnings}:"))?)?)?,
-                                    html.div([], items)?,
-                                    html.div([], hints_html)?,
+                                    html.div([], body)?,
                                 ]
                             })?,
                         )?
