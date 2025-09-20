@@ -13,7 +13,9 @@ use rayon::{
     prelude::{IndexedParallelIterator, IntoParallelRefIterator},
 };
 
-use crate::{string_tree::StringTree, xmlhub_indexer_defaults::HTML_ALLOCATOR_POOL};
+use crate::{
+    html_util::anchor, string_tree::StringTree, xmlhub_indexer_defaults::HTML_ALLOCATOR_POOL,
+};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Highlight {
@@ -141,7 +143,7 @@ impl Section {
 
             let number_path_string = number_path.to_string();
             let section_id = format!("section-{number_path_string}");
-            vec.push(html.a([att("name", &section_id)], [])?)?;
+            vec.push(anchor(&section_id, [], html)?)?;
             vec.push(element(
                 html,
                 [att("id", section_id), self.highlight.color_att()],
@@ -178,16 +180,9 @@ impl Section {
                 title_and_intro.push('#');
             }
             title_and_intro.push(' ');
-            // Add an anchor for in-page links; use both available
-            // approaches, the older "name" and the newer "id"
-            // approach, hoping that at least one gets through
-            // GitLab's formatting.
             let html = HTML_ALLOCATOR_POOL.get();
-            title_and_intro.push_str(
-                &html
-                    .a([att("name", &section_id), att("id", &section_id)], [])?
-                    .to_html_fragment_string(&html)?,
-            );
+            title_and_intro
+                .push_str(&anchor(&section_id, [], &html)?.to_html_fragment_string(&html)?);
             title_and_intro.push_str(&number_path_string);
             title_and_intro.push(' ');
             // Should we use HTML to try to make this red if

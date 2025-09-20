@@ -12,6 +12,7 @@ use pluraless::pluralized;
 use run_git::git::BaseAndRelPath;
 
 use crate::{
+    html_util::anchor,
     util::{self, bool_to_yes_no, list_get_by_key},
     xml_document::XMLDocument,
     xmlhub_attributes::{
@@ -442,8 +443,8 @@ impl<H: HavingDerivedValues> FileInfo<H> {
         file_path_or_name: &str,
     ) -> Result<AId<Node>> {
         let id_string = format!("{id_prefix}-{}", self.id);
-        html.a(
-            [att("name", &id_string)],
+        anchor(
+            &id_string,
             html.table(
                 [
                     att("id", &id_string),
@@ -511,6 +512,7 @@ impl<H: HavingDerivedValues> FileInfo<H> {
                     },
                 ],
             )?,
+            html,
         )
     }
 }

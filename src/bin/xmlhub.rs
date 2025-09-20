@@ -42,6 +42,7 @@ use xmlhub_indexer::{
     forking_loop::forking_loop,
     get_terminal_width::get_terminal_width,
     git_version::{GitVersion, SemVersion},
+    html_util::anchor,
     installation::{
         binaries_repo::Os,
         defaults::global_app_state_dir,
@@ -774,9 +775,10 @@ fn build_index_section(
                     [],
                     html.q(
                         [],
-                        html.a(
-                            [att("name", &anchor_name), att("id", &anchor_name)],
+                        anchor(
+                            &anchor_name,
                             autolink.format_html(key_string, &*html)?,
+                            &html,
                         )?,
                     )?,
                 )?,

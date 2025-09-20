@@ -1,6 +1,7 @@
 //! Should add these to ahtml crate.
 
-use ahtml::{flat::Flat, AId, AllocatorType, HtmlAllocator, Node};
+use ahtml::{att, flat::Flat, AId, AllocatorType, HtmlAllocator, Node, ToASlice};
+use anyhow::Result;
 
 // Utils for `Flat`
 
@@ -72,4 +73,13 @@ pub fn extract_paragraph_body(
         }
     }
     body
+}
+
+/// Make an anchor (target for `#foo` style links) in the best compatible way
+pub fn anchor(
+    anchor_name: &str,
+    body: impl ToASlice<Node>,
+    html: &HtmlAllocator,
+) -> Result<AId<Node>> {
+    html.a([att("name", anchor_name), att("id", anchor_name)], body)
 }
