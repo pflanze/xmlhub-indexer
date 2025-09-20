@@ -9,7 +9,7 @@ use ahtml::{att, flat::Flat, util::SoftPre, HtmlAllocator, Node};
 use anyhow::Result;
 use run_git::git::BaseAndRelPath;
 
-use crate::xmlhub_indexer_defaults::document_symbol;
+use crate::{hints::Hints, xmlhub_fileinfo::Issue, xmlhub_indexer_defaults::document_symbol};
 
 /// An error report with all errors that happened while processing one
 /// particular file. An error prevents the file from being included in
@@ -17,7 +17,7 @@ use crate::xmlhub_indexer_defaults::document_symbol;
 #[derive(Debug)]
 pub struct FileErrors {
     pub path: BaseAndRelPath,
-    pub errors: Vec<String>,
+    pub errors: Vec<Issue>,
 }
 
 impl FileIssues for FileErrors {
@@ -25,7 +25,7 @@ impl FileIssues for FileErrors {
         self.path.rel_path()
     }
 
-    fn issues(&self) -> &[String] {
+    fn issues(&self) -> &[Issue] {
         &self.errors
     }
 
@@ -43,7 +43,7 @@ impl FileIssues for FileErrors {
 pub struct FileWarnings<'t> {
     pub path: &'t BaseAndRelPath,
     pub id: usize,
-    pub warnings: &'t Vec<String>,
+    pub warnings: &'t Vec<Issue>,
 }
 
 impl<'t> FileIssues for FileWarnings<'t> {
@@ -51,7 +51,7 @@ impl<'t> FileIssues for FileWarnings<'t> {
         self.path.rel_path()
     }
 
-    fn issues(&self) -> &[String] {
+    fn issues(&self) -> &[Issue] {
         &self.warnings
     }
 
@@ -62,7 +62,7 @@ impl<'t> FileIssues for FileWarnings<'t> {
 
 pub trait FileIssues {
     fn rel_path(&self) -> &str;
-    fn issues(&self) -> &[String];
+    fn issues(&self) -> &[Issue];
     /// id for linking to html box (fallback is to link to the document itself
     /// via rel_path)
     fn info_box_id(&self) -> Option<usize>;
@@ -77,6 +77,7 @@ pub trait FileIssues {
         &self,
         show_path: bool,
         info_box_id_prefix: &str,
+        hints: &mut Hints,
         html: &HtmlAllocator,
     ) -> Result<Flat<Node>> {
         const SOFT_PRE: SoftPre = SoftPre {
@@ -116,23 +117,37 @@ pub trait FileIssues {
         }
 
         let mut ul_body = html.new_vec();
-        for issue in self.issues() {
-            ul_body.push(html.li([], SOFT_PRE.format(issue, html)?)?)?;
+        for Issue { message, hint } in self.issues() {
+            let msg_html = SOFT_PRE.format(message, html)?;
+            let item_html = if let Some(hint) = hint {
+                Flat::Two(msg_html, hints.intern(hint.clone()).to_html(html)?)
+            } else {
+                Flat::One(msg_html)
+            };
+            ul_body.push(html.li([], item_html)?)?;
         }
-
         let dt = html.dt([], dt_body)?;
         let dd = html.dd([], html.ul([], ul_body)?)?;
         Ok(Flat::Two(dt, dd))
     }
 
     /// Print as plaintext, for error reporting to stderr.
-    fn print_plain<O: Write>(&self, out: &mut O) -> Result<()> {
+    fn print_plain<O: Write>(&self, hints: &mut Hints, out: &mut O) -> Result<()> {
         writeln!(out, "    For {:?}:", self.rel_path())?;
-        for issue in self.issues() {
-            let lines: Vec<&str> = issue.split('\n').collect();
-            writeln!(out, "      * {}", lines[0])?;
-            for line in &lines[1..] {
-                writeln!(out, "        {}", line)?;
+        for Issue { message, hint } in self.issues() {
+            let hint_ref_str = if let Some(hint) = hint {
+                hints.intern(hint.clone()).to_plain()
+            } else {
+                "".into()
+            };
+            let lines: Vec<&str> = message.split('\n').collect();
+            for (i, line) in lines.iter().enumerate() {
+                let is_first = i == 0;
+                let is_last = i == lines.len() - 1;
+
+                let prefix = if is_first { "      * " } else { "        " };
+                let postfix = if is_last { &hint_ref_str } else { "" };
+                writeln!(out, "{prefix}{}{postfix}", line)?;
             }
         }
         Ok(())

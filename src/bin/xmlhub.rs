@@ -42,6 +42,7 @@ use xmlhub_indexer::{
     forking_loop::forking_loop,
     get_terminal_width::get_terminal_width,
     git_version::{GitVersion, SemVersion},
+    hints::Hints,
     html_util::anchor,
     installation::{
         binaries_repo::Os,
@@ -75,7 +76,7 @@ use xmlhub_indexer::{
     },
     xmlhub_file_issues::{FileErrors, FileIssues, FileWarnings},
     xmlhub_fileinfo::{
-        AttributeValue, FileInfo, Metadata, WithCommentsOnly, WithDerivedValues,
+        AttributeValue, FileInfo, Issue, Metadata, WithCommentsOnly, WithDerivedValues,
         WithExtractedValues,
     },
     xmlhub_global_opts::{
@@ -548,7 +549,7 @@ struct AddToOpts {
 fn parse_comments<'a>(
     comments: impl Iterator<Item = XMLDocumentComment<'a>>,
     dry: bool,
-) -> Result<Metadata<WithCommentsOnly>, Vec<String>> {
+) -> Result<Metadata<WithCommentsOnly>, Vec<Issue>> {
     let spec_by_lowercase_key: BTreeMap<String, &AttributeSpecification> = METADATA_SPECIFICATION
         .iter()
         .map(|spec| (spec.key.as_ref().to_lowercase(), spec))
@@ -557,7 +558,7 @@ fn parse_comments<'a>(
     let mut map: BTreeMap<AttributeName, AttributeValue> = BTreeMap::new();
 
     // Collect all errors instead of stopping at the first one.
-    let mut errors: Vec<String> = Vec::new();
+    let mut errors: Vec<Issue> = Vec::new();
     for comment in comments {
         // Using a function without arguments and calling it right
         // away to capture the result (Ok or Err).
@@ -586,7 +587,10 @@ fn parse_comments<'a>(
         })()
         .with_context(|| anyhow!("XML comment on {}", comment.location));
         if let Err(e) = result {
-            errors.push(format!("{e:#}"));
+            errors.push(Issue {
+                message: format!("{e:#}"),
+                hint: None,
+            });
         }
     }
 
@@ -616,11 +620,14 @@ fn parse_comments<'a>(
                 .collect();
 
         pluralized! { sorted_missing.len() => attributes, these, names, are }
-        errors.push(format!(
-            "{attributes} with {these} {names} {are} missing: {}",
-            // Show just the names, not the AttributeName wrappers
-            format_string_list(&sorted_missing),
-        ));
+        errors.push(Issue {
+            message: format!(
+                "{attributes} with {these} {names} {are} missing: {}",
+                // Show just the names, not the AttributeName wrappers
+                format_string_list(&sorted_missing),
+            ),
+            hint: None,
+        });
     }
 
     if errors.is_empty() {
@@ -653,7 +660,10 @@ fn read_file_infos(
             |(id, path)| -> Result<FileInfo<WithExtractedValues>, FileErrors> {
                 let xmldocument = read_xml_file(&path.full_path()).map_err(|e| FileErrors {
                     path: path.clone(),
-                    errors: vec![format!("{e:#}")],
+                    errors: vec![Issue {
+                        message: format!("{e:#}"),
+                        hint: None,
+                    }],
                 })?;
                 let metadata =
                     parse_comments(xmldocument.header_comments(), false).map_err(|errors| {
@@ -663,7 +673,7 @@ fn read_file_infos(
                         }
                     })?;
 
-                let mut warnings = Vec::new();
+                let mut warnings: Vec<Issue> = Vec::new();
 
                 let metadata = metadata.add_extracted_attributes(&xmldocument, &mut warnings);
 
@@ -694,19 +704,30 @@ fn read_file_infos(
                     (|| -> Option<()> {
                         let found_major: u16 = document_version.major?;
                         if found_major != user_specified_major {
-                            warnings.push(format!(
-                                "the <beast> element in the document specifies version \
-                                 {document_version} with major {found_major}, but the \
-                                 user-provided version {user_specified_version} has \
-                                 major {user_specified_major}"
-                            ));
+                            warnings.push(Issue {
+                                message: format!(
+                                    "the <beast> element in the document specifies version \
+                                     {document_version} with major {found_major}, but the \
+                                     user-provided version {user_specified_version} has \
+                                     major {user_specified_major}"
+                                ),
+                                hint: Some(
+                                    "Please edit the file to make both versions match \
+                                     the BEAST version you're actually using."
+                                        .into(),
+                                ),
+                            });
                         }
                         Some(())
                     })();
                     Ok(())
                 })() {
                     Ok(()) => (),
-                    Err(e) => warnings.push(format!("{e}")),
+                    // XX why a warning for an error?
+                    Err(e) => warnings.push(Issue {
+                        message: format!("{e}"),
+                        hint: None,
+                    }),
                 }
 
                 Ok(FileInfo {
@@ -1195,18 +1216,20 @@ fn build_index(
                 Ok(None)
             } else {
                 let html = HTML_ALLOCATOR_POOL.get();
-
-                let mut vec = html.new_vec();
+                let mut hints = Hints::new("errors");
+                let mut items = html.new_vec();
                 for file_errors in &file_errorss {
-                    vec.push_flat(file_errors.to_html(
+                    items.push_flat(file_errors.to_html(
                         true, // XX where is this defined?
-                        "box", &html,
+                        "box", &mut hints, &html,
                     )?)?;
                 }
+                let intro_html = html.div([], [html.dl([], items)?, hints.to_html(&html)?])?;
+
                 Ok(Some(Section {
                     highlight: Highlight::Red,
                     title: Some("Errors".into()),
-                    intro: Some(html.preserialize(html.dl([], vec)?)?),
+                    intro: Some(html.preserialize(intro_html)?),
                     subsections: vec![],
                 }))
             }
@@ -1219,18 +1242,20 @@ fn build_index(
                 Ok(None)
             } else {
                 let html = HTML_ALLOCATOR_POOL.get();
-
-                let mut vec = html.new_vec();
+                let mut hints = Hints::new("warnings");
+                let mut items = html.new_vec();
                 for warnings in &warningss {
-                    vec.push_flat(warnings.to_html(
+                    items.push_flat(warnings.to_html(
                         true, // XX where is this defined?
-                        "box", &html,
+                        "box", &mut hints, &html,
                     )?)?;
                 }
+                let intro_html = html.div([], [html.dl([], items)?, hints.to_html(&html)?])?;
+
                 Ok(Some(Section {
                     highlight: Highlight::Orange,
                     title: Some("Warnings".into()),
-                    intro: Some(html.preserialize(html.dl([], vec)?)?),
+                    intro: Some(html.preserialize(intro_html)?),
                     subsections: vec![],
                 }))
             }
@@ -1381,9 +1406,11 @@ fn build_index(
         let mut out = stderr().lock();
         (|| -> Result<()> {
             writeln!(&mut out, "\nIndexing errors:")?;
+            let mut hints = Hints::new("indexingerrors");
             for file_errors in file_errorss {
-                file_errors.print_plain(&mut out)?
+                file_errors.print_plain(&mut hints, &mut out)?
             }
+            hints.print_plain(&mut out)?;
             Ok(())
         })()
         .context("writing to stderr")?;
@@ -1392,10 +1419,13 @@ fn build_index(
     if write_warnings_to_stderr {
         let mut out = stderr().lock();
         (|| -> Result<()> {
-            writeln!(&mut out, "\nIndexing warnings:")?;
+            writeln!(&mut out, "\nIndexing warnings:\n")?;
+            let mut hints = Hints::new("indexingwarnings");
             for warning in warningss {
-                warning.print_plain(&mut out)?
+                warning.print_plain(&mut hints, &mut out)?
             }
+            writeln!(&mut out, "")?;
+            hints.print_plain(&mut out)?;
             Ok(())
         })()
         .context("writing to stderr")?;
@@ -1982,6 +2012,7 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
         read_file_infos(paths);
     let mut exit_code = 0;
     let mut err = stderr().lock();
+    let mut hints = Hints::new("checkerror");
     for fileinfo_or_error in fileinfo_or_errors {
         match fileinfo_or_error {
             Ok(fileinfo) => {
@@ -1993,10 +2024,11 @@ fn check_command(program_version: GitVersion<SemVersion>, check_opts: CheckOpts)
             }
             Err(e) => {
                 exit_code = 1;
-                e.print_plain(&mut err)?;
+                e.print_plain(&mut hints, &mut err)?;
             }
         }
     }
+    hints.print_plain(&mut err)?;
     std::process::exit(exit_code);
 }
 

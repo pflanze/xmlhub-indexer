@@ -12,6 +12,7 @@ use pluraless::pluralized;
 use run_git::git::BaseAndRelPath;
 
 use crate::{
+    hints::Hints,
     html_util::anchor,
     util::{self, bool_to_yes_no, list_get_by_key},
     xml_document::XMLDocument,
@@ -331,7 +332,7 @@ impl Metadata<WithCommentsOnly> {
     pub fn add_extracted_attributes(
         self,
         document: &XMLDocument,
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<Issue>,
     ) -> Metadata<WithExtractedValues> {
         let mut values = self.values;
 
@@ -358,7 +359,7 @@ impl Metadata<WithCommentsOnly> {
 impl Metadata<WithExtractedValues> {
     /// Generate derived attribute values as listed in
     /// `METADATA_SPECIFICATION` with `AttributeSource::Derived`
-    pub fn add_derived_attributes(self, warnings: &mut Vec<String>) -> Metadata<WithDerivedValues> {
+    pub fn add_derived_attributes(self, warnings: &mut Vec<Issue>) -> Metadata<WithDerivedValues> {
         let mut values = self.values;
 
         for spec in METADATA_SPECIFICATION {
@@ -391,13 +392,19 @@ impl Metadata<WithExtractedValues> {
     }
 }
 
+#[derive(Debug)]
+pub struct Issue {
+    pub message: String,
+    pub hint: Option<Cow<'static, str>>,
+}
+
 /// The whole, concrete, information on one particular file.
 #[derive(Debug)]
 pub struct FileInfo<H: HavingDerivedValues> {
     pub id: usize,
     pub path: BaseAndRelPath,
     pub metadata: Metadata<H>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Issue>,
 }
 
 // For FileInfo to go into a BTreeSet (`BTreeSet<&FileInfo>` further
@@ -494,19 +501,20 @@ impl<H: HavingDerivedValues> FileInfo<H> {
                         pluralized! { warnings.issues().len() => Warnings }
                         html.tr(
                             [att("class", "fileinfo_warnings")],
-                            html.td(
-                                [att("bgcolor", FILEINFO_WARNINGS_BGCOLOR)],
+                            html.td([att("bgcolor", FILEINFO_WARNINGS_BGCOLOR)], {
+                                let hints_id = format!("file{}", self.id);
+                                let mut hints = Hints::new(&hints_id);
+                                let items = warnings.to_html(
+                                    false, // XX where is this defined?
+                                    "box", &mut hints, html,
+                                )?;
+                                let hints_html = hints.to_html(html)?;
                                 [
                                     html.div([], html.b([], html.text(format!("{Warnings}:"))?)?)?,
-                                    html.div(
-                                        [],
-                                        warnings.to_html(
-                                            false, // XX where is this defined?
-                                            "box", html,
-                                        )?,
-                                    )?,
-                                ],
-                            )?,
+                                    html.div([], items)?,
+                                    html.div([], hints_html)?,
+                                ]
+                            })?,
                         )?
                     } else {
                         html.empty_node()?

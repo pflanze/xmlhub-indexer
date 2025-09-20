@@ -18,6 +18,7 @@ pub mod get_terminal_width;
 pub mod git_check_version;
 pub mod git_version;
 pub mod hack09;
+pub mod hints;
 pub mod html_util;
 pub mod installation;
 pub mod modified_document;

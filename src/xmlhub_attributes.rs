@@ -18,7 +18,7 @@ use crate::{
     util::{self, format_anchor_name},
     xml_document::XMLDocument,
     xmlhub_autolink::Autolink,
-    xmlhub_fileinfo::{AttributeValue, AttributeValueKind},
+    xmlhub_fileinfo::{AttributeValue, AttributeValueKind, Issue},
     xmlhub_indexer_defaults::SEQUENCES_ELEMENT_NAME,
 };
 
@@ -194,7 +194,7 @@ pub struct SourceSpecification {
 
 #[derive(Debug)]
 pub struct ExtractionSpecification {
-    pub extractor: for<'a> fn(&'a XMLDocument, &mut Vec<String>) -> AttributeValueKind,
+    pub extractor: for<'a> fn(&'a XMLDocument, &mut Vec<Issue>) -> AttributeValueKind,
 }
 
 #[derive(Debug)]
@@ -209,7 +209,7 @@ pub struct DerivationSpecification {
     /// phase. Also receives a reference to warnings, to output errors
     /// to.
     pub derivation:
-        for<'v, 'a> fn(&'v [Option<&'a AttributeValue>], &mut Vec<String>) -> AttributeValueKind,
+        for<'v, 'a> fn(&'v [Option<&'a AttributeValue>], &mut Vec<Issue>) -> AttributeValueKind,
 }
 
 #[derive(Debug)]
