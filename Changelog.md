@@ -306,3 +306,4 @@ v10.1 - 2025-06-23
 
 v10.2 - 2025-09-22
 
+- Add hints for what to do on version mismatches
