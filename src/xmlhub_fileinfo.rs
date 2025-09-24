@@ -5,7 +5,7 @@
 
 use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
 
-use ahtml::{att, flat::Flat, util::SoftPre, AId, ASlice, Element, HtmlAllocator, Node};
+use ahtml::{att, flat::Flat, util::SoftPre, AId, Element, HtmlAllocator, Node};
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use pluraless::pluralized;
@@ -197,12 +197,7 @@ impl AttributeValue {
                 let body_node: &Node = html.get_node(body).expect("just allocated");
                 let body_element: &Element =
                     body_node.as_element().expect("softpre returns an element");
-                // XX softpre must allow to omit the ending <br>! Hack:
-                let full_body: ASlice<Node> = body_element.body;
-                let (keep, _br) = full_body
-                    .split_at(full_body.len() - 1)
-                    .expect("always getting at least 1 br");
-                let linked_slice = possibly_link_back(value, Flat::Slice(keep))?;
+                let linked_slice = possibly_link_back(value, Flat::Slice(body_element.body))?;
                 html.element(body_element.meta, body_element.attr, linked_slice)
                     .map(Flat::One)
             }
