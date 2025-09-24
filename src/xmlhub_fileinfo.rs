@@ -5,7 +5,7 @@
 
 use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
 
-use ahtml::{att, flat::Flat, util::SoftPre, AId, Element, HtmlAllocator, Node};
+use ahtml::{att, flat::Flat, util::SoftPre, AId, HtmlAllocator, Node};
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use pluraless::pluralized;
@@ -193,13 +193,7 @@ impl AttributeValue {
                     input_line_separator: "\n",
                     trailing_br: false,
                 };
-                let body = softpre.format(value.trim(), html)?;
-                let body_node: &Node = html.get_node(body).expect("just allocated");
-                let body_element: &Element =
-                    body_node.as_element().expect("softpre returns an element");
-                let linked_slice = possibly_link_back(value, Flat::Slice(body_element.body))?;
-                html.element(body_element.meta, body_element.attr, linked_slice)
-                    .map(Flat::One)
+                possibly_link_back(value, Flat::One(softpre.format(value.trim(), html)?))
             }
             AttributeValueKind::StringList(value) => {
                 let mut body = html.new_vec();
