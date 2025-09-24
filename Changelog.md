@@ -311,3 +311,6 @@ v10.2 - 2025-09-22
 v11 - 2025-09-22
 
 - Fix: do not drop field values in e.g. the file boxes (remove hack that assumed that the last child element after soft-pre treatment was a `<br>`, instead update to newer `ahtml` librariy and use explicit toggle to disable trailing `<br>`)
+
+v12 - 2025-09-24
+
