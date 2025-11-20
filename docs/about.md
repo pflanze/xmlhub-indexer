@@ -5,6 +5,7 @@ program is running (see function `markdown_with_variables_to_html` for
 which variables are supported).
 
 -->
+
 {{#if public}}
 
 # About XML Hub
@@ -20,6 +21,7 @@ Christian Jaeger [`<ch@christianjaeger.ch>`](mailto:ch@christianjaeger.ch)
 Marcus Overwater [`<moverwater@ethz.ch>`](mailto:moverwater@ethz.ch)
 
 {{else}}
+
 # About
 
 ## About this locally-installed program
@@ -37,4 +39,5 @@ repository, pre-compiled binaries are in the
 ## Your XML Hub maintainer
 
 * cEvo: Marcus Overwater [`<moverwater@ethz.ch>`](mailto:moverwater@ethz.ch)
+
 {{/if}}
