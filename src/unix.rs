@@ -110,7 +110,7 @@ pub fn easy_flock(
     file: &mut File,
     exclusive: bool,
     nonblock: bool,
-) -> Result<Option<FlockGuard>, Errno> {
+) -> Result<Option<FlockGuard<'_>>, Errno> {
     let bfd: BorrowedFd = file.as_fd();
     let fd: i32 = bfd.as_raw_fd();
     let mode = if exclusive {
@@ -139,11 +139,11 @@ pub fn easy_flock(
 pub fn easy_flock_nonblocking(
     file: &mut File,
     exclusive: bool,
-) -> Result<Option<FlockGuard>, Errno> {
+) -> Result<Option<FlockGuard<'_>>, Errno> {
     easy_flock(file, exclusive, true)
 }
 
-pub fn easy_flock_blocking(file: &mut File, exclusive: bool) -> Result<FlockGuard, Errno> {
+pub fn easy_flock_blocking(file: &mut File, exclusive: bool) -> Result<FlockGuard<'_>, Errno> {
     easy_flock(file, exclusive, false)
         .map(|v| v.expect("said blocking, thus always getting the lock"))
 }

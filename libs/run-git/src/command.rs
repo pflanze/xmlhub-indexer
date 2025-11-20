@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 
-fn lossy_string(v: &[u8]) -> Cow<str> {
+fn lossy_string(v: &[u8]) -> Cow<'_, str> {
     // XX different on Windows?
     String::from_utf8_lossy(v)
 }

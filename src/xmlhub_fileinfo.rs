@@ -124,7 +124,7 @@ impl AttributeValue {
     /// allows both sharing of existing vectors as well as holding new
     /// ones; that's just a performance feature, they can be used
     /// wherever a Vec or [] is required.)
-    pub fn as_string_list(&self) -> Cow<[String]> {
+    pub fn as_string_list(&self) -> Cow<'_, [String]> {
         match &self.value {
             AttributeValueKind::StringList(value) => Cow::from(value.as_slice()),
             AttributeValueKind::NA => Cow::from(&[]),
@@ -420,7 +420,7 @@ impl<H: HavingDerivedValues> Eq for FileInfo<H> {}
 impl<H: HavingDerivedValues> FileInfo<H> {
     /// Give a temporary FileWarnings object with the same trait as
     /// FileErrors, for warnings display.
-    pub fn opt_warnings(&self) -> Option<FileWarnings> {
+    pub fn opt_warnings(&self) -> Option<FileWarnings<'_>> {
         if self.warnings.is_empty() {
             None
         } else {

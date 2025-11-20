@@ -167,7 +167,7 @@ impl Section {
     }
 
     /// Format the section for the inclusion in a markdown file
-    pub fn to_markdown(&self, number_path: NumberPath) -> Result<StringTree> {
+    pub fn to_markdown(&self, number_path: NumberPath) -> Result<StringTree<'_>> {
         let mut title_and_intro = String::new();
         if let Some(title) = &self.title {
             let number_path_string = number_path.to_string();

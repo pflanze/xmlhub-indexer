@@ -152,7 +152,7 @@ impl XMLDocument {
     }
 
     /// Convert a position index into a `XMLDocumentLocation`.
-    pub fn index_to_location(&self, index: usize) -> XMLDocumentLocation {
+    pub fn index_to_location(&self, index: usize) -> XMLDocumentLocation<'_> {
         XMLDocumentLocation {
             xmldocument: self,
             byte_range: index..index,
@@ -176,7 +176,7 @@ impl XMLDocument {
     /// Find elements with the given tag name. `limit` is the maximum
     /// number of nodes found before it stops and returns (it can push
     /// one more if called on an element that matches).
-    pub fn elements_named(&self, element_name: &str, limit: usize) -> Vec<Node> {
+    pub fn elements_named(&self, element_name: &str, limit: usize) -> Vec<Node<'_, '_>> {
         let mut output = Vec::new();
         find_elements_named(
             self.document().root_element(),

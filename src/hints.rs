@@ -78,7 +78,7 @@ impl<'id> Hints<'id> {
         }
     }
 
-    pub fn intern(&mut self, msg: Cow<'static, str>) -> HintId {
+    pub fn intern(&mut self, msg: Cow<'static, str>) -> HintId<'_> {
         if let Some(id) = self.index.get(&msg) {
             HintId {
                 id: *id,

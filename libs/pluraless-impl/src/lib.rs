@@ -63,7 +63,7 @@ defnumeric! {i32, 1}
 defnumeric! {i16, 1}
 defnumeric! {i8, 1}
 
-fn special(plural: &str) -> Option<PluralizedWord> {
+fn special(plural: &str) -> Option<PluralizedWord<'_>> {
     SPECIAL
         .into_iter()
         .find(|(p, _)| *p == plural)
@@ -72,7 +72,7 @@ fn special(plural: &str) -> Option<PluralizedWord> {
 
 /// `word` should be an English word in the plural form. Returns
 /// `None` if it does not know how to pluralize.
-pub fn english_plural(word_in_plural: &str) -> Option<PluralizedWord> {
+pub fn english_plural(word_in_plural: &str) -> Option<PluralizedWord<'_>> {
     if let Some(pl) = special(word_in_plural) {
         return Some(pl);
     }
@@ -91,7 +91,7 @@ pub fn english_plural(word_in_plural: &str) -> Option<PluralizedWord> {
 /// answer; useful when you want to panic anyway (e.g. at compile
 /// time) to have the message/backtrace point to this crate, not the
 /// user code.
-pub fn xenglish_plural(word_in_plural: &str) -> PluralizedWord {
+pub fn xenglish_plural(word_in_plural: &str) -> PluralizedWord<'_> {
     if let Some(pl) = english_plural(word_in_plural) {
         return pl;
     }

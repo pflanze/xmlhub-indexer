@@ -24,7 +24,7 @@ pub struct XmlhubCheckVersion<'s> {
 }
 
 impl<'s> XmlhubCheckVersion<'s> {
-    fn git_log_version_checker(&self) -> GitLogVersionChecker {
+    fn git_log_version_checker(&self) -> GitLogVersionChecker<'_> {
         GitLogVersionChecker {
             program_name: self.program_name.into(),
             program_version: self.program_version.as_ref().into(),
