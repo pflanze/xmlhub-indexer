@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     match subcommand {
         SubCommand::Poll { file } => {
             let mut signal =
-                PollingSignals::open(&file).with_context(|| anyhow!("opening {file:?}"))?;
+                PollingSignals::open(&file, 0).with_context(|| anyhow!("opening {file:?}"))?;
             loop {
                 let n = signal.get_number_of_signals();
                 if n > 0 {
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
         }
         SubCommand::Send { n, file } => {
             let mut signal =
-                PollingSignals::open(&file).with_context(|| anyhow!("opening {file:?}"))?;
+                PollingSignals::open(&file, 0).with_context(|| anyhow!("opening {file:?}"))?;
             for _ in 0..n {
                 signal.send_signal();
             }

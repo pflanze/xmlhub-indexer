@@ -11,22 +11,21 @@ use memmap2::{MmapMut, MmapOptions};
 
 type PollingSignalsAtomic = AtomicU64;
 
-/// A filesystem path based way to poll for 'signals';
-pub struct PollingSignals {
-    seen: u64,
+/// A filesystem path based cross-process atomic counter
+pub struct IPCAtomicU64 {
     mmap: MmapMut,
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum PollingSignalsError {
+pub enum IPCAtomicError {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
     #[error("invalid length {0} of file contents")]
     InvalidFileContentsLength(u64),
 }
 
-impl PollingSignals {
-    pub fn open(path: &Path) -> Result<Self, PollingSignalsError> {
+impl IPCAtomicU64 {
+    pub fn open(path: &Path, initial_value: u64) -> Result<Self, IPCAtomicError> {
         let mut opts = OpenOptions::new();
         opts.read(true);
         opts.write(true);
@@ -39,12 +38,12 @@ impl PollingSignals {
         const PSALEN: u64 = size_of::<PollingSignalsAtomic>() as u64;
         match l {
             0 => {
-                let a = PollingSignalsAtomic::new(0);
+                let a = PollingSignalsAtomic::new(initial_value);
                 let b: &[u8; size_of::<PollingSignalsAtomic>()] = unsafe { transmute(&a) };
                 file.write_all(b)?;
             }
             PSALEN => (),
-            _ => Err(PollingSignalsError::InvalidFileContentsLength(l))?,
+            _ => Err(IPCAtomicError::InvalidFileContentsLength(l))?,
         }
         let mmap = unsafe {
             MmapOptions::new()
@@ -52,37 +51,64 @@ impl PollingSignals {
                 .map(&file)?
                 .make_mut()?
         };
-        let mut s = Self { seen: 0, mmap };
+        Ok(Self { mmap })
+    }
+
+    pub fn load(&self) -> u64 {
+        let Self { mmap } = self;
+        let value: &[u8; size_of::<PollingSignalsAtomic>()] = (&(**mmap)
+            [0..size_of::<PollingSignalsAtomic>()])
+            .try_into()
+            .expect("same size of PollingSignalsAtomic bytes");
+        let ptr = value.as_ptr() as *const AtomicU64;
+        let atomic = unsafe { &*ptr };
+        atomic.load(Ordering::SeqCst)
+    }
+
+    pub fn inc(&self) -> u64 {
+        let Self { mmap } = self;
+        let value: &[u8; size_of::<PollingSignalsAtomic>()] = (&(**mmap)
+            [0..size_of::<PollingSignalsAtomic>()])
+            .try_into()
+            .expect("same size of PollingSignalsAtomic bytes");
+        let ptr = value.as_ptr() as *const AtomicU64;
+        let atomic = unsafe { &*ptr };
+        atomic.fetch_add(1, Ordering::SeqCst)
+    }
+}
+
+/// A filesystem path based way to poll for 'signals';
+pub struct PollingSignals {
+    seen: u64,
+    atomic: IPCAtomicU64,
+}
+
+impl PollingSignals {
+    pub fn open(path: &Path, initial_value: u64) -> Result<Self, IPCAtomicError> {
+        let atomic = IPCAtomicU64::open(path, initial_value)?;
+        let mut s = Self {
+            seen: initial_value,
+            atomic,
+        };
         s.get_number_of_signals();
         Ok(s)
     }
 
     /// Check how many signals were received since the last check.
     pub fn get_number_of_signals(&mut self) -> u64 {
-        let Self { seen, mmap } = self;
-        let value: &mut [u8; size_of::<PollingSignalsAtomic>()] = (&mut (**mmap)
-            [0..size_of::<PollingSignalsAtomic>()])
-            .try_into()
-            .expect("same size of PollingSignalsAtomic bytes");
-        let ptr = value.as_mut_ptr() as *mut AtomicU64;
-        let atomic = unsafe { &mut *ptr };
-        let new_seen = atomic.load(Ordering::SeqCst);
+        let Self { seen, atomic } = self;
+        let new_seen = atomic.load();
         let d = new_seen.wrapping_sub(*seen);
         *seen = new_seen;
         d
     }
 
     /// Send one signal. This is excluded from this `PollingSignals`
-    /// instance, i.e. `get_number_of_signals()` will not report it.
+    /// instance, i.e. `get_number_of_signals()` will not report
+    /// it. Returns the previous value.
     pub fn send_signal(&mut self) -> u64 {
-        let Self { seen, mmap } = self;
+        let Self { seen, atomic } = self;
         *seen = seen.wrapping_add(1);
-        let value: &mut [u8; size_of::<PollingSignalsAtomic>()] = (&mut (**mmap)
-            [0..size_of::<PollingSignalsAtomic>()])
-            .try_into()
-            .expect("same size of PollingSignalsAtomic bytes");
-        let ptr = value.as_mut_ptr() as *mut AtomicU64;
-        let atomic = unsafe { &mut *ptr };
-        atomic.fetch_add(1, Ordering::SeqCst)
+        atomic.inc()
     }
 }
