@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use run_git::path_util::AppendToPath;
+use cj_path_util::path_util::AppendToPath;
 
 use crate::{effect::Effect, util::prefix_lines, utillib::home::home_dir};
 

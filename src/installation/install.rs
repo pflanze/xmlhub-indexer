@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use run_git::path_util::AppendToPath;
+use cj_path_util::path_util::AppendToPath;
 
 use crate::{
     effect::{bind, Effect, NoOp},

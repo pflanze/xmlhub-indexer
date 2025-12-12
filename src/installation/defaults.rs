@@ -7,8 +7,8 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use cj_path_util::path_util::AppendToPath;
 use lazy_static::lazy_static;
-use run_git::path_util::AppendToPath;
 
 use crate::utillib::home::home_dir;
 

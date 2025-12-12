@@ -1,9 +1,18 @@
-use std::os::unix::fs::symlink;
+use std::{
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Context, Result};
-use run_git::path_util::{canonicalize, AppendToPath};
+use cj_path_util::path_util::AppendToPath;
 
 use crate::{unix_passwd::getpwuid_home, utillib::home::home_dir};
+
+/// Just adds error wrapper that mentions the path.
+pub fn canonicalize(path: &Path) -> Result<PathBuf> {
+    path.canonicalize()
+        .with_context(|| anyhow!("canonicalizing {path:?}"))
+}
 
 /// Hack for stadler09 server: we run on a local file system
 /// (`/local0/$USER/`), because `$HOME` is on a mounted file

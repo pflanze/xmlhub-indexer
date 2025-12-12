@@ -16,11 +16,11 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use chrono::{Local, Utc};
+use cj_path_util::path_util::AppendToPath;
 use nix::{
     sys::signal::{kill, Signal},
     unistd::{close, dup2, pipe, setsid, Pid},
 };
-use run_git::path_util::AppendToPath;
 
 use crate::{
     file_lock::{file_lock_nonblocking, FileLockError},

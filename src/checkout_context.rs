@@ -9,8 +9,9 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Result};
+use cj_path_util::path_util::AppendToPath;
 use nix::NixPath;
-use run_git::{git::GitWorkingDir, path_util::AppendToPath};
+use run_git::git::GitWorkingDir;
 
 use crate::{const_util::file_name, fixup_path::FixupPath};
 

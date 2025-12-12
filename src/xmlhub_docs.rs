@@ -9,8 +9,8 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, Context, Result};
+use cj_path_util::path_util::AppendToPath;
 use lazy_static::lazy_static;
-use run_git::path_util::AppendToPath;
 
 use crate::{
     browser::{spawn_browser, spawn_browser_on_path},

@@ -9,10 +9,8 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
-use run_git::{
-    git::GitWorkingDir,
-    path_util::{add_extension_mut, AppendToPath},
-};
+use cj_path_util::{path_util::AppendToPath, unix::polyfill::add_extension_mut};
+use run_git::git::GitWorkingDir;
 
 use crate::{
     changelog::{Changelog, ChangelogDisplay, ChangelogDisplayStyle, CHANGELOG_FILE_NAME},

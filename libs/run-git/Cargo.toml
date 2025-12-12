@@ -13,3 +13,4 @@ keywords = ["git"]
 
 [dependencies]
 anyhow = "1.0.65"
+cj-path-util = { version = "0.1.0" }

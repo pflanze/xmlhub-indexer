@@ -4,11 +4,11 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use cj_path_util::unix::polyfill::add_extension_mut;
 use fips205::{
     slh_dsa_shake_128s,
     traits::{SerDes, Signer, Verifier},
 };
-use run_git::path_util::add_extension_mut;
 use serde::{Deserialize, Serialize};
 
 use crate::utillib::hex::{decode_hex, to_hex_string};

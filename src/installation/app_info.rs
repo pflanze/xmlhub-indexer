@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use run_git::path_util::add_extension_mut;
+use cj_path_util::unix::polyfill::add_extension_mut;
 use serde::{Deserialize, Serialize};
 
 use crate::sha256::sha256sum;

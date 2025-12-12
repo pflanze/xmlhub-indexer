@@ -10,12 +10,12 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use cj_path_util::path_util::AppendToPath;
 
 pub use crate::base_and_rel_path::BaseAndRelPath;
 use crate::{
     command::{run, run_outputs, run_stdout, spawn, Capturing},
     flattened::Flattened,
-    path_util::AppendToPath,
     util::contains_bytes,
 };
 

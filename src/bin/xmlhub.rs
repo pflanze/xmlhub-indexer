@@ -13,16 +13,14 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print, SerHtmlFrag};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
+use cj_path_util::path_util::AppendToPath;
 use clap::Parser;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use nix::sys::resource::{setrlimit, Resource};
 use pluraless::pluralized;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use run_git::{
-    git::{BaseAndRelPath, GitStatusItem, GitWorkingDir},
-    path_util::AppendToPath,
-};
+use run_git::git::{BaseAndRelPath, GitStatusItem, GitWorkingDir};
 use walkdir::WalkDir;
 
 // Use from src/*.rs

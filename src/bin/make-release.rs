@@ -8,9 +8,10 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
+use cj_path_util::path_util::AppendToPath;
 use clap::Parser;
 use debug_ignore::DebugIgnore;
-use run_git::{git::GitWorkingDir, path_util::AppendToPath};
+use run_git::git::GitWorkingDir;
 
 use xmlhub_indexer::{
     cargo::{

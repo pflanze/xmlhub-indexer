@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
-use run_git::{git::git_clone, path_util::AppendToPath};
+use cj_path_util::path_util::AppendToPath;
+use run_git::git::git_clone;
 
 use crate::{
     checkout_context::{CheckExpectedSubpathsExist, CheckoutContext},
