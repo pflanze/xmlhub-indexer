@@ -19,12 +19,24 @@ opt-level = "s"
 opt-level = "s"
 overflow-checks = true
 
+# [[bin]]
+# name = "polling-signals"
+# path = "src/bin/polling-signals.rs"
+
+# [polling-signals.dependencies]
+# clap = { version = "3", features = ["derive"] }
+# ^ *HOW* does one specify these?
 
 [dependencies]
 anyhow = "1.0.65"
 chrono = "0.4"
 cj-path-util = { version = "0.1.0", features = [ "unix" ] }
+memmap2 = "0.9.4"
 nix = "0.24.3"
 num_threads  = "=0.1.6"
 ouroboros = "0.18.5"
 thiserror = "1.0.37"
+
+# Don't *WANT* to have this as the dependency for the lib. But how to
+# get around it?
+clap = { version = "3", features = ["derive"] }

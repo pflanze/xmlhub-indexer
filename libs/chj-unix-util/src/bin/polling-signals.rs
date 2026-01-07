@@ -1,13 +1,11 @@
 use std::{path::PathBuf, time::Duration};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
+use chj_unix_util::polling_signals::PollingSignals;
 use clap::Parser;
-
-use evobench_tools::{get_terminal_width::get_terminal_width, polling_signals::PollingSignals};
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width(4))]
 /// Schedule and query benchmarking jobs.
 struct Opts {
     /// The subcommand to run. Use `--help` after the sub-command to

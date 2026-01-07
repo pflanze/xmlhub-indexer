@@ -5,6 +5,13 @@ edition = "2021"
 authors = ["Christian Jaeger <ch@christianjaeger.ch>"]
 license = "MIT OR Apache-2.0"
 
+[workspace]
+members = [
+    ".",
+    "libs/chj-unix-util",
+    # the other libs are OK as they do not contain binaries, OK?
+]
+
 [lints.clippy]
 collapsible_else_if = "allow"
 collapsible_if = "allow"
