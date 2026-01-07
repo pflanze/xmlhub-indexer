@@ -13,6 +13,12 @@ use std::{
 use ahtml::{att, flat::Flat, AId, HtmlAllocator, Node, Print, SerHtmlFrag};
 use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
+use chj_unix_util::{
+    backoff::{LoopVerbosity, LoopWithBackoff},
+    daemon::{Daemon, DaemonMode},
+    file_lock::{file_lock_nonblocking, FileLockError},
+    forking_loop::forking_loop,
+};
 use cj_path_util::path_util::AppendToPath;
 use clap::Parser;
 use itertools::Itertools;
@@ -25,7 +31,6 @@ use walkdir::WalkDir;
 
 // Use from src/*.rs
 use xmlhub_indexer::{
-    backoff::{LoopVerbosity, LoopWithBackoff},
     beast_version::{check_beast_version, BeastProductVersion, BeastVersion},
     browser::{spawn_browser, spawn_browser_on_path},
     changelog::Changelog,
@@ -33,11 +38,8 @@ use xmlhub_indexer::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
     },
     const_util::file_name,
-    daemon::{Daemon, DaemonMode},
-    file_lock::{file_lock_nonblocking, FileLockError},
     fixup_path::CURRENT_DIRECTORY,
     folder::Folder,
-    forking_loop::forking_loop,
     get_terminal_width::get_terminal_width,
     git_version::{GitVersion, SemVersion},
     hints::Hints,

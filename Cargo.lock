@@ -172,6 +172,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "chj-unix-util"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cj-path-util",
+ "nix",
+ "num_threads",
+ "ouroboros",
+ "thiserror",
+]
+
+[[package]]
 name = "chj-util"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1566,6 +1579,7 @@ dependencies = [
  "ahtml-from-markdown",
  "anyhow",
  "auri",
+ "chj-unix-util",
  "chj-util",
  "chrono",
  "cj-path-util",

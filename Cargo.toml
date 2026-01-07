@@ -29,6 +29,7 @@ ahtml-from-markdown = { version = "0.2.0" }
 
 pluraless = { path = "libs/pluraless" }
 run-git = { path = "libs/run-git" }
+chj-unix-util = { path = "libs/chj-unix-util" }
 
 # Note: generally using older version since I know/verified those and
 # they are (maybe not all any more) compatible with rustc from Debian stable.
