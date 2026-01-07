@@ -28,7 +28,7 @@ use crate::{
     unix::{easy_flock_blocking, easy_fork},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, clap::Subcommand)]
 pub enum DaemonMode {
     /// Do not put into background, just run forever in the foreground.
     Run,
