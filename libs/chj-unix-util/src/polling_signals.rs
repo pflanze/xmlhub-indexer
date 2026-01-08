@@ -65,6 +65,17 @@ impl IPCAtomicU64 {
         atomic.load(Ordering::SeqCst)
     }
 
+    pub fn store(&self, val: u64) {
+        let Self { mmap } = self;
+        let value: &[u8; size_of::<PollingSignalsAtomic>()] = (&(**mmap)
+            [0..size_of::<PollingSignalsAtomic>()])
+            .try_into()
+            .expect("same size of PollingSignalsAtomic bytes");
+        let ptr = value.as_ptr() as *const AtomicU64;
+        let atomic = unsafe { &*ptr };
+        atomic.store(val, Ordering::SeqCst)
+    }
+
     pub fn inc(&self) -> u64 {
         let Self { mmap } = self;
         let value: &[u8; size_of::<PollingSignalsAtomic>()] = (&(**mmap)
