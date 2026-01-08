@@ -81,7 +81,29 @@ impl FromStr for DaemonMode {
     }
 }
 
+#[derive(Debug, Clone, clap::Args)]
+pub struct DaemonOpts {
+    /// If true, write log time stamps in the local time zone.
+    /// Default: in UTC.
+    #[clap(long)]
+    pub local_time: bool,
+
+    /// The maximum size of the 'current.log' file in bytes before it
+    /// is renamed and a new one opened.
+    #[clap(long, default_value = "10000000")]
+    pub max_log_file_size: u64,
+
+    /// The maximum number of numbered log files (i.e. excluding
+    /// `current.log`) before the oldest are deleted.  Careful: as
+    /// many files are deleted as needed as necessary to get their
+    /// count down to the given number (giving 0 it will delete them
+    /// all)! None means, no files are ever deleted.
+    #[clap(long)]
+    pub max_log_files: Option<u32>,
+}
+
 pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
+    pub opts: DaemonOpts,
     /// Where the lock/pid files should be written to (is created if missing).
     pub state_dir: P,
     /// Where the log files should be written to (is created if missing).
@@ -89,16 +111,6 @@ pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
     /// The code to run; the daemon ends/stops when this function
     /// returns.
     pub run: F,
-    /// If true, logs in the local time zone,
-    /// otherwise in UTC.
-    pub use_local_time: bool,
-    /// The maximum size of the current log file in bytes before it is
-    /// being renamed and a new one opened.
-    pub max_log_file_size: u64,
-    /// The maximum number of numbered log files (i.e. excluding
-    /// `current.log`) before the oldest are deleted. None means, no
-    /// files are ever deleted by the daemon.
-    pub max_log_files: Option<u32>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -210,7 +222,7 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
             Err(_) => (), // guess there's no file? XX look into what error it is
         };
         let num_numbered_logfiles = numbered_logfiles.len();
-        if let Some(max_log_files) = self.max_log_files {
+        if let Some(max_log_files) = self.opts.max_log_files {
             let max_log_files = usize::try_from(max_log_files).expect("u32 fits in usize");
             if num_numbered_logfiles > max_log_files {
                 let delete_n = num_numbered_logfiles - max_log_files;
@@ -463,7 +475,7 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
                         output_line.clear();
                         let nread = messagesfh.read_line(&mut input_line)?;
                         let daemon_ended = nread == 0;
-                        if self.use_local_time {
+                        if self.opts.local_time {
                             write!(&mut output_line, "{}", Local::now())?;
                         } else {
                             write!(&mut output_line, "{}", Utc::now())?;
@@ -485,7 +497,7 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
                             break;
                         }
 
-                        if total_written >= self.max_log_file_size {
+                        if total_written >= self.opts.max_log_file_size {
                             logfh.flush()?; // well, not buffering anyway
                             drop(logfh);
                             self.rotate_logs()?;

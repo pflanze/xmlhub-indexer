@@ -15,7 +15,7 @@ use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
-    daemon::{Daemon, DaemonMode},
+    daemon::{Daemon, DaemonMode, DaemonOpts},
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
 };
@@ -113,12 +113,6 @@ const MAX_SLEEP_SECONDS: f64 = 1000.;
 /// it will log less frequently if there were errors for a long time
 /// and it is sleeping a long time due to backing off because of that.
 const DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS: u64 = 120;
-
-/// Max size of a single log file in bytes before it is renamed.
-const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
-
-/// Max number of log files before they are deleted.
-const MAX_LOG_FILES_DEFAULT: u32 = 100;
 
 /// Address space memory limit set inside every worker child, in
 /// bytes. Much is needed as the HtmlAllocator regions pre-allocate a
@@ -274,26 +268,8 @@ struct BuildOpts {
     versioncheck: VersionCheckOpt,
     #[clap(flatten)]
     quietness: QuietOpt,
-
-    /// When running in `--daemon start` mode, for the log messages,
-    /// use time stamps in the local time zone. The default is to use
-    /// UTC.
-    #[clap(long)]
-    pub localtime: bool,
-
-    /// When running in `--daemon start` mode, the maximum size of a
-    /// log file in bytes before the current file is renamed and a new
-    /// one is created instead. Default: 1000000.
-    #[clap(long)]
-    pub max_log_file_size: Option<u64>,
-
-    /// When running in `--daemon start` mode, the number of numbered
-    /// log files before the oldest files are automatically
-    /// deleted. Careful: will delete as many files as needed to get
-    /// their count down to the given number (if you give 0 it will
-    /// delete them all.) Default: 100.
-    #[clap(long)]
-    pub max_log_files: Option<u32>,
+    #[clap(flatten)]
+    daemon_opts: DaemonOpts,
 
     /// Write the index files (and commit them if requested) even if
     /// some files had errors and thus won't be indexed; the errors
@@ -1721,9 +1697,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
         no_repo_check,
         ignore_untracked,
         base_path,
-        localtime,
-        max_log_file_size,
-        max_log_files,
+        daemon_opts,
         limit_as,
     } = build_opts;
 
@@ -1800,11 +1774,9 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
         let log_dir = (&daemon_base_dir).append("logs");
         let state_dir = daemon_base_dir;
         let daemon = Daemon {
+            opts: daemon_opts,
             state_dir,
             log_dir,
-            use_local_time: localtime,
-            max_log_file_size: max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
-            max_log_files: Some(max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT)),
             run: {
                 let quietness = quietness.clone();
                 move || -> Result<()> {
@@ -2466,9 +2438,7 @@ fn main() -> Result<()> {
                     base_path,
                     ignore_untracked,
                     no_repo_check,
-                    localtime,
-                    max_log_file_size,
-                    max_log_files,
+                    daemon_opts,
                     limit_as,
                 }) => {
                     // Create uninitialized variables without the underscores,
@@ -2540,9 +2510,7 @@ fn main() -> Result<()> {
                             ignore_untracked,
                             base_path,
                             no_repo_check,
-                            localtime,
-                            max_log_file_size,
-                            max_log_files,
+                            daemon_opts,
                             limit_as,
                         })),
                     }
