@@ -96,8 +96,9 @@ pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
     /// being renamed and a new one opened.
     pub max_log_file_size: u64,
     /// The maximum number of numbered log files (i.e. excluding
-    /// `current.log`) before the oldest are deleted.
-    pub max_log_files: usize,
+    /// `current.log`) before the oldest are deleted. None means, no
+    /// files are ever deleted by the daemon.
+    pub max_log_files: Option<u32>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -209,13 +210,16 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
             Err(_) => (), // guess there's no file? XX look into what error it is
         };
         let num_numbered_logfiles = numbered_logfiles.len();
-        if num_numbered_logfiles > self.max_log_files {
-            let delete_n = num_numbered_logfiles - self.max_log_files;
-            for (_, path) in &numbered_logfiles[0..delete_n] {
-                remove_file(path).with_context(|| anyhow!("deleting log file {path:?}"))?;
-                // eprintln!("deleted log file {path:?}"); --ah, can't, no logging output
+        if let Some(max_log_files) = self.max_log_files {
+            let max_log_files = usize::try_from(max_log_files).expect("u32 fits in usize");
+            if num_numbered_logfiles > max_log_files {
+                let delete_n = num_numbered_logfiles - max_log_files;
+                for (_, path) in &numbered_logfiles[0..delete_n] {
+                    remove_file(path).with_context(|| anyhow!("deleting log file {path:?}"))?;
+                    // eprintln!("deleted log file {path:?}"); --ah, can't, no logging output
+                }
             }
-        };
+        }
         Ok(())
     }
 

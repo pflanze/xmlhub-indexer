@@ -118,7 +118,7 @@ const DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS: u64 = 120;
 const MAX_LOG_FILE_SIZE_DEFAULT: u64 = 1000000;
 
 /// Max number of log files before they are deleted.
-const MAX_LOG_FILES_DEFAULT: usize = 100;
+const MAX_LOG_FILES_DEFAULT: u32 = 100;
 
 /// Address space memory limit set inside every worker child, in
 /// bytes. Much is needed as the HtmlAllocator regions pre-allocate a
@@ -293,7 +293,7 @@ struct BuildOpts {
     /// their count down to the given number (if you give 0 it will
     /// delete them all.) Default: 100.
     #[clap(long)]
-    pub max_log_files: Option<usize>,
+    pub max_log_files: Option<u32>,
 
     /// Write the index files (and commit them if requested) even if
     /// some files had errors and thus won't be indexed; the errors
@@ -1804,7 +1804,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             log_dir,
             use_local_time: localtime,
             max_log_file_size: max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
-            max_log_files: max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
+            max_log_files: Some(max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT)),
             run: {
                 let quietness = quietness.clone();
                 move || -> Result<()> {
