@@ -1797,8 +1797,11 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
     };
 
     if let Some(daemon_mode) = daemon {
+        let log_dir = (&daemon_base_dir).append("logs");
+        let state_dir = daemon_base_dir;
         let daemon = Daemon {
-            base_dir: daemon_base_dir,
+            state_dir,
+            log_dir,
             use_local_time: localtime,
             max_log_file_size: max_log_file_size.unwrap_or(MAX_LOG_FILE_SIZE_DEFAULT),
             max_log_files: max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),

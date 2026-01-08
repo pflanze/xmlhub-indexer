@@ -82,8 +82,10 @@ impl FromStr for DaemonMode {
 }
 
 pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
-    /// Where the lock/pid files and logs dir should be written to.
-    pub base_dir: P,
+    /// Where the lock/pid files should be written to (is created if missing).
+    pub state_dir: P,
+    /// Where the log files should be written to (is created if missing).
+    pub log_dir: P,
     /// The code to run; the daemon ends/stops when this function
     /// returns.
     pub run: F,
@@ -153,29 +155,27 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
                 }),
             },
         };
-        create(self.base_dir())?;
+        create(self.state_dir())?;
         create(self.log_dir())?;
         Ok(())
     }
 
-    pub fn base_dir(&self) -> PathBuf {
-        self.base_dir.as_ref().to_owned()
+    pub fn state_dir(&self) -> PathBuf {
+        self.state_dir.as_ref().to_owned()
+    }
+
+    pub fn log_dir(&self) -> PathBuf {
+        self.log_dir.as_ref().to_owned()
     }
 
     pub fn is_running_path(&self) -> PathBuf {
-        self.base_dir().append("daemon_is_running.lock")
+        self.state_dir().append("daemon_is_running.lock")
     }
 
     // Use a separate file since we need to lock this independently of
     // is_running.
     pub fn pid_path(&self) -> PathBuf {
-        self.base_dir().append("pid")
-    }
-
-    pub fn log_dir(&self) -> PathBuf {
-        let mut path: PathBuf = self.base_dir();
-        path.push("logs");
-        path
+        self.state_dir().append("pid")
     }
 
     pub fn current_log_path(&self) -> PathBuf {
@@ -353,7 +353,7 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
             Ok(lock) => lock,
             Err(e) => match e {
                 FileLockError::AlreadyLocked => {
-                    return Err(DaemonError::AlreadyRunning(self.base_dir()))
+                    return Err(DaemonError::AlreadyRunning(self.log_dir()))
                 }
                 _ => {
                     return Err(DaemonError::LockError {
