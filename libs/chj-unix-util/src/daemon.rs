@@ -81,7 +81,7 @@ impl FromStr for DaemonMode {
     }
 }
 
-pub struct Daemon<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> {
+pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
     /// Where the lock/pid files and logs dir should be written to.
     pub base_dir: P,
     /// The code to run; the daemon ends/stops when this function
@@ -139,7 +139,7 @@ pub enum DaemonError {
     Anyhow(#[from] anyhow::Error),
 }
 
-impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
+impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
     pub fn create_dirs(&self) -> Result<(), PathIOError> {
         // XX add to file_util, including PathIOError perhaps?
         let create = |path| match create_dir(&path) {
@@ -327,8 +327,9 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
     }
 
     /// Note: must be run while there are no running threads, panics
-    /// otherwise!
-    pub fn start(self) -> Result<(), DaemonError> {
+    /// otherwise! Returns the result in the child, but nothing in the
+    /// parent.
+    pub fn start(self) -> Result<Option<R>, DaemonError> {
         // 1. get exclusive lock on pid file; 2. get exclusive
         // `is_running` lock; 3. empty the pid file ASAP to invalidate
         // the stale pid (sigh, there's still a race here). 4. fork;
@@ -387,9 +388,9 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
             is_running_lock.leak();
             pid_lock.leak();
 
-            Ok(())
+            Ok(None)
         } else {
-            match (|| -> anyhow::Result<()> {
+            match (|| -> anyhow::Result<Option<R>> {
                 // Start a new session, so that signals can be sent to
                 // the whole group and will kill child processes, too.
                 let session_pid = setsid().map_err(|error| DaemonError::ErrnoError {
@@ -416,7 +417,7 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
 
                     eprintln!("daemon started");
 
-                    (self.run)()?;
+                    Ok(Some((self.run)()?))
                 } else {
                     // In the logging process.
 
@@ -489,12 +490,13 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
                         }
                     }
                     logfh.flush()?; // well, not buffering anyway.
+                    Ok(None)
                 }
-                Ok(())
             })() {
-                Ok(()) => {
+                Ok(None) => {
                     std::process::exit(0);
                 }
+                Ok(Some(res)) => Ok(Some(res)),
                 Err(e) => {
                     let _ = writeln!(&mut stderr(), "daemon terminated by error: {e:#}");
                     std::process::exit(1);
@@ -516,30 +518,28 @@ impl<P: AsRef<Path>, F: FnOnce() -> anyhow::Result<()>> Daemon<P, F> {
 
     /// Note: must be run while there are no running threads, panics
     /// otherwise!
-    pub fn execute(self, mode: DaemonMode) -> anyhow::Result<()> {
+    pub fn execute(self, mode: DaemonMode) -> anyhow::Result<Option<R>> {
         match mode {
-            DaemonMode::Run => {
-                (self.run)()?;
-            }
-            DaemonMode::Start => {
-                self.start()?;
-            }
+            DaemonMode::Run => Ok(Some((self.run)()?)),
+            DaemonMode::Start => Ok(self.start()?),
             DaemonMode::StartIfNotRunning => match self.start() {
-                Ok(()) => (),
-                Err(DaemonError::AlreadyRunning(_)) => (),
+                Ok(r) => Ok(r),
+                Err(DaemonError::AlreadyRunning(_)) => Ok(None),
                 Err(e) => Err(e)?,
             },
             DaemonMode::Stop => {
                 self.stop()?;
+                Ok(None)
             }
             DaemonMode::Restart => {
                 self.stop()?;
                 self.start()?;
+                Ok(None)
             }
             DaemonMode::Status => {
                 self.print_status()?;
+                Ok(None)
             }
         }
-        Ok(())
     }
 }

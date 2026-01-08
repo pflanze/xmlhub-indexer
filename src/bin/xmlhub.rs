@@ -1804,7 +1804,7 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             max_log_files: max_log_files.unwrap_or(MAX_LOG_FILES_DEFAULT),
             run: {
                 let quietness = quietness.clone();
-                move || {
+                move || -> Result<()> {
                     let _main_lock = get_main_lock()?;
 
                     // Daemon: repeatedly carry out the work by starting a new
