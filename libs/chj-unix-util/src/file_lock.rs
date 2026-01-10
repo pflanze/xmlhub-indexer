@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, os::unix::fs::OpenOptionsExt, path::Path};
 
 use nix::errno::Errno;
 use ouroboros::self_referencing;
@@ -37,7 +37,13 @@ pub fn file_lock_nonblocking<P: AsRef<Path>>(
     path: P,
     exclusive: bool,
 ) -> Result<FileLock, FileLockError> {
-    let file = File::create(path.as_ref())?;
+    let mut opts = File::options();
+    opts.read(true);
+    opts.write(true);
+    opts.truncate(false);
+    opts.create(true);
+    opts.mode(0o600); // XX how to make portable?
+    let file = opts.open(path.as_ref())?;
     FileLock::try_new(file, |file| {
         if let Some(flock_guard) = easy_flock_nonblocking(file, exclusive)? {
             Ok(flock_guard)
