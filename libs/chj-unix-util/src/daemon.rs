@@ -67,9 +67,10 @@ pub enum DaemonMode {
 }
 
 const FROM_STR_CASES: &[(&str, DaemonMode)] = {
-    const fn opts(force: bool) -> StopOpts {
+    const fn opts(hard: bool, soft: bool) -> StopOpts {
         StopOpts {
-            force,
+            hard,
+            soft,
             wait: false,
             timeout_before_sigkill: 30,
         }
@@ -93,12 +94,15 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
         ("run", DaemonMode::Run),
         ("start", DaemonMode::Start),
         ("up", DaemonMode::Start),
-        ("stop", DaemonMode::Stop(opts(false))),
-        ("force-stop", DaemonMode::Stop(opts(true))),
-        ("down", DaemonMode::Stop(opts(false))),
-        ("force-down", DaemonMode::Stop(opts(true))),
-        ("restart", DaemonMode::Restart(opts(false))),
-        ("force-restart", DaemonMode::Restart(opts(true))),
+        ("stop", DaemonMode::Stop(opts(false, false))),
+        ("hard-stop", DaemonMode::Stop(opts(true, false))),
+        ("soft-stop", DaemonMode::Stop(opts(false, true))),
+        ("down", DaemonMode::Stop(opts(false, false))),
+        ("hard-down", DaemonMode::Stop(opts(true, false))),
+        ("soft-down", DaemonMode::Stop(opts(false, true))),
+        ("restart", DaemonMode::Restart(opts(false, false))),
+        ("hard-restart", DaemonMode::Restart(opts(true, false))),
+        ("soft-restart", DaemonMode::Restart(opts(false, true))),
         ("status", DaemonMode::Status),
         ("STOP", DaemonMode::STOP),
         ("CONT", DaemonMode::CONT),
@@ -109,8 +113,8 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
 fn errmsg() -> String {
     // Cannot do join() since not using itertools in this crate.
     let mut s = String::from(
-        "('start' and 'up', and 'stop' and 'down' and their force variants are \
-         aliases; actions with all-uppercase names are sending the signals \
+        "('start' and 'up', and 'stop' and 'down' (and their hard and soft variants) \
+         are aliases; actions with all-uppercase names are sending the signals \
          with the same names): ",
     );
     for (k, _m) in FROM_STR_CASES {
@@ -165,12 +169,10 @@ pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     pub state_dir: Arc<Path>,
     /// Where the log files should be written to (is created if missing).
     pub log_dir: Arc<Path>,
-    /// The code to run; the daemon[XXX is meant to, cleanup]
-    /// ends/stops when this function returns. The function should
-    /// periodically call `want()` on its argument and stop processing
-    /// when it doesn't give `DaemonWant::Up` anymore. XXX it should
-    /// also re-exec itself if it is Restart? Or will the library do
-    /// that?.
+    /// The code to run; the daemon ends/stops when this function
+    /// returns. The function should periodically call `want()` on its
+    /// argument and stop processing when it doesn't give
+    /// `DaemonWant::Up`.
     pub run: F,
 }
 
@@ -314,12 +316,23 @@ impl ExecutionResult {
 
 #[derive(Debug, Clone, Copy, clap::Args)]
 pub struct StopOpts {
-    /// By default, 'stop' stops the daemon gracefully (signals it the
-    /// wish for termination, but the daemon may delay the exit for a
-    /// long time or ignore it completely). This stops the daemon via
-    /// signals instead, first SIGINT, then SIGKILL.
+    /// This stops the daemon via signals, first SIGINT, then
+    /// SIGKILL. Restarting in this mode takes the new enviroment from
+    /// the issuer since it works by forking a new daemon.  (--hard
+    /// and --soft are opposites; the default depends on the
+    /// application.)
     #[clap(short, long)]
-    pub force: bool,
+    pub hard: bool,
+
+    /// This stops the daemon by communicating a wish for termination
+    /// via shared memory. The daemon may delay the reaction for a
+    /// long time. Restarting in this mode works by the daemon
+    /// re-executing itself, meaning it will not pick up environment
+    /// or command line argument changes. This action returns
+    /// immediately as it only stores the wish. (--hard and --soft are
+    /// opposites; the default depends on the application.)
+    #[clap(short, long)]
+    pub soft: bool,
 
     /// When doing graceful termination, by default the stop/restart
     /// actions do not wait for the daemon to carry it out. This
@@ -331,6 +344,22 @@ pub struct StopOpts {
     /// SIGKILL
     #[clap(short, long)]
     pub timeout_before_sigkill: u32,
+}
+
+impl StopOpts {
+    pub fn hard(&self, default_is_hard: bool) -> bool {
+        let Self {
+            hard,
+            soft,
+            wait: _,
+            timeout_before_sigkill: _,
+        } = self;
+        match (hard, soft) {
+            (false, false) | (true, true) => default_is_hard,
+            (true, false) => true,
+            (false, true) => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -501,9 +530,11 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         &self,
         want: DaemonWant,
         opts: StopOpts,
+        default_is_hard: bool,
     ) -> Result<StopReport, anyhow::Error> {
         let StopOpts {
-            force,
+            hard: _,
+            soft: _,
             wait,
             timeout_before_sigkill,
         } = opts;
@@ -522,19 +553,23 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         let mut crashed = false;
 
         if was_running {
-            if force {
+            if opts.hard(default_is_hard) {
                 if let Some(pid) = was_pid {
                     if self._send_signal(pid, Some(Signal::SIGINT))? {
                         sent_sigint = true;
                         let num_sleeps = timeout_before_sigkill * 5;
-                        for _ in 0..num_sleeps {
-                            sleep(Duration::from_millis(200));
-                            if !self._send_signal(pid, None)? {
-                                break;
+                        'outer: {
+                            for _ in 0..num_sleeps {
+                                sleep(Duration::from_millis(200));
+                                if !self._send_signal(pid, None)? {
+                                    break 'outer;
+                                }
                             }
+                            self._send_signal(pid, Some(Signal::SIGKILL))?;
+                            sent_sigkill = true;
                         }
-                        self._send_signal(pid, Some(Signal::SIGKILL))?;
-                        sent_sigkill = true;
+                        // Remove the pid
+                        daemon_state.store(want, None);
                     }
                 } else {
                     // DaemonIsRunningButHaveNoPid -- can reconstruct from report
@@ -751,7 +786,11 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
 
     /// Note: must be run while there are no running threads--panics
     /// otherwise!
-    pub fn execute(self, mode: DaemonMode) -> Result<ExecutionResult, DaemonError> {
+    pub fn execute(
+        self,
+        mode: DaemonMode,
+        default_is_hard: bool,
+    ) -> Result<ExecutionResult, DaemonError> {
         match mode {
             DaemonMode::Run => {
                 (self.run)(DaemonStateReader(InnerDaemonStateReader::None));
@@ -759,7 +798,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             }
             DaemonMode::Start => Ok(self.start()?),
             DaemonMode::Stop(opts) => {
-                let _report = self.stop_or_restartstop(DaemonWant::Down, opts)?;
+                let _report = self.stop_or_restartstop(DaemonWant::Down, opts, default_is_hard)?;
                 Ok(ExecutionResult::initiator())
             }
             DaemonMode::Restart(opts) => {
@@ -769,7 +808,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                     sent_sigint,
                     sent_sigkill,
                     crashed,
-                } = self.stop_or_restartstop(DaemonWant::Restart, opts)?;
+                } = self.stop_or_restartstop(DaemonWant::Restart, opts, default_is_hard)?;
 
                 if !was_running || sent_sigint || sent_sigkill || crashed {
                     self.start()
@@ -876,8 +915,7 @@ pub struct DaemonStateAccessor {
 pub enum DaemonWant {
     Down,
     Up,
-    /// Signals to the daemon that we want it to exit, but then be
-    /// started again (it must set the state to Up on exit XX).
+    /// Signals to the daemon that we want it to re-execute itself
     Restart,
 }
 

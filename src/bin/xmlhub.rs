@@ -1866,7 +1866,7 @@ fn build_command(
                 }
             },
         };
-        Ok(daemon.execute(daemon_mode)?)
+        Ok(daemon.execute(daemon_mode, true)?)
     } else {
         let _main_lock = get_main_lock()?;
         std::process::exit(build_index_once()?);
