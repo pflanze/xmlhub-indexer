@@ -1,8 +1,15 @@
-use std::{num::NonZeroU32, thread::sleep, time::Duration};
+use std::{
+    num::NonZeroU32,
+    sync::atomic::{AtomicBool, Ordering},
+    thread::sleep,
+    time::Duration,
+};
 
 use nix::sys::pthread::pthread_self;
 
 use crate::xorshift::Xorshift128plus;
+
+pub static DEBUG: AtomicBool = AtomicBool::new(false);
 
 /// Rerun `f` until it returns Ok, only sleeps after 100 attempts,
 /// panics after 200 attempts. Mostly useful for atomic
@@ -27,11 +34,13 @@ pub fn retry<R, E>(f: impl Fn() -> Result<R, E>) -> R {
             }
             let r = random.as_mut().expect("initialized above").get();
             sleep(Duration::from_micros(r & 16383));
-            eprintln!(
-                "note: retrying with {tries_left} tries left via `retry` at {}:{}",
-                file!(),
-                line!()
-            );
+            if true || DEBUG.load(Ordering::Relaxed) {
+                eprintln!(
+                    "note: retrying with {tries_left} tries left via `retry` at {}:{}",
+                    file!(),
+                    line!()
+                );
+            }
         }
     }
 }
@@ -55,6 +64,8 @@ pub fn retry_n<R, E>(
                 sleep(Duration::from_millis(sleep_ms));
             }
         }
-        eprintln!("note: retrying via `retry_n` at {}:{}", file!(), line!());
+        if DEBUG.load(Ordering::Relaxed) {
+            eprintln!("note: retrying via `retry_n` at {}:{}", file!(), line!());
+        }
     }
 }
