@@ -15,7 +15,7 @@ use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
-    daemon::{Daemon, DaemonMode, DaemonOpts},
+    daemon::{Daemon, DaemonMode, DaemonOpts, DaemonStateReader},
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
 };
@@ -1771,22 +1771,22 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
     };
 
     if let Some(daemon_mode) = daemon {
-        let log_dir = (&daemon_base_dir).append("logs");
-        let state_dir = daemon_base_dir;
+        let log_dir = (&daemon_base_dir).append("logs").into();
+        let state_dir = daemon_base_dir.into();
         let daemon = Daemon {
             opts: daemon_opts,
             state_dir,
             log_dir,
             run: {
                 let quietness = quietness.clone();
-                move || -> Result<()> {
+                move |daemon_state_reader: DaemonStateReader| -> Result<()> {
                     let _main_lock = get_main_lock()?;
 
                     // Daemon: repeatedly carry out the work by starting a new
                     // child process to do it (so that the child crashing or being
                     // killed due to out of memory conditions does not stop the
                     // daemon).
-                    forking_loop(
+                    Ok(forking_loop(
                         LoopWithBackoff {
                             min_sleep_seconds,
                             max_sleep_seconds: MAX_SLEEP_SECONDS,
@@ -1849,7 +1849,9 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                             // `build_index`).
                             build_index_once().map(|_exit_code| ())
                         },
-                    )
+                        // When to exit
+                        || daemon_state_reader.want_exit(),
+                    ))
                 }
             },
         };

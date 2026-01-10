@@ -62,9 +62,14 @@ impl Default for LoopWithBackoff {
 }
 
 impl LoopWithBackoff {
-    /// Loop forever running `job` then sleeping at least `min_seconds`,
-    /// if `job` returns an `Err`, increases the sleep time
-    pub fn run<E: Display>(&self, mut job: impl FnMut() -> Result<(), E>) -> ! {
+    /// Loop running `job` then sleeping at least `min_seconds`, if
+    /// `job` returns an `Err`, increases the sleep time. Runs `until`
+    /// after every run, and returns if it returns true.
+    pub fn run<E: Display>(
+        &self,
+        mut job: impl FnMut() -> Result<(), E>,
+        until: impl Fn() -> bool,
+    ) {
         let mut sleep_seconds = self.min_sleep_seconds;
         let mut iteration_count: u64 = 0;
         let mut last_lai_time: Option<SystemTime> = None;
@@ -120,6 +125,9 @@ impl LoopWithBackoff {
                 }
             }
             sleep(Duration::from_secs_f64(sleep_seconds));
+            if until() {
+                return;
+            }
             iteration_count += 1;
         }
     }

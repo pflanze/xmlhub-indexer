@@ -1,15 +1,16 @@
 //! Infrastructure to run / start / stop a service as a daemon process
 //! (or process group).
 
-//! See [daemon](../docs/daemon.md) for some info.
+//! See [daemon](../docs/daemon.md) for more info.
 
 use std::{
     fs::{create_dir, remove_file, rename, File},
-    io::{stderr, stdout, BufRead, BufReader, ErrorKind, Read, Seek, Write},
-    num::ParseIntError,
+    io::{stderr, stdout, BufRead, BufReader, ErrorKind, Write},
+    num::{NonZeroU32, ParseIntError},
     os::{fd::FromRawFd, unix::prelude::MetadataExt},
     path::{Path, PathBuf},
     str::FromStr,
+    sync::{atomic::Ordering, Arc},
     thread::sleep,
     time::Duration,
 };
@@ -24,60 +25,89 @@ use nix::{
 
 use crate::{
     file_lock::{file_lock_nonblocking, FileLockError},
-    file_util::{open_append, open_rw},
-    unix::{easy_flock_blocking, easy_fork},
+    file_util::open_append,
+    polling_signals::{IPCAtomicError, IPCAtomicU64},
+    retry::{retry, retry_n},
+    unix::easy_fork,
 };
 
 #[derive(Debug, Clone, Copy, clap::Subcommand)]
 pub enum DaemonMode {
     /// Do not put into background, just run forever in the foreground.
     Run,
+
     /// Start daemon into background.
     Start,
-    /// Same as Start but silently do nothing if daemon is already
-    /// running.
-    StartIfNotRunning,
-    /// Stop existing daemon running in background (does not stop
-    /// daemons in `Run` mode, only those in `Start` mode).
-    Stop,
-    /// `Stop` (ignoring errors) then `Start`.
-    Restart,
-    /// Report if there is a daemon in `Start` or `Run` mode.
+
+    /// Stop daemon running in background (does not stop daemons in
+    /// `run` mode, only those in `start` mode). This subcommand has
+    /// options.
+    Stop(StopOpts),
+
+    /// `stop` (ignoring errors) then `start`. This subcommand has
+    /// options.
+    Restart(StopOpts),
+
+    /// Report if there is a daemon in `start` or `run` mode.
     Status,
 }
 
+const FROM_STR_CASES: &[(&str, DaemonMode)] = {
+    const fn opts(force: bool) -> StopOpts {
+        StopOpts {
+            force,
+            wait: false,
+            timeout_before_sigkill: 30,
+        }
+    }
+    {
+        use DaemonMode::*;
+        // reminder to adapt the code below when the enum changes
+        match DaemonMode::Run {
+            Run => (),
+            Start => (),
+            Stop(_) => (),
+            Restart(_) => (),
+            Status => (),
+        }
+    }
+
+    &[
+        ("run", DaemonMode::Run),
+        ("start", DaemonMode::Start),
+        ("stop", DaemonMode::Stop(opts(false))),
+        ("force-stop", DaemonMode::Stop(opts(true))),
+        ("restart", DaemonMode::Restart(opts(false))),
+        ("force-restart", DaemonMode::Restart(opts(true))),
+        ("status", DaemonMode::Status),
+    ]
+};
+
+fn errmsg() -> String {
+    // Cannot do join() since not using itertools in this crate.
+    let mut s = String::new();
+    for (k, _m) in FROM_STR_CASES {
+        use std::fmt::Write;
+        _ = write!(&mut s, "`{k}`, ");
+    }
+    s.truncate(s.len() - 2);
+    s
+}
+
 #[derive(thiserror::Error, Debug)]
-#[error(
-    "please give one of the strings `run`, `start`, `start-if-not-running`, \
-     `stop`, `restart` or `status`"
-)]
+#[error("please give one of the strings {}", errmsg())]
 pub struct DaemonModeError;
 
 impl FromStr for DaemonMode {
     type Err = DaemonModeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        {
-            // reminder to adapt the code below when the enum changes
-            match DaemonMode::Run {
-                Run => (),
-                Start => (),
-                Stop => (),
-                Restart => (),
-                Status => (),
-                StartIfNotRunning => (),
+        for (k, v) in FROM_STR_CASES {
+            if s == *k {
+                return Ok(v.clone());
             }
         }
-        use DaemonMode::*;
-        match s {
-            "run" => Ok(Run),
-            "start" => Ok(Start),
-            "start-if-not-running" => Ok(StartIfNotRunning),
-            "stop" => Ok(Stop),
-            "restart" => Ok(Restart),
-            "status" => Ok(Status),
-            _ => Err(DaemonModeError),
-        }
+        Err(DaemonModeError)
     }
 }
 
@@ -102,14 +132,18 @@ pub struct DaemonOpts {
     pub max_log_files: Option<u32>,
 }
 
-pub struct Daemon<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> {
+pub struct Daemon<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> {
     pub opts: DaemonOpts,
     /// Where the lock/pid files should be written to (is created if missing).
-    pub state_dir: P,
+    pub state_dir: Arc<Path>,
     /// Where the log files should be written to (is created if missing).
-    pub log_dir: P,
-    /// The code to run; the daemon ends/stops when this function
-    /// returns.
+    pub log_dir: Arc<Path>,
+    /// The code to run; the daemon[XXX is meant to, cleanup]
+    /// ends/stops when this function returns. The function should
+    /// periodically call `want()` on its argument and stop processing
+    /// when it doesn't give `DaemonWant::Up` anymore. XXX it should
+    /// also re-exec itself if it is Restart? Or will the library do
+    /// that?.
     pub run: F,
 }
 
@@ -127,19 +161,14 @@ pub enum InOutError {
 #[error("could not {what} at {path:?}: {error}")]
 pub struct PathIOError {
     what: &'static str,
-    path: PathBuf,
+    path: Arc<Path>,
     error: InOutError,
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum DaemonError {
-    #[error("service {0:?} is already running")]
-    AlreadyRunning(PathBuf),
-    #[error("can't lock file {is_running_path:?}: {error}")]
-    LockError {
-        is_running_path: PathBuf,
-        error: String,
-    },
+    #[error("can't lock file {lock_path:?}: {error}")]
+    LockError { lock_path: Arc<Path>, error: String },
     #[error("{context}: IO error: {error}")]
     IoError {
         context: &'static str,
@@ -151,48 +180,88 @@ pub enum DaemonError {
         error: nix::errno::Errno,
     },
     #[error("{0}")]
+    IPCAtomicError(#[from] IPCAtomicError),
+    #[error("{0}")]
     Anyhow(#[from] anyhow::Error),
 }
 
-impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
+#[derive(Debug, Clone, Copy, clap::Args)]
+pub struct StopOpts {
+    /// By default, 'stop' stops the daemon gracefully (signals it the
+    /// wish for termination, but the daemon may delay the exit for a
+    /// long time or ignore it completely). This stops the daemon via
+    /// signals instead, first SIGINT, then SIGKILL.
+    #[clap(short, long)]
+    pub force: bool,
+
+    /// When doing graceful termination, by default the stop/restart
+    /// actions do not wait for the daemon to carry it out. This
+    /// changes the behaviour to wait in that case, too.
+    #[clap(short, long)]
+    pub wait: bool,
+
+    /// The time in seconds after sending SIGINT before sending
+    /// SIGKILL
+    #[clap(short, long)]
+    pub timeout_before_sigkill: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct StopReport {
+    pub was_pid: Option<i32>,
+    pub was_running: bool,
+    pub sent_sigint: bool,
+    pub sent_sigkill: bool,
+    pub crashed: bool,
+}
+
+impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
     pub fn create_dirs(&self) -> Result<(), PathIOError> {
         // XX add to file_util, including PathIOError perhaps?
-        let create = |path| match create_dir(&path) {
+        let create = |path: &Arc<Path>| match create_dir(&path) {
             Ok(()) => Ok(()),
             Err(error) => match error.kind() {
                 ErrorKind::AlreadyExists => Ok(()),
                 _ => Err(PathIOError {
                     what: "create dir",
-                    path,
+                    path: path.clone(),
                     error: error.into(),
                 }),
             },
         };
-        create(self.state_dir())?;
-        create(self.log_dir())?;
+        create(&self.state_dir())?;
+        create(&self.log_dir())?;
         Ok(())
     }
 
-    pub fn state_dir(&self) -> PathBuf {
-        self.state_dir.as_ref().to_owned()
+    pub fn state_dir(&self) -> Arc<Path> {
+        self.state_dir.clone()
     }
 
-    pub fn log_dir(&self) -> PathBuf {
-        self.log_dir.as_ref().to_owned()
+    pub fn log_dir(&self) -> Arc<Path> {
+        self.log_dir.clone()
     }
 
-    pub fn is_running_path(&self) -> PathBuf {
-        self.state_dir().append("daemon_is_running.lock")
+    /// Path to a file that is used as a 8-byte mmap file, and for
+    /// flock. Protect this file from modification by other
+    /// parties--doing so can segfault the app!
+    pub fn daemon_state_path(&self) -> Arc<Path> {
+        self.state_dir().append("daemon_state.mmap").into()
     }
 
-    // Use a separate file since we need to lock this independently of
-    // is_running.
-    pub fn pid_path(&self) -> PathBuf {
-        self.state_dir().append("pid")
+    /// The same as `daemon_state_path`
+    pub fn lock_path(&self) -> Arc<Path> {
+        self.daemon_state_path()
     }
 
     pub fn current_log_path(&self) -> PathBuf {
         self.log_dir().append("current.log")
+    }
+
+    fn daemon_state(&self) -> anyhow::Result<DaemonStateAccessor> {
+        let daemon_state_path = self.daemon_state_path();
+        DaemonStateAccessor::open(daemon_state_path.clone())
+            .with_context(|| anyhow!("opening {daemon_state_path:?}"))
     }
 
     /// Rename the "current.log" file (if present) to "00001.log" or
@@ -235,44 +304,11 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
         Ok(())
     }
 
-    /// The pid file could be empty (it is being emptied while `start`
-    /// is holding a lock), but not when seeing `is_running` locked
-    /// (since that means that a process that wrote the pid is alive,
-    /// hence the pid must be there, and we don't get access to the
-    /// pid file lock before it's been written). If it *is* empty, an
-    /// error is returned.
-    pub fn read_pid(&self) -> Result<i32, PathIOError> {
-        let path = self.pid_path();
-        let mut file = File::open(&path).map_err(|e| PathIOError {
-            what: "open file",
-            path: path.clone(),
-            error: e.into(),
-        })?;
-        let mut lock = easy_flock_blocking(&mut file, false).map_err(|e| PathIOError {
-            what: "lock file",
-            path: path.clone(),
-            error: e.into(),
-        })?;
-        let mut buf = String::new();
-        lock.read_to_string(&mut buf).map_err(|e| PathIOError {
-            what: "read file",
-            path: path.clone(),
-            error: e.into(),
-        })?;
-        drop(lock);
-        buf.trim_end()
-            .parse()
-            .map_err(|e: ParseIntError| PathIOError {
-                what: "parse file",
-                path: path.clone(),
-                error: e.into(),
-            })
-        // Should we return the lock, too? Should kill be done
-        // while holding the lock?
-    }
-
+    /// Check via flock (sufficient, although the `DaemonState` should
+    /// also provide a pid in this case). Slightly costly as it
+    /// involves memory allocations and multiple syscalls.
     pub fn is_running(&self) -> Result<bool, anyhow::Error> {
-        let lock_path = self.is_running_path();
+        let lock_path = self.lock_path();
         // The daemon takes an exclusive lock; it's enough and
         // necessary to take a non-exclusive one here, so that
         // multiple testers don't find a lock by accident. XX test
@@ -280,7 +316,8 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
             Ok(lock) => {
                 // We only get the (non-exclusive) lock as side effect
                 // of our approach of testing for it being
-                // locked. Drop it right away.
+                // locked. Drop it right away to minimize the risk for
+                // a `start` action failing to get the exclusive lock.
                 drop(lock);
                 Ok(false)
             }
@@ -291,118 +328,187 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
         }
     }
 
-    // Giving up and just using anyhow here
-    pub fn stop(&self) -> Result<(), anyhow::Error> {
-        if self.is_running()? {
-            let pid: i32 = self.read_pid()?;
-            if pid <= 0 {
-                panic!("invalid pid {pid} is not > 0 in {:?}", self.pid_path());
-            }
-            let process_group_id: i32 = pid
-                .checked_neg()
-                .ok_or_else(|| anyhow!("pid {pid} can't be negated"))?;
-            let kill_group_with = |signal| {
-                match kill(Pid::from_raw(process_group_id), signal) {
-                    Ok(()) => true,
-                    Err(e) => match e {
-                        nix::errno::Errno::EPERM => {
-                            // Can't happen because there's "no way"
-                            // that between us checking is_running()
-                            // and reading the pid and signalling
-                            // another process group would be there
-                            // than ours.  XX except, what if a member
-                            // of the process group exec's a setuid
-                            // binary?
-                            panic!(
-                                "don't have permission to send signal to \
-                                 process group {process_group_id}"
-                            )
+    // (Giving up and just using anyhow here)
+    fn stop_or_restartstop(
+        &self,
+        want: DaemonWant,
+        opts: StopOpts,
+    ) -> Result<StopReport, anyhow::Error> {
+        let StopOpts {
+            force,
+            wait,
+            timeout_before_sigkill,
+        } = opts;
+
+        let daemon_state = self.daemon_state()?;
+        let (_old_want, was_pid) = daemon_state.read();
+
+        let was_running = self.is_running()?;
+
+        // Set the want even if not running: the want might have been
+        // Running from before a reboot.
+        let (_, old_state) = retry(|| daemon_state.store_want(want));
+
+        let mut sent_sigint = false;
+        let mut sent_sigkill = false;
+        let mut crashed = false;
+
+        if was_running {
+            if force {
+                if let Some(pid) = was_pid {
+                    let process_group_id: i32 = pid
+                        .checked_neg()
+                        .ok_or_else(|| anyhow!("pid {pid} can't be negated"))?;
+
+                    let kill_group_with = |signal| -> bool {
+                        match kill(Pid::from_raw(process_group_id), signal) {
+                            Ok(()) => true,
+                            Err(e) => match e {
+                                nix::errno::Errno::EPERM => {
+                                    // Can't happen because there's "no way"
+                                    // that between us checking is_running()
+                                    // and reading the pid and signalling
+                                    // another process group would be there
+                                    // than ours.  XX except, what if a member
+                                    // of the process group exec's a setuid
+                                    // binary?
+                                    panic!(
+                                        "don't have permission to send signal to \
+                                     process group {process_group_id}"
+                                    )
+                                }
+                                nix::errno::Errno::ESRCH => {
+                                    // Process does not exist
+                                    false
+                                }
+                                _ => unreachable!(),
+                            },
                         }
-                        nix::errno::Errno::ESRCH => {
-                            // Process does not exist
-                            false
+                    };
+
+                    if kill_group_with(Some(Signal::SIGINT)) {
+                        sent_sigint = true;
+                        let num_sleeps = timeout_before_sigkill * 5;
+                        for _ in 0..num_sleeps {
+                            sleep(Duration::from_millis(200));
+                            if !kill_group_with(None) {
+                                break;
+                            }
                         }
-                        _ => unreachable!(),
-                    },
+                        kill_group_with(Some(Signal::SIGKILL));
+                        sent_sigkill = true;
+                    }
+                } else {
+                    // DaemonIsRunningButHaveNoPid -- can reconstruct from report
                 }
-            };
-            if kill_group_with(Some(Signal::SIGINT)) {
-                for _ in 0..40 {
-                    sleep(Duration::from_millis(200));
-                    if !kill_group_with(None) {
-                        break;
+                // XX todo: write a "daemon stopped" message to log? From
+                // here?  Or ignore signals in logging child and log it on
+                // pipe close?
+            } else {
+                // Graceful stop or restart.
+                if wait {
+                    let mut i = 0;
+                    loop {
+                        sleep(Duration::from_millis(500));
+                        // Do not just check if pid is none (daemon
+                        // should be deleting pid as it goes down):
+                        // restart action just sets another pid. Wait,
+                        // actually does not change the pid if
+                        // implemented by daemon re-exec'ing itself!
+                        // But it will change a DaemonWant::Restart
+                        // into a DaemonWant::Up. Also if any other
+                        // actor changes the want we should stop,
+                        // too. Thus, stop on *any* change of daemon
+                        // state.
+                        if daemon_state.access.load() != old_state {
+                            break;
+                        }
+                        // Don't fully trust pid state changes
+                        // (e.g. daemon crashing instead of shutting
+                        // down cleanly), thus:
+                        if i % 20 == 0 {
+                            if !self.is_running()? {
+                                // Should actually never happen for
+                                // DaemonWant::Restart, right? Would
+                                // indicate a crash, hence:
+                                crashed = true;
+                                break;
+                            }
+                        }
+                        i += 1;
                     }
                 }
-                kill_group_with(Some(Signal::SIGKILL));
             }
-            // XX todo: write a "daemon stopped" message? From here?
-            // Or ignore signals in logging child and log it on pipe
-            // close?
         }
-        Ok(())
+        Ok(StopReport {
+            was_pid,
+            was_running,
+            sent_sigint,
+            sent_sigkill,
+            crashed,
+        })
     }
 
-    /// Note: must be run while there are no running threads, panics
-    /// otherwise! Returns the result in the child, but nothing in the
-    /// parent.
-    pub fn start(self) -> Result<Option<R>, DaemonError> {
-        // 1. get exclusive lock on pid file; 2. get exclusive
-        // `is_running` lock; 3. empty the pid file ASAP to invalidate
-        // the stale pid (sigh, there's still a race here). 4. fork;
-        // 5. in the child, write pid to it (that guarantees that when
-        // the child gets to run `run`, the pid is written, OK?), and
-        // let go of the pid lock. Readers are expected to check
-        // is_running, then lock pid (non-exclusively) and read it.
+    /// Note: must be run while there are no running threads,
+    /// otherwise panics! Returns the result of the `run` procedure in
+    /// the child, but nothing in the parent.
+    fn start(self) -> Result<Option<R>, DaemonError> {
+        let daemon_state = self.daemon_state()?;
+        let (current_want, current_pid) = daemon_state.read();
 
-        // 1. get exclusive lock on pid file, without modifying it yet
-        let pid_path = self.pid_path();
-        let mut pid_file = open_rw(&pid_path)?;
-        let mut pid_lock =
-            easy_flock_blocking(&mut pid_file, true).map_err(|error| DaemonError::ErrnoError {
-                context: "flock",
-                error,
-            })?;
+        // Try to get exclusive `is_running` lock. This can fail if
+        // unlucky and a concurrent process tests with the shared
+        // lock, thus retry.
+        let lock_path = self.lock_path();
+        let mut is_running_lock = {
+            // Retry less often if there is indication that the daemon
+            // is running as then failures are expected.
+            let attempts =
+                NonZeroU32::try_from(if current_want == DaemonWant::Up && current_pid.is_some() {
+                    3
+                } else {
+                    30
+                })
+                .expect("nonzero");
 
-        // 2. get exclusive `is_running` lock
-        let is_running_path = self.is_running_path();
-        let mut is_running_lock = match file_lock_nonblocking(&is_running_path, true) {
-            Ok(lock) => lock,
-            Err(e) => match e {
-                FileLockError::AlreadyLocked => {
-                    return Err(DaemonError::AlreadyRunning(self.log_dir()))
-                }
-                _ => {
-                    return Err(DaemonError::LockError {
-                        is_running_path,
-                        error: e.to_string(),
-                    })
-                }
-            },
+            match retry_n(attempts, 10, || file_lock_nonblocking(&lock_path, true)) {
+                Ok(lock) => lock,
+                Err(e) => match e {
+                    FileLockError::AlreadyLocked => {
+                        match current_want {
+                            DaemonWant::Down => {
+                                // Signal that we want it to again be
+                                // up; still have it effect the
+                                // restart that would have happened
+                                // anyway given more time.
+                                retry(|| daemon_state.store_want(DaemonWant::Restart));
+                            }
+                            DaemonWant::Up => (),
+                            DaemonWant::Restart => (),
+                        }
+                        // XX have a report as with stop?
+                        return Ok(None);
+                    }
+                    _ => {
+                        return Err(DaemonError::LockError {
+                            lock_path: lock_path.into(),
+                            error: e.to_string(),
+                        })
+                    }
+                },
+            }
         };
-        // 3. ASAP truncate the pid file (there is still a small race
-        // window here!)
-        pid_lock.set_len(0).map_err(|error| DaemonError::IoError {
-            context: "pid_lock.set_len",
-            error,
-        })?;
-        // Is this necessary?
-        pid_lock
-            .seek(std::io::SeekFrom::Start(0))
-            .map_err(|error| DaemonError::IoError {
-                context: "pid_lock.seek",
-                error,
-            })?;
 
-        // 4. fork
+        daemon_state.want_starting();
+
         if let Some(_pid) = easy_fork().map_err(|error| DaemonError::ErrnoError {
             context: "fork",
             error,
         })? {
             // The child is holding onto the locks; apparently flock
             // acts globally when on the same filehandle, so we have
-            // to disable the locks here.
+            // to disable the locks here in the parent.
             is_running_lock.leak();
-            pid_lock.leak();
 
             Ok(None)
         } else {
@@ -414,10 +520,9 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
                     error,
                 })?;
 
-                // 5. write the new pid / session group leader to the pid file
-                pid_lock.write_fmt(format_args!("{session_pid}\n"))?;
-                pid_lock.flush()?;
-                drop(pid_lock);
+                // Now write the new pid / session group leader to the
+                // state file
+                daemon_state.store(DaemonWant::Up, Some(session_pid.into()));
 
                 // Start logging process
                 let (logging_r, logging_w) = pipe()?;
@@ -433,7 +538,9 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
 
                     eprintln!("daemon started");
 
-                    Ok(Some((self.run)()?))
+                    Ok(Some((self.run)(DaemonStateReader(
+                        InnerDaemonStateReader::DaemonStateAccessor(&daemon_state),
+                    ))?))
                 } else {
                     // In the logging process.
 
@@ -522,40 +629,185 @@ impl<R, P: AsRef<Path>, F: FnOnce() -> anyhow::Result<R>> Daemon<R, P, F> {
     }
 
     pub fn print_status(&self) -> anyhow::Result<()> {
+        let daemon_state = self.daemon_state()?;
+        let is_running = self.is_running()?;
+        let (want, pid) = daemon_state.read();
         let mut out = stdout().lock();
-        let status = if self.is_running()? {
-            "running"
+        if is_running {
+            let pid_string;
+            let pid_str = match pid {
+                Some(pid) => {
+                    pid_string = pid.to_string();
+                    &pid_string
+                }
+                None => "?",
+            };
+            writeln!(&mut out, "running (pid: {pid_str}, want: {want:?})",)?;
         } else {
-            "stopped"
+            writeln!(&mut out, "stopped (want: {want:?})")?;
         };
-        writeln!(&mut out, "{status}")?;
         Ok(())
     }
 
-    /// Note: must be run while there are no running threads, panics
+    /// Note: must be run while there are no running threads--panics
     /// otherwise!
     pub fn execute(self, mode: DaemonMode) -> anyhow::Result<Option<R>> {
         match mode {
-            DaemonMode::Run => Ok(Some((self.run)()?)),
+            DaemonMode::Run => Ok(Some((self.run)(DaemonStateReader(
+                InnerDaemonStateReader::None,
+            ))?)),
             DaemonMode::Start => Ok(self.start()?),
-            DaemonMode::StartIfNotRunning => match self.start() {
-                Ok(r) => Ok(r),
-                Err(DaemonError::AlreadyRunning(_)) => Ok(None),
-                Err(e) => Err(e)?,
-            },
-            DaemonMode::Stop => {
-                self.stop()?;
+            DaemonMode::Stop(opts) => {
+                let _report = self.stop_or_restartstop(DaemonWant::Down, opts)?;
                 Ok(None)
             }
-            DaemonMode::Restart => {
-                self.stop()?;
-                self.start()?;
-                Ok(None)
+            DaemonMode::Restart(opts) => {
+                let StopReport {
+                    was_pid: _,
+                    was_running,
+                    sent_sigint,
+                    sent_sigkill,
+                    crashed,
+                } = self.stop_or_restartstop(DaemonWant::Restart, opts)?;
+
+                if !was_running || sent_sigint || sent_sigkill || crashed {
+                    Ok(self.start()?)
+                } else {
+                    Ok(None)
+                }
             }
             DaemonMode::Status => {
                 self.print_status()?;
                 Ok(None)
             }
+        }
+    }
+}
+
+pub struct DaemonStateAccessor {
+    path: Arc<Path>,
+    access: IPCAtomicU64,
+}
+
+/// What state we want the daemon to be in
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DaemonWant {
+    Down,
+    Up,
+    /// Signals to the daemon that we want it to exit, but then be
+    /// started again (it must set the state to Up on exit XX).
+    Restart,
+}
+
+// Operations for daemon state, keep private!
+impl DaemonWant {
+    /// From DaemonState's AtomicU64. Ignores the lower half of the
+    /// u64. Panics with `path` in the message for invalid values.
+    fn from_u64(want: u64, path: &Arc<Path>) -> Self {
+        let wantu32 = (want >> 32) as u32;
+        if wantu32 == b'd' as u32 {
+            DaemonWant::Down
+        } else if wantu32 == b'u' as u32 {
+            DaemonWant::Up
+        } else if wantu32 == b'r' as u32 {
+            DaemonWant::Restart
+        } else {
+            panic!(
+                "got invalid upper value {wantu32} as DaemonWant value \
+                 from DaemonState file {path:?}"
+            )
+        }
+    }
+
+    /// Ready to be used in DaemonState AtomicU64
+    fn to_u64(self) -> u64 {
+        let want = match self {
+            DaemonWant::Down => b'd',
+            DaemonWant::Up => b'u',
+            DaemonWant::Restart => b'r',
+        } as u32;
+        (want as u64) << 32
+    }
+}
+
+impl DaemonStateAccessor {
+    pub fn open(path: Arc<Path>) -> Result<Self, IPCAtomicError> {
+        let access = IPCAtomicU64::open(&path, (b'd' as u64) << 32)?;
+        Ok(Self { path, access })
+    }
+
+    /// The second result is the pid if set. A pid present does not
+    /// imply that the daemon is up--have to also check flock.
+    pub fn read(&self) -> (DaemonWant, Option<i32>) {
+        let v: u64 = self.access.load();
+        let lower: u32 = v as u32;
+        let pid = lower as i32;
+        let pid = if pid == 0 { None } else { Some(pid) };
+
+        let want = DaemonWant::from_u64(v, &self.path);
+        (want, pid)
+    }
+
+    pub fn want(&self) -> DaemonWant {
+        self.read().0
+    }
+
+    fn store(&self, want: DaemonWant, pid: Option<i32>) {
+        let pid: u32 = pid.unwrap_or(0) as u32;
+        let want = match want {
+            DaemonWant::Down => b'd',
+            DaemonWant::Up => b'u',
+            DaemonWant::Restart => b'r',
+        } as u32;
+        let val = ((want as u64) << 32) + (pid as u64);
+        self.access.store(val);
+    }
+
+    /// Change want while keeping pid field value. Returns the (old,
+    /// new) value on success, or the newly attempted store in the
+    /// error case, which means some change happened in the mean time,
+    /// you could retry but may want to retry on a higher level
+    /// instead.
+    fn store_want(&self, want: DaemonWant) -> Result<(u64, u64), u64> {
+        let wantu64 = want.to_u64();
+        let atomic = self.access.atomic();
+        let ordering = Ordering::SeqCst;
+
+        let old = atomic.load(ordering);
+        let new = (old & (u32::MAX as u64)) | wantu64;
+        let got = atomic.compare_exchange(old, new, ordering, ordering)?;
+        assert_eq!(got, old); // just testing my understanding--always guaranteed, right?
+        Ok((old, new))
+    }
+
+    pub fn want_starting(&self) {
+        self.store(DaemonWant::Up, None);
+    }
+}
+
+enum InnerDaemonStateReader<'t> {
+    DaemonStateAccessor(&'t DaemonStateAccessor),
+    None,
+}
+
+pub struct DaemonStateReader<'t>(InnerDaemonStateReader<'t>);
+
+impl<'t> DaemonStateReader<'t> {
+    pub fn want(&self) -> DaemonWant {
+        match self.0 {
+            InnerDaemonStateReader::DaemonStateAccessor(daemon_state_accessor) => {
+                daemon_state_accessor.want()
+            }
+            InnerDaemonStateReader::None => DaemonWant::Up,
+        }
+    }
+
+    /// Whether the daemon should exit due to wanted Stop or Restart.
+    pub fn want_exit(&self) -> bool {
+        match self.want() {
+            DaemonWant::Down => true,
+            DaemonWant::Up => false,
+            DaemonWant::Restart => true,
         }
     }
 }
