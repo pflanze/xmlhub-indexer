@@ -5,3 +5,4 @@ pub mod file_util;
 pub mod forking_loop;
 pub mod polling_signals;
 pub mod unix;
+pub mod xorshift;
