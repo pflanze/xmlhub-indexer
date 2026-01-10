@@ -118,7 +118,7 @@ const DAEMON_ACTIVITY_LOG_INTERVAL_SECONDS: u64 = 120;
 /// bytes. Much is needed as the HtmlAllocator regions pre-allocate a
 /// lot of virtual memory even if it is never needed. There are no RSS
 /// resource limits in Linux (except via cgroups in some cases).
-const AS_BYTES_LIMIT_IN_WORKER_CHILD: u64 = 3 * 1024 * 1024 * 1024;
+const AS_BYTES_LIMIT_IN_WORKER_CHILD: u64 = 6 * 1024 * 1024 * 1024;
 
 /// Limit on CPU time, for the soft limit (a hard limit is set to 1
 /// second higher than this value).
