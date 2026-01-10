@@ -75,8 +75,11 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
     &[
         ("run", DaemonMode::Run),
         ("start", DaemonMode::Start),
+        ("up", DaemonMode::Start),
         ("stop", DaemonMode::Stop(opts(false))),
         ("force-stop", DaemonMode::Stop(opts(true))),
+        ("down", DaemonMode::Stop(opts(false))),
+        ("force-down", DaemonMode::Stop(opts(true))),
         ("restart", DaemonMode::Restart(opts(false))),
         ("force-restart", DaemonMode::Restart(opts(true))),
         ("status", DaemonMode::Status),
@@ -85,7 +88,9 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
 
 fn errmsg() -> String {
     // Cannot do join() since not using itertools in this crate.
-    let mut s = String::new();
+    let mut s = String::from(
+        "('start' and 'up', and 'stop' and 'down' and their force variants are aliases): ",
+    );
     for (k, _m) in FROM_STR_CASES {
         use std::fmt::Write;
         _ = write!(&mut s, "`{k}`, ");
