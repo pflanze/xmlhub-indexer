@@ -4,6 +4,7 @@ pub mod file_lock;
 pub mod file_util;
 pub mod forking_loop;
 pub mod polling_signals;
+pub mod re_exec;
 pub mod retry;
 pub mod unix;
 pub mod xorshift;
