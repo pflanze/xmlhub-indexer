@@ -19,7 +19,10 @@ use anyhow::{anyhow, bail, Context};
 use chrono::{Local, Utc};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{
+        kill,
+        Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
+    },
     unistd::{close, dup2, pipe, setsid, Pid},
 };
 
@@ -50,6 +53,15 @@ pub enum DaemonMode {
 
     /// Report if there is a daemon in `start` or `run` mode.
     Status,
+
+    /// Send a STOP signal to (i.e. suspend) the daemon.
+    STOP,
+
+    /// Send a CONT signal to (i.e. continue) the daemon.
+    CONT,
+
+    /// Send a KILL signal to (i.e. terminate right away) the daemon.
+    KILL,
 }
 
 const FROM_STR_CASES: &[(&str, DaemonMode)] = {
@@ -69,6 +81,9 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
             Stop(_) => (),
             Restart(_) => (),
             Status => (),
+            STOP => (),
+            CONT => (),
+            KILL => (),
         }
     }
 
@@ -83,13 +98,18 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
         ("restart", DaemonMode::Restart(opts(false))),
         ("force-restart", DaemonMode::Restart(opts(true))),
         ("status", DaemonMode::Status),
+        ("STOP", DaemonMode::STOP),
+        ("CONT", DaemonMode::CONT),
+        ("KILL", DaemonMode::KILL),
     ]
 };
 
 fn errmsg() -> String {
     // Cannot do join() since not using itertools in this crate.
     let mut s = String::from(
-        "('start' and 'up', and 'stop' and 'down' and their force variants are aliases): ",
+        "('start' and 'up', and 'stop' and 'down' and their force variants are \
+         aliases; actions with all-uppercase names are sending the signals \
+         with the same names): ",
     );
     for (k, _m) in FROM_STR_CASES {
         use std::fmt::Write;
@@ -333,6 +353,47 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
         }
     }
 
+    fn _send_signal(&self, pid: i32, signal: Option<Signal>) -> anyhow::Result<bool> {
+        let process_group_id: i32 = pid
+            .checked_neg()
+            .ok_or_else(|| anyhow!("pid {pid} can't be negated"))?;
+
+        match kill(Pid::from_raw(process_group_id), signal) {
+            Ok(()) => Ok(true),
+            Err(e) => match e {
+                nix::errno::Errno::EPERM => {
+                    // Can't happen because there's "no way"
+                    // that between us checking is_running()
+                    // and reading the pid and signalling
+                    // another process group would be there
+                    // than ours.  XX except, what if a member
+                    // of the process group exec's a setuid
+                    // binary?
+                    panic!(
+                        "don't have permission to send signal to \
+                                     process group {process_group_id}"
+                    )
+                }
+                nix::errno::Errno::ESRCH => {
+                    // Process does not exist
+                    Ok(false)
+                }
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    pub fn send_signal(&self, signal: Option<Signal>) -> anyhow::Result<bool> {
+        let daemon_state = self.daemon_state()?;
+        let (_old_want, was_pid) = daemon_state.read();
+        if let Some(pid) = was_pid {
+            retry(|| daemon_state.store_want(DaemonWant::Down));
+            self._send_signal(pid, signal)
+        } else {
+            Ok(false)
+        }
+    }
+
     // (Giving up and just using anyhow here)
     fn stop_or_restartstop(
         &self,
@@ -361,46 +422,16 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
         if was_running {
             if force {
                 if let Some(pid) = was_pid {
-                    let process_group_id: i32 = pid
-                        .checked_neg()
-                        .ok_or_else(|| anyhow!("pid {pid} can't be negated"))?;
-
-                    let kill_group_with = |signal| -> bool {
-                        match kill(Pid::from_raw(process_group_id), signal) {
-                            Ok(()) => true,
-                            Err(e) => match e {
-                                nix::errno::Errno::EPERM => {
-                                    // Can't happen because there's "no way"
-                                    // that between us checking is_running()
-                                    // and reading the pid and signalling
-                                    // another process group would be there
-                                    // than ours.  XX except, what if a member
-                                    // of the process group exec's a setuid
-                                    // binary?
-                                    panic!(
-                                        "don't have permission to send signal to \
-                                     process group {process_group_id}"
-                                    )
-                                }
-                                nix::errno::Errno::ESRCH => {
-                                    // Process does not exist
-                                    false
-                                }
-                                _ => unreachable!(),
-                            },
-                        }
-                    };
-
-                    if kill_group_with(Some(Signal::SIGINT)) {
+                    if self._send_signal(pid, Some(Signal::SIGINT))? {
                         sent_sigint = true;
                         let num_sleeps = timeout_before_sigkill * 5;
                         for _ in 0..num_sleeps {
                             sleep(Duration::from_millis(200));
-                            if !kill_group_with(None) {
+                            if !self._send_signal(pid, None)? {
                                 break;
                             }
                         }
-                        kill_group_with(Some(Signal::SIGKILL));
+                        self._send_signal(pid, Some(Signal::SIGKILL))?;
                         sent_sigkill = true;
                     }
                 } else {
@@ -683,6 +714,18 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
             }
             DaemonMode::Status => {
                 self.print_status()?;
+                Ok(None)
+            }
+            DaemonMode::STOP => {
+                self.send_signal(Some(SIGSTOP))?;
+                Ok(None)
+            }
+            DaemonMode::CONT => {
+                self.send_signal(Some(SIGCONT))?;
+                Ok(None)
+            }
+            DaemonMode::KILL => {
+                self.send_signal(Some(SIGKILL))?;
                 Ok(None)
             }
         }
