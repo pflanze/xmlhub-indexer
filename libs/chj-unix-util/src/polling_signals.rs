@@ -35,22 +35,18 @@ impl IPCAtomicU64 {
         let mut file = opts.open(path)?;
         let m = file.metadata()?;
         let l = m.len();
-        const PSALEN: u64 = size_of::<PollingSignalsAtomic>() as u64;
+        const PSA_SIZE: usize = size_of::<PollingSignalsAtomic>();
+        const PSA_LEN: u64 = PSA_SIZE as u64;
         match l {
             0 => {
                 let a = PollingSignalsAtomic::new(initial_value);
-                let b: &[u8; size_of::<PollingSignalsAtomic>()] = unsafe { transmute(&a) };
+                let b: &[u8; PSA_SIZE] = unsafe { transmute(&a) };
                 file.write_all(b)?;
             }
-            PSALEN => (),
+            PSA_LEN => (),
             _ => Err(IPCAtomicError::InvalidFileContentsLength(l))?,
         }
-        let mmap = unsafe {
-            MmapOptions::new()
-                .len(size_of::<PollingSignalsAtomic>())
-                .map(&file)?
-                .make_mut()?
-        };
+        let mmap = unsafe { MmapOptions::new().len(PSA_SIZE).map(&file)?.make_mut()? };
         Ok(Self { mmap })
     }
 
