@@ -19,6 +19,7 @@ use anyhow::{anyhow, bail, Context};
 use chrono::{Local, Utc};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
+    libc::getsid,
     sys::signal::{
         kill,
         Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
@@ -30,6 +31,7 @@ use crate::{
     file_lock::{file_lock_nonblocking, FileLockError},
     file_util::open_append,
     polling_signals::{IPCAtomicError, IPCAtomicU64},
+    re_exec::re_exec,
     retry::{retry, retry_n},
     unix::easy_fork,
 };
@@ -157,7 +159,7 @@ pub struct DaemonOpts {
     pub max_log_files: Option<u32>,
 }
 
-pub struct Daemon<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> {
+pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     pub opts: DaemonOpts,
     /// Where the lock/pid files should be written to (is created if missing).
     pub state_dir: Arc<Path>,
@@ -210,6 +212,106 @@ pub enum DaemonError {
     Anyhow(#[from] anyhow::Error),
 }
 
+pub struct DaemonResult {
+    daemon_state: DaemonStateAccessor,
+}
+
+impl DaemonResult {
+    pub fn daemon_cleanup(self) {
+        let DaemonResult { daemon_state } = self;
+        let (want, old_pid) = daemon_state.read();
+        // Should not need to change the pid, right?
+        let current_sid = unsafe {
+            // There's actually no safety issue with getside?
+            getsid(0)
+        };
+        if Some(current_sid) != old_pid {
+            eprintln!(
+                "warning on stop or restart: our session-id is {current_sid}, but \
+                 daemon state has {old_pid:?}. Overwriting it."
+            );
+        }
+        match want {
+            DaemonWant::Down => {
+                daemon_state.store(DaemonWant::Down, None);
+            }
+            DaemonWant::Up | DaemonWant::Restart => {
+                daemon_state.store(DaemonWant::Up, Some(current_sid));
+                // (Ah, the new instance will overwrite daemon_state
+                // again, with a new sid.)
+                let err = re_exec();
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+enum _ExecutionResult {
+    /// In the parent process that started the daemon: no value
+    Initiator,
+    /// In the daemon child: context for handling exiting/restarts
+    /// during shutdown. Pass up to the main function, call
+    /// `daemon_cleanup`.
+    Daemon(DaemonResult),
+    /// Daemon-less `Run` result. No need to execute any restarts or
+    /// change any daemon state.
+    Run,
+}
+
+struct Bomb(bool);
+impl Drop for Bomb {
+    fn drop(&mut self) {
+        if self.0 {
+            panic!("`ExecutionResult`s need to be passed to their `daemon_cleanup` method");
+        }
+    }
+}
+
+#[must_use]
+pub struct ExecutionResult(_ExecutionResult, Bomb);
+
+impl ExecutionResult {
+    fn initiator() -> Self {
+        Self(_ExecutionResult::Initiator, Bomb(true))
+    }
+
+    fn run() -> Self {
+        Self(_ExecutionResult::Run, Bomb(true))
+    }
+
+    fn daemon(r: DaemonResult) -> Self {
+        Self(_ExecutionResult::Daemon(r), Bomb(true))
+    }
+
+    /// If need to know if in the daemon, e.g. to only conditionally return to `main`
+    pub fn is_daemon(&self) -> bool {
+        match &self.0 {
+            _ExecutionResult::Initiator => false,
+            _ExecutionResult::Daemon(_) => true,
+            _ExecutionResult::Run => false,
+        }
+    }
+
+    /// Call this in the `main` function, after everything in the app
+    /// has been cleaned up. If this is in the daemon child, it will
+    /// re-exec the daemon binary if this was a restart
+    /// action. Otherwise exits, indicating whether this is a daemon
+    /// context (same as `is_daemon`).
+    pub fn daemon_cleanup(self) -> bool {
+        let Self(er, mut bomb) = self;
+        bomb.0 = false;
+        match er {
+            _ExecutionResult::Initiator => false,
+            _ExecutionResult::Daemon(daemon_result) => {
+                daemon_result.daemon_cleanup();
+                true
+            }
+            _ExecutionResult::Run => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, clap::Args)]
 pub struct StopOpts {
     /// By default, 'stop' stops the daemon gracefully (signals it the
@@ -240,7 +342,7 @@ pub struct StopReport {
     pub crashed: bool,
 }
 
-impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
+impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
     pub fn create_dirs(&self) -> Result<(), PathIOError> {
         // XX add to file_util, including PathIOError perhaps?
         let create = |path: &Arc<Path>| match create_dir(&path) {
@@ -488,7 +590,7 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
     /// Note: must be run while there are no running threads,
     /// otherwise panics! Returns the result of the `run` procedure in
     /// the child, but nothing in the parent.
-    fn start(self) -> Result<Option<R>, DaemonError> {
+    fn start(self) -> Result<ExecutionResult, DaemonError> {
         let daemon_state = self.daemon_state()?;
         let (current_want, current_pid) = daemon_state.read();
 
@@ -523,7 +625,7 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
                             DaemonWant::Restart => (),
                         }
                         // XX have a report as with stop?
-                        return Ok(None);
+                        return Ok(ExecutionResult::initiator());
                     }
                     _ => {
                         return Err(DaemonError::LockError {
@@ -546,120 +648,85 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
             // to disable the locks here in the parent.
             is_running_lock.leak();
 
-            Ok(None)
+            Ok(ExecutionResult::initiator())
         } else {
-            match (|| -> anyhow::Result<Option<R>> {
-                // Start a new session, so that signals can be sent to
-                // the whole group and will kill child processes, too.
-                let session_pid = setsid().map_err(|error| DaemonError::ErrnoError {
-                    context: "setsid",
+            // Start a new session, so that signals can be sent to
+            // the whole group and will kill child processes, too.
+            let session_pid = setsid().map_err(|error| DaemonError::ErrnoError {
+                context: "setsid",
+                error,
+            })?;
+
+            // Now write the new pid / session group leader to the
+            // state file
+            daemon_state.store(DaemonWant::Up, Some(session_pid.into()));
+
+            // Start logging process
+            let (logging_r, logging_w) = pipe().map_err(|error| DaemonError::ErrnoError {
+                context: "pipe for logging",
+                error,
+            })?;
+            if let Some(_logging_pid) = easy_fork().map_err(|error| DaemonError::ErrnoError {
+                context: "forking the logger",
+                error,
+            })? {
+                // In the daemon process.
+
+                // Close the reading end of the pipe that we don't
+                // use, and redirect stdout and stderr into the
+                // pipe.
+                close(logging_r).map_err(|error| DaemonError::ErrnoError {
+                    context: "daemon: closing logging_r",
+                    error,
+                })?;
+                dup2(logging_w, 1).map_err(|error| DaemonError::ErrnoError {
+                    context: "daemon: dup to stdout",
+                    error,
+                })?;
+                dup2(logging_w, 2).map_err(|error| DaemonError::ErrnoError {
+                    context: "daemon: dup to stderr",
+                    error,
+                })?;
+                close(logging_w).map_err(|error| DaemonError::ErrnoError {
+                    context: "daemon: closing logging_w",
                     error,
                 })?;
 
-                // Now write the new pid / session group leader to the
-                // state file
-                daemon_state.store(DaemonWant::Up, Some(session_pid.into()));
+                eprintln!("daemon started");
 
-                // Start logging process
-                let (logging_r, logging_w) = pipe()?;
-                if let Some(_logging_pid) = easy_fork()? {
-                    // In the daemon process.
+                (self.run)(DaemonStateReader(
+                    InnerDaemonStateReader::DaemonStateAccessor(&daemon_state),
+                ));
 
-                    // Close the reading end of the pipe that we don't
-                    // use, and redirect stdout and stderr into the
-                    // pipe.
-                    close(logging_r)?;
-                    dup2(logging_w, 1)?;
-                    dup2(logging_w, 2)?;
+                Ok(ExecutionResult::daemon(DaemonResult { daemon_state }))
+            } else {
+                // In the logging process.
 
-                    eprintln!("daemon started");
+                // Never writing from this process, close so that
+                // we will detect when the daemon ends.
+                close(logging_w).map_err(|error| DaemonError::ErrnoError {
+                    context: "logger: closing logging_w",
+                    error,
+                })?;
 
-                    Ok(Some((self.run)(DaemonStateReader(
-                        InnerDaemonStateReader::DaemonStateAccessor(&daemon_state),
-                    ))?))
-                } else {
-                    // In the logging process.
+                // Also, close stdout + stderr as those might be the
+                // dup2 to another logger process, from before a
+                // re-exec.
+                _ = close(1);
+                _ = close(2);
 
-                    // Put us in a new session again, to prevent the
-                    // logging from being killed when the daemon is,
-                    // so that we get all output and can log when the
-                    // daemon goes away.
-                    let _logging_session_pid = setsid()?;
-
-                    // Never writing from this process, close so that
-                    // we will detect when the daemon ends.
-                    close(logging_w)?;
-
-                    // XX add a fall back to copying to stderr if
-                    // logging fails (which may also happen due to
-                    // disk full!)
-
-                    self.create_dirs()?;
-
-                    // (Instead of BufReader and read_line, just read
-                    // chunks? No, since the sending side doesn't
-                    // actually buffer ~at all by default!)
-                    let mut messagesfh = BufReader::new(unsafe {
-                        // Safe because we're careful not to mess up
-                        // with the file descriptors (we're not giving
-                        // access to `messagesfh` from outside this
-                        // function, and we're not calling `close` on
-                        // this fd in this process)
-                        File::from_raw_fd(logging_r)
-                    });
-
-                    let mut input_line = String::new();
-                    let mut output_line = Vec::new();
-
-                    let mut logfh = open_append(self.current_log_path())?;
-                    let mut total_written: u64 = logfh.metadata()?.size();
-                    loop {
-                        input_line.clear();
-                        output_line.clear();
-                        let nread = messagesfh.read_line(&mut input_line)?;
-                        let daemon_ended = nread == 0;
-                        if self.opts.local_time {
-                            write!(&mut output_line, "{}", Local::now())?;
-                        } else {
-                            write!(&mut output_line, "{}", Utc::now())?;
-                        };
-                        writeln!(
-                            &mut output_line,
-                            "\t{}",
-                            if daemon_ended {
-                                "daemon ended"
-                            } else {
-                                input_line.trim_end()
-                            }
-                        )?;
-
-                        logfh.write_all(&output_line)?;
-                        total_written += output_line.len() as u64;
-
-                        if daemon_ended {
-                            break;
-                        }
-
-                        if total_written >= self.opts.max_log_file_size {
-                            logfh.flush()?; // well, not buffering anyway
-                            drop(logfh);
-                            self.rotate_logs()?;
-                            logfh = open_append(self.current_log_path())?;
-                            total_written = 0;
-                        }
+                match self.handle_logging(logging_r) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        // Will fail because we closed stderr. XX have
+                        // some fail over logging location?
+                        _ = write!(
+                            &mut stderr(),
+                            "logger process: ending because of error: {e}"
+                        );
                     }
-                    logfh.flush()?; // well, not buffering anyway.
-                    Ok(None)
                 }
-            })() {
-                Ok(None) => {
-                    std::process::exit(0);
-                }
-                Ok(Some(res)) => Ok(Some(res)),
-                Err(e) => {
-                    let _ = writeln!(&mut stderr(), "daemon terminated by error: {e:#}");
-                    std::process::exit(1);
-                }
+                std::process::exit(0);
             }
         }
     }
@@ -668,34 +735,32 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
         let daemon_state = self.daemon_state()?;
         let is_running = self.is_running()?;
         let (want, pid) = daemon_state.read();
+        let is = if is_running { "running" } else { "stopped" };
         let mut out = stdout().lock();
-        if is_running {
-            let pid_string;
-            let pid_str = match pid {
-                Some(pid) => {
-                    pid_string = pid.to_string();
-                    &pid_string
-                }
-                None => "?",
-            };
-            writeln!(&mut out, "running (pid: {pid_str}, want: {want:?})",)?;
-        } else {
-            writeln!(&mut out, "stopped (want: {want:?})")?;
+        let pid_string;
+        let pid_str = match pid {
+            Some(pid) => {
+                pid_string = format!("pid: {pid}, ");
+                &pid_string
+            }
+            None => "",
         };
+        writeln!(&mut out, "{is} ({pid_str}want: {want:?})")?;
         Ok(())
     }
 
     /// Note: must be run while there are no running threads--panics
     /// otherwise!
-    pub fn execute(self, mode: DaemonMode) -> anyhow::Result<Option<R>> {
+    pub fn execute(self, mode: DaemonMode) -> Result<ExecutionResult, DaemonError> {
         match mode {
-            DaemonMode::Run => Ok(Some((self.run)(DaemonStateReader(
-                InnerDaemonStateReader::None,
-            ))?)),
+            DaemonMode::Run => {
+                (self.run)(DaemonStateReader(InnerDaemonStateReader::None));
+                Ok(ExecutionResult::run())
+            }
             DaemonMode::Start => Ok(self.start()?),
             DaemonMode::Stop(opts) => {
                 let _report = self.stop_or_restartstop(DaemonWant::Down, opts)?;
-                Ok(None)
+                Ok(ExecutionResult::initiator())
             }
             DaemonMode::Restart(opts) => {
                 let StopReport {
@@ -707,28 +772,97 @@ impl<R, F: FnOnce(DaemonStateReader) -> anyhow::Result<R>> Daemon<R, F> {
                 } = self.stop_or_restartstop(DaemonWant::Restart, opts)?;
 
                 if !was_running || sent_sigint || sent_sigkill || crashed {
-                    Ok(self.start()?)
+                    self.start()
                 } else {
-                    Ok(None)
+                    Ok(ExecutionResult::initiator())
                 }
             }
             DaemonMode::Status => {
                 self.print_status()?;
-                Ok(None)
+                Ok(ExecutionResult::initiator())
             }
             DaemonMode::STOP => {
                 self.send_signal(Some(SIGSTOP))?;
-                Ok(None)
+                Ok(ExecutionResult::initiator())
             }
             DaemonMode::CONT => {
                 self.send_signal(Some(SIGCONT))?;
-                Ok(None)
+                Ok(ExecutionResult::initiator())
             }
             DaemonMode::KILL => {
                 self.send_signal(Some(SIGKILL))?;
-                Ok(None)
+                Ok(ExecutionResult::initiator())
             }
         }
+    }
+
+    fn handle_logging(&self, logging_r: i32) -> anyhow::Result<()> {
+        // Put us in a new session again, to prevent the
+        // logging from being killed when the daemon is,
+        // so that we get all output and can log when the
+        // daemon goes away.
+        let _logging_session_pid = setsid()?;
+
+        // XX add a fall back to copying to stderr if
+        // logging fails (which may also happen due to
+        // disk full!)
+
+        self.create_dirs()?;
+
+        // (Instead of BufReader and read_line, just read
+        // chunks? No, since the sending side doesn't
+        // actually buffer ~at all by default!)
+        let mut messagesfh = BufReader::new(unsafe {
+            // Safe because we're careful not to mess up
+            // with the file descriptors (we're not giving
+            // access to `messagesfh` from outside this
+            // function, and we're not calling `close` on
+            // this fd in this process)
+            File::from_raw_fd(logging_r)
+        });
+
+        let mut input_line = String::new();
+        let mut output_line = Vec::new();
+
+        let mut logfh = open_append(self.current_log_path())?;
+        let mut total_written: u64 = logfh.metadata()?.size();
+        loop {
+            input_line.clear();
+            output_line.clear();
+            let nread = messagesfh.read_line(&mut input_line)?;
+            let daemon_ended = nread == 0;
+            if self.opts.local_time {
+                write!(&mut output_line, "{}", Local::now())?;
+            } else {
+                write!(&mut output_line, "{}", Utc::now())?;
+            };
+            writeln!(
+                &mut output_line,
+                "\t{}",
+                if daemon_ended {
+                    "daemon ended"
+                } else {
+                    input_line.trim_end()
+                }
+            )?;
+
+            logfh.write_all(&output_line)?;
+            total_written += output_line.len() as u64;
+
+            if daemon_ended {
+                break;
+            }
+
+            if total_written >= self.opts.max_log_file_size {
+                logfh.flush()?; // well, not buffering anyway
+                drop(logfh);
+                self.rotate_logs()?;
+                logfh = open_append(self.current_log_path())?;
+                total_written = 0;
+            }
+        }
+        logfh.flush()?; // well, not buffering anyway.
+        Ok(())
     }
 }
 

@@ -15,7 +15,7 @@ use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
-    daemon::{Daemon, DaemonMode, DaemonOpts, DaemonStateReader},
+    daemon::{Daemon, DaemonMode, DaemonOpts, DaemonStateReader, ExecutionResult},
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
 };
@@ -1675,7 +1675,10 @@ fn changelog_command(command_opts: ChangelogOpts) -> Result<()> {
 /// Execute a `build` command: prepare and run `build_index` in the
 /// requested mode (interactive, batch, daemon). (Never returns `Ok`
 /// but exits directly in the non-`Err` case. `!` is not stable yet.)
-fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts) -> Result<()> {
+fn build_command(
+    program_version: GitVersion<SemVersion>,
+    build_opts: BuildOpts,
+) -> Result<ExecutionResult> {
     let BuildOpts {
         dryness,
         verbosity,
@@ -1779,14 +1782,22 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
             log_dir,
             run: {
                 let quietness = quietness.clone();
-                move |daemon_state_reader: DaemonStateReader| -> Result<()> {
-                    let _main_lock = get_main_lock()?;
+                move |daemon_state_reader: DaemonStateReader| -> () {
+                    let _main_lock = match get_main_lock() {
+                        Ok(lock) => lock,
+                        Err(e) => {
+                            eprintln!(
+                                "daemon: terminating because of error getting main lock: {e}"
+                            );
+                            return;
+                        }
+                    };
 
                     // Daemon: repeatedly carry out the work by starting a new
                     // child process to do it (so that the child crashing or being
                     // killed due to out of memory conditions does not stop the
                     // daemon).
-                    Ok(forking_loop(
+                    forking_loop(
                         LoopWithBackoff {
                             min_sleep_seconds,
                             max_sleep_seconds: MAX_SLEEP_SECONDS,
@@ -1851,12 +1862,11 @@ fn build_command(program_version: GitVersion<SemVersion>, build_opts: BuildOpts)
                         },
                         // When to exit
                         || daemon_state_reader.want_exit(),
-                    ))
+                    )
                 }
             },
         };
-        daemon.execute(daemon_mode)?;
-        std::process::exit(0);
+        Ok(daemon.execute(daemon_mode)?)
     } else {
         let _main_lock = get_main_lock()?;
         std::process::exit(build_index_once()?);
@@ -2386,7 +2396,7 @@ fn add_to_command(program_version: GitVersion<SemVersion>, command_opts: AddToOp
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn run() -> Result<Option<ExecutionResult>> {
     let program_version: GitVersion<SemVersion> = PROGRAM_VERSION
         .parse()
         .with_context(|| anyhow!("the git tag for the release version is not in a valid format"))?;
@@ -2409,12 +2419,12 @@ fn main() -> Result<()> {
         if v {
             let version_info = VersionInfo::new(&program_version);
             print!("{version_info}");
-            return Ok(());
+            return Ok(None);
         }
         // `--version-only`
         if version_only {
             println!("{program_version}");
-            return Ok(());
+            return Ok(None);
         }
 
         match command {
@@ -2538,27 +2548,42 @@ fn main() -> Result<()> {
         }
     };
 
+    // Turn a unit result to the one we need
+    fn ur(r: Result<()>) -> Result<Option<ExecutionResult>> {
+        match r {
+            Ok(()) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     // Run the requested command
     match opts.command.expect("`None` dispatched already above") {
-        Command::Docs => docs_command(program_version),
-        Command::HelpContributing => help_contributing_command(),
+        Command::Docs => ur(docs_command(program_version)),
+        Command::HelpContributing => ur(help_contributing_command()),
         Command::HelpAttributes(command_opts) => {
-            help_attributes_command(command_opts, program_version)
+            ur(help_attributes_command(command_opts, program_version))
         }
-        Command::Changelog(command_opts) => changelog_command(command_opts),
+        Command::Changelog(command_opts) => ur(changelog_command(command_opts)),
 
-        Command::Install(command_opts) => install_command(command_opts),
-        Command::Upgrade(command_opts) => upgrade_command(program_version, command_opts),
+        Command::Install(command_opts) => ur(install_command(command_opts)),
+        Command::Upgrade(command_opts) => ur(upgrade_command(program_version, command_opts)),
 
-        Command::CloneTo(command_opts) => clone_to_command(program_version, command_opts),
+        Command::CloneTo(command_opts) => ur(clone_to_command(program_version, command_opts)),
 
         Command::Prepare(command_opts) => {
             // `prepare` can't check `program_version` as it is not
             // given the path to the repository
-            prepare_command(command_opts)
+            ur(prepare_command(command_opts))
         }
-        Command::AddTo(command_opts) => add_to_command(program_version, command_opts),
-        Command::Check(command_opts) => check_command(program_version, command_opts),
-        Command::Build(command_opts) => build_command(program_version, command_opts),
+        Command::AddTo(command_opts) => ur(add_to_command(program_version, command_opts)),
+        Command::Check(command_opts) => ur(check_command(program_version, command_opts)),
+        Command::Build(command_opts) => Ok(Some(build_command(program_version, command_opts)?)),
     }
+}
+
+fn main() -> Result<()> {
+    if let Some(er) = run()? {
+        er.daemon_cleanup();
+    }
+    Ok(())
 }
