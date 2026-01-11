@@ -36,6 +36,69 @@ use crate::{
     unix::easy_fork,
 };
 
+// Expecting a tab between timestamp and the rest of the line! Also,
+// expecting no slashes.
+fn starts_with_timestamp(line: &str) -> bool {
+    let mut digits = 0;
+    let mut minus = 0;
+    let mut plus = 0;
+    let mut t = 0;
+    let mut slash = 0;
+    let mut colon = 0;
+    let mut space = 0;
+    let mut dot = 0;
+    let mut other = 0;
+    for (i, c) in line.chars().enumerate() {
+        if i > 40 {
+            return false;
+        }
+        if c == '\t' {
+            return other <= 5
+                && digits >= 16
+                && slash == 0
+                && colon >= 2
+                && dot <= 1
+                && space <= 2
+                && minus <= 3
+                && plus <= 1
+                && t <= 1;
+        }
+        if c.is_ascii_digit() {
+            digits += 1;
+        } else if c == '-' {
+            minus += 1;
+        } else if c == ':' {
+            colon += 1;
+        } else if c == ' ' {
+            space += 1;
+        } else if c == '+' {
+            plus += 1;
+        } else if c == 'T' {
+            t += 1;
+        } else if c == '/' {
+            slash += 1;
+        } else if c == '.' {
+            dot += 1;
+        } else {
+            other += 1;
+        }
+    }
+    // found no tab
+    false
+}
+
+#[test]
+fn t_starts_with_timestamp() {
+    let cases = [
+        ("2026-01-11 15:25:12.000445551 +01:00	src/run/working_directory_pool.rs:552:17	process_working_directory D40 (None for test-running versioned dataset search at_2026-01-11T15:25:11.936345998+01:00) succeeded.", true),
+        ("2026-01-11T15:25:12.000319897+01:00	src/run/working_directory_pool.rs:552:17	process_working_directory D40 (None for test-running versioned dataset search at_2026-01-11T15:25:11.936345998+01:00) succeeded.", true),
+        ("src/run/working_directory_pool.rs:552:17	process_working_directory D40 (None for test-running versioned dataset search at_2026-01-11T15:25:11.936345998+01:00) succeeded.", false),
+    ];
+    for (s, expected) in &cases {
+        assert!(starts_with_timestamp(s) == *expected, "{s}, {expected}");
+    }
+}
+
 #[derive(Debug, Clone, Copy, clap::Subcommand)]
 pub enum DaemonMode {
     /// Do not put into background, just run forever in the foreground.
@@ -872,22 +935,25 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             output_line.clear();
             let nread = messagesfh.read_line(&mut input_line)?;
             let daemon_ended = nread == 0;
-            if self.opts.local_time {
-                write!(&mut output_line, "{}", Local::now())?;
-            } else {
-                write!(&mut output_line, "{}", Utc::now())?;
-            };
-            let tmp;
-            writeln!(
-                &mut output_line,
-                "\t{}",
-                if daemon_ended {
+            let starts_with_timestamp = starts_with_timestamp(&input_line);
+            if !starts_with_timestamp {
+                if self.opts.local_time {
+                    write!(&mut output_line, "{}\t", Local::now())?;
+                } else {
+                    write!(&mut output_line, "{}\t", Utc::now())?;
+                }
+            }
+            {
+                let tmp;
+                let rest = if daemon_ended {
                     tmp = format!("daemon {session_pid} ended");
                     &tmp
                 } else {
                     input_line.trim_end()
-                }
-            )?;
+                };
+                _ = output_line.write_all(rest.as_bytes());
+                output_line.push(b'\n');
+            }
 
             logfh.write_all(&output_line)?;
             total_written += output_line.len() as u64;
