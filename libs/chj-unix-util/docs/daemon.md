@@ -2,20 +2,46 @@
 
 ## General design
 
-- Do *not* have "want" versus "is" state, just one state: start the
-  daemon, presumed running. start it, and if it gets killed, it will be
-  stopped again. Keep it simple. (Instead, use `forking_loop` with a
-  small and reliable parent to minimize the risk of getting killed.)
+- Choice of graceful and forced stopping modes: graceful just informs
+  the daemon that it should stop at the next checkpoint. Forced is via
+  unix signals (first TERM then KILL). The choice can be given via
+  clap subcommand options, or action prefixes in FromStr; without
+  explicitly naming one of the choices (or when naming both,
+  cancelling each other), the application-provided default is used.
 
-- Do *not* (currently) have a master (cygote) process: we start the
-  daemon from the current environment. Just be careful what
-  environment parts might be relevant. Keep it simple. Maybe implement
-  it later.
+- Graceful stopping and restarting works via a want state in a mmap'ed
+  state file (that also contains the pid and is also used for the
+  forced mode). The application (in the daemon callback function) must
+  periodically check if it should stop, and if so just return from the
+  callback. The application receives a ExecutionResult, on which it
+  must call `daemon_cleanup()` (or it will panic in Drop!). This
+  method carries out the re-exec in case of a restart action. Thus the
+  application must place this call high up, ideally in the main
+  function after everything relevant has been cleaned up (Drop actions
+  ran).
 
-- Have a single directory with all info: state files
-  (`daemon_is_running.lock` and `pid` files), and a subdirectory with
-  logs.
-  
+- There is currently no service observer daemon. If the daemon process
+  crashes, it is not automatically restarted. To minimize that risk,
+  use `forking_loop` within a small and reliable parent.
+
+- Likewise, there is currently no master (cygote) process: we start
+  the daemon from the current environment, with the tradeoff that this
+  implies (can set up the environment, but also *have* to control
+  it). Note that with graceful restarts, the daemon does *not* pick up
+  the environment or command line argument changes of the process that
+  calls for the restart: the daemon re-exec's itself with its existing
+  environment and command line arguments. If that's problematic,
+  consider making forced actions the default, and document that the
+  explicit soft actions have this behaviour. (Future: add option to
+  disable soft actions altogether?)
+
+- There is one file, `daemon_state.mmap`, that serves both to record
+  the pid and wanted state, as well as to put the flock on that
+  indicates that a daemon is running.
+
+- There is a separate path to a directory where logs (with log
+  rotation) are written to. There is (currently) no log compression.
+
 
 ## Locking design
 
@@ -24,37 +50,25 @@ Want to prevent the following problems:
 - daemon killed by whatever means must be detectable as the daemon now
   being stopped
 
-- daemon starting needs to take the lock so that no 2 daemons are
-  starting at the same time
+- starting a daemon needs to take the lock so that no 2 daemons are
+  ever running at the same time
 
 - between taking that lock and updating the pid file, there must be no
   race where a `--daemon stop` could use an outdated pid
-
-- daemon conflicting with non-daemon runs will be detected and lead to
-  error messages, but that should not prevent the daemon from being
-  started or leading to it quitting. Using a different lock here (a
-  third one besides the two from the daemon infrastructure).
 
 Thus:
 
 - Use flock, since those locks are released automatically when a
   process quits, the machine reboots etc. (Drawback: buggy
   implementations, only in the past?)
-  
-- Use two files: `daemon_is_running.lock` just for the running status,
-  and a separate `pid` file which is `flock`ed separately for its
-  updating.
 
-- For daemon start, lock the `pid` file exclusively before taking the
-  `is_running` lock. Only ever take pid file locks for a short
-  time. For daemon stop, take the `pid` file lock (shared) after
-  checking `is_running`.
+- Update the state file with the pid and want status atomically.
 
 
 ## Logging design
 
-- Have a `logs` folder with files named `current.log` or numbered
-  like `00001.log`, that lies inside the base folder.
+- Have a `logs` folder with files named `current.log` or numbered like
+  `00001.log`, that lies inside the log directory.
 
 - Do not use compression, keep it simple.
 
@@ -62,10 +76,12 @@ Thus:
   just print to stderr and stdout. Pipe those filehandles to a process
   that writes the messages down as logfiles.
 
-- Prepend a human-readable time stamp, and a "\t" to every line.
+- Prepend a human-readable time stamp, and a "\t" to every line, if
+  enabled in the `Daemon` config.
 
 - A logfile is rotated when it reaches a predefined size (not age).
 
 - When there are more than a predefined number of log files, delete
-  the oldest (lowest-numbered).
+  the oldest (lowest-numbered) if so configured (or never, by
+  default).
 
