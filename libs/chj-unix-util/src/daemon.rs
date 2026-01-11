@@ -241,8 +241,8 @@ impl DaemonResult {
                 daemon_state.store(DaemonWant::Up, Some(current_sid));
                 // (Ah, the new instance will overwrite daemon_state
                 // again, with a new sid.)
-                let err = re_exec();
-                eprintln!("{err}");
+                let e = re_exec();
+                eprintln!("{e:#}");
                 std::process::exit(1);
             }
         }
