@@ -321,7 +321,8 @@ pub struct StopOpts {
     /// the issuer since it works by forking a new daemon.  (--hard
     /// and --soft are opposites; the default depends on the
     /// application.)
-    #[clap(short, long)]
+    // `short` -h conflicts with --help
+    #[clap(long)]
     pub hard: bool,
 
     /// This stops the daemon by communicating a wish for termination
