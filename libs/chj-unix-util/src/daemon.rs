@@ -729,7 +729,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                     error,
                 })?;
 
-                eprintln!("daemon started");
+                eprintln!("daemon {session_pid} started");
 
                 (self.run)(DaemonStateReader(
                     InnerDaemonStateReader::DaemonStateAccessor(&daemon_state),
@@ -752,7 +752,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 _ = close(1);
                 _ = close(2);
 
-                match self.handle_logging(logging_r) {
+                match self.handle_logging(logging_r, session_pid) {
                     Ok(()) => (),
                     Err(e) => {
                         // Will fail because we closed stderr. XX have
@@ -837,7 +837,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         }
     }
 
-    fn handle_logging(&self, logging_r: i32) -> anyhow::Result<()> {
+    fn handle_logging(&self, logging_r: i32, session_pid: Pid) -> anyhow::Result<()> {
         // Put us in a new session again, to prevent the
         // logging from being killed when the daemon is,
         // so that we get all output and can log when the
@@ -877,11 +877,13 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             } else {
                 write!(&mut output_line, "{}", Utc::now())?;
             };
+            let tmp;
             writeln!(
                 &mut output_line,
                 "\t{}",
                 if daemon_ended {
-                    "daemon ended"
+                    tmp = format!("daemon {session_pid} ended");
+                    &tmp
                 } else {
                     input_line.trim_end()
                 }
