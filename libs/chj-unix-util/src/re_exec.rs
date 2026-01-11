@@ -2,7 +2,7 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 
 pub fn re_exec_with_executable(executable_path: PathBuf) -> std::io::Error {
     let mut args = std::env::args_os();
@@ -18,7 +18,8 @@ pub fn re_exec_with_executable(executable_path: PathBuf) -> std::io::Error {
 /// Only returns when there is an error.
 pub fn _re_exec() -> Result<()> {
     let path = std::env::current_exe().context("getting the path to the current executable")?;
-    Err(re_exec_with_executable(path.clone())).context("executing the binary {path:?}")
+    Err(re_exec_with_executable(path.clone()))
+        .with_context(|| anyhow!("executing the binary {path:?}"))
 }
 
 /// Only returns when there is an error.
