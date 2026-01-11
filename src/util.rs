@@ -113,7 +113,7 @@ pub fn hostname() -> Result<String> {
 pub fn stringify_error<T: Display, E: Display>(res: Result<T, E>) -> String {
     match res {
         Ok(v) => format!(": {v}"),
-        Err(e) => format!(" -- {e}"),
+        Err(e) => format!(" -- {e:#}"),
     }
 }
 

@@ -98,7 +98,7 @@ impl<'t> Drop for FlockGuard<'t> {
                 Err(_e) => {
                     // XX Can't do this since it could panic. Perhaps can't lock stderr either?
                     // eprintln!(
-                    //     "warning: FlockGuard::drop: unexpected error releasing file lock: {e}"
+                    //     "warning: FlockGuard::drop: unexpected error releasing file lock: {e:#}"
                     // )
                 }
             }

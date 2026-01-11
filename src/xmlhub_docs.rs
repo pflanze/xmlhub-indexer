@@ -70,7 +70,7 @@ fn replace_all_lazily(
     let mut doc = ModifiedDocument::new(page);
     for (i, _) in page.match_indices(key) {
         doc.push(Modification::Delete(i..i + key.len()));
-        let val = value.as_ref().map_err(|e| anyhow!("{e}"))?;
+        let val = value.as_ref().map_err(|e| anyhow!("{e:#}"))?;
         doc.push(Modification::Insert(i, (&**val).into()));
     }
     if doc.has_modifiations() {
@@ -298,7 +298,7 @@ impl WhichPage {
         program_version: &GitVersion<SemVersion>,
         html: &HtmlAllocator,
     ) -> Result<AId<Node>> {
-        let public = *PUBLIC.as_ref().map_err(|e| anyhow!("{e}"))?;
+        let public = *PUBLIC.as_ref().map_err(|e| anyhow!("{e:#}"))?;
         match self {
             WhichPage::Start => markdown_with_variables_to_html(
                 public,

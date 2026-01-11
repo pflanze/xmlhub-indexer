@@ -196,7 +196,7 @@ impl DecodeKey for AppSignaturePublicKey {
         let mut bytes = [0; Self::KEY_LEN];
         decode_hex(self.public_key.as_bytes(), &mut bytes)?;
         Ok(Self::KeyType::try_from_bytes(&bytes)
-            .map_err(|e| anyhow!("recreating public key from data: {e}"))?)
+            .map_err(|e| anyhow!("recreating public key from data: {e:#}"))?)
     }
 }
 
@@ -208,7 +208,7 @@ impl DecodeKey for AppSignaturePrivateKey {
         let mut bytes = [0; Self::KEY_LEN];
         decode_hex(self.private_key.as_bytes(), &mut bytes)?;
         Ok(Self::KeyType::try_from_bytes(&bytes)
-            .map_err(|e| anyhow!("recreating private key from data: {e}"))?)
+            .map_err(|e| anyhow!("recreating private key from data: {e:#}"))?)
     }
 }
 
@@ -233,7 +233,7 @@ impl DecodeKey for AppSignature {
         let mut bytes = [0; Self::KEY_LEN];
         decode_hex(self.public_key.as_bytes(), &mut bytes)?;
         Ok(Self::KeyType::try_from_bytes(&bytes)
-            .map_err(|e| anyhow!("recreating public key from data: {e}"))?)
+            .map_err(|e| anyhow!("recreating public key from data: {e:#}"))?)
     }
 }
 
@@ -244,7 +244,7 @@ impl AppSignaturePrivateKey {
         // hedged = ?
         let signature = key
             .try_sign(content, &[], true)
-            .map_err(|e: &str| anyhow!("signing data with private key: {e}"))?;
+            .map_err(|e: &str| anyhow!("signing data with private key: {e:#}"))?;
         let signature = to_hex_string(&signature);
         Ok(AppSignature {
             metadata: FileMetadata {
@@ -316,7 +316,7 @@ impl AppSignatureKeyPair {
             birth: get_timestamp(),
         };
         let (public_key, private_key) = slh_dsa_shake_128s::try_keygen()
-            .map_err(|e| anyhow!("calling try_keygen in fips205 library: {e}"))?;
+            .map_err(|e| anyhow!("calling try_keygen in fips205 library: {e:#}"))?;
         Ok(Self {
             metadata,
             public_key,

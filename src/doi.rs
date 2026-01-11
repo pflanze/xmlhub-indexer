@@ -209,7 +209,7 @@ mod tests {
                     assert_eq!(format!("{doi}"), s);
                     assert_eq!(doi.len(), s.len());
                 }
-                Err(e) => panic!("erroneously not parsed: {s:?}, {e}"),
+                Err(e) => panic!("erroneously not parsed: {s:?}, {e:#}"),
             }
         }
     }
@@ -226,7 +226,7 @@ mod tests {
                     assert_eq!(doi.len(), printed.len(), "for s {s:?}");
                     assert_eq!(rest2, rest, "for s {s:?}");
                 }
-                Err(e) => panic!("erroneously not parsed: {s:?}, {e}"),
+                Err(e) => panic!("erroneously not parsed: {s:?}, {e:#}"),
             }
         }
     }

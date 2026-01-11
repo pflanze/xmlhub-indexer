@@ -104,7 +104,7 @@ impl<'s: 't, 't, 't0: 't, 't1> Display for ChangelogDisplay<'s, 't, 't0, 't1> {
                         ChangelogEntry::Release(Release { version, date }) => {
                             writeln!(f, "\nv{version} released on {date}\n")?
                         }
-                        ChangelogEntry::PointEntry(e) => writeln!(f, "{e}")?,
+                        ChangelogEntry::PointEntry(e) => writeln!(f, "{e:#}")?,
                     }
                 }
                 Ok(())
@@ -135,7 +135,7 @@ impl<'s: 't, 't, 't0: 't, 't1> Display for ChangelogDisplay<'s, 't, 't0, 't1> {
                         Box::new(entries.iter())
                     };
                     for e in entries {
-                        writeln!(f, "{e}")?;
+                        writeln!(f, "{e:#}")?;
                     }
                 }
                 Ok(())

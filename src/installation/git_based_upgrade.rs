@@ -205,7 +205,7 @@ pub fn carry_out_install_action_with_log(args: InstallActionWithLog) -> Result<(
         }
         Err(e) => {
             let path = upgrades_log_dir.append("error.txt");
-            std::fs::write(&path, format!("{e}"))
+            std::fs::write(&path, format!("{e:#}"))
                 .with_context(|| anyhow!("writing to {path:?}"))?;
             Err(e)?
         }

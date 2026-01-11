@@ -56,7 +56,7 @@ fn get_browsers() -> Result<(BrowsersSource, Vec<String>)> {
         }
         Err(e) => match e {
             env::VarError::NotPresent => Ok(linux_browsers()),
-            env::VarError::NotUnicode(_) => bail!("reading BROWSER env var: {e}"),
+            env::VarError::NotUnicode(_) => bail!("reading BROWSER env var: {e:#}"),
         },
     }
 }

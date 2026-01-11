@@ -701,7 +701,7 @@ fn read_file_infos(
                     Ok(()) => (),
                     // XX why a warning for an error?
                     Err(e) => warnings.push(Issue {
-                        message: format!("{e}"),
+                        message: format!("{e:#}"),
                         hint: None,
                     }),
                 }
@@ -1769,7 +1769,7 @@ fn build_command(
                     xmlhub_checkout.working_dir_path()
                 )
             }
-            _ => anyhow!("locking {main_lock_path:?}: {e}"),
+            _ => anyhow!("locking {main_lock_path:?}: {e:#}"),
         })
     };
 
@@ -1787,7 +1787,7 @@ fn build_command(
                         Ok(lock) => lock,
                         Err(e) => {
                             eprintln!(
-                                "daemon: terminating because of error getting main lock: {e}"
+                                "daemon: terminating because of error getting main lock: {e:#}"
                             );
                             return;
                         }
