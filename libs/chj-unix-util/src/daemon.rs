@@ -343,7 +343,8 @@ pub struct StopOpts {
 
     /// The time in seconds after sending SIGINT before sending
     /// SIGKILL
-    #[clap(short, long)]
+    // Default: keep in sync with const fn opts
+    #[clap(short, long, default_value = "30")]
     pub timeout_before_sigkill: u32,
 }
 
