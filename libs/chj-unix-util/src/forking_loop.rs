@@ -16,19 +16,14 @@ use crate::{
 ///
 /// Note: must be run while there are no running threads, panics
 /// otherwise!
-pub fn forking_loop<E: Display>(
+pub fn forking_loop<E: Display, F: FnOnce() -> Result<(), E>>(
     config: LoopWithBackoff,
-    // TODO: job could really be an FnOnce, since it's the last thing
-    // running in the child before exit. But the type system doesn't
-    // know about fork. How to persuade it? -- Actually, be careful,
-    // re shared memory? (But then, externally shared memory would
-    // always be same issue, too. And there is no safe rw-shared
-    // memory across forks.)
-    job: impl Fn() -> Result<(), E> + Send + Sync,
+    job: F,
     until: impl Fn() -> bool,
 ) where
     anyhow::Error: From<E>,
 {
+    let mut perhaps_job = Some(job);
     config.run(
         || -> Result<()> {
             if let Some(pid) = easy_fork()? {
@@ -48,6 +43,20 @@ pub fn forking_loop<E: Display>(
                     }
                 }
             } else {
+                // Detach from the parent, type system wise at least.
+                let mut perhaps_job = unsafe {
+                    // Safety: Uh, not very sure at all. It's as if
+                    // each child created the same state from scratch,
+                    // with everything attached. There is no safe
+                    // shared memory, so no such problems (there are
+                    // *some* safe(?) shared unix resources across
+                    // fork, though, like flock, XX todo.).
+                    // Check:
+                    // https://users.rust-lang.org/t/moving-borrowed-values-into-a-forked-child/28183
+                    ((&mut perhaps_job) as *const Option<F>).read()
+                };
+                let job = perhaps_job.take().expect("only once per child");
+
                 // Child process
                 match job() {
                     Ok(()) => std::process::exit(0),
