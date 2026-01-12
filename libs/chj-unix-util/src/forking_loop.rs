@@ -20,8 +20,11 @@ pub fn forking_loop<E: Display>(
     config: LoopWithBackoff,
     // TODO: job could really be an FnOnce, since it's the last thing
     // running in the child before exit. But the type system doesn't
-    // know about fork. How to persuade it?
-    job: impl Fn() -> Result<(), E>,
+    // know about fork. How to persuade it? -- Actually, be careful,
+    // re shared memory? (But then, externally shared memory would
+    // always be same issue, too. And there is no safe rw-shared
+    // memory across forks.)
+    job: impl Fn() -> Result<(), E> + Send + Sync,
     until: impl Fn() -> bool,
 ) where
     anyhow::Error: From<E>,
