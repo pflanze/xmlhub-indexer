@@ -31,7 +31,8 @@ pub fn forking_loop<E: Display>(
             if let Some(pid) = easy_fork()? {
                 // Parent process
 
-                // XXX todo: set up a thread that kills the pid after a timeout.
+                // XXX todo: optionally set up a thread that kills the
+                // pid after a timeout.
 
                 match waitpid_until_gone(pid)? {
                     Status::Normalexit(code) => {
