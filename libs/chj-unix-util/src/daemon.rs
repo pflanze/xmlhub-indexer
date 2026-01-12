@@ -99,6 +99,11 @@ fn t_starts_with_timestamp() {
     }
 }
 
+/// You may want to use this as a normal argument, i.e. via FromStr,
+/// instead, as then single strings can be passed through. There is
+/// more flexibility with the options here, though. XX currently this
+/// is also conflating STOP and Stop etc., and does not have `up`
+/// etc. aliases, thus pretty unusable.
 #[derive(Debug, Clone, Copy, clap::Subcommand)]
 pub enum DaemonMode {
     /// Do not put into background, just run forever in the foreground.
@@ -129,7 +134,7 @@ pub enum DaemonMode {
     KILL,
 }
 
-const FROM_STR_CASES: &[(&str, DaemonMode)] = {
+const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
     const fn opts(hard: bool, soft: bool) -> StopOpts {
         StopOpts {
             hard,
@@ -154,49 +159,111 @@ const FROM_STR_CASES: &[(&str, DaemonMode)] = {
     }
 
     &[
-        ("run", DaemonMode::Run),
-        ("start", DaemonMode::Start),
-        ("up", DaemonMode::Start),
-        ("stop", DaemonMode::Stop(opts(false, false))),
-        ("hard-stop", DaemonMode::Stop(opts(true, false))),
-        ("soft-stop", DaemonMode::Stop(opts(false, true))),
-        ("down", DaemonMode::Stop(opts(false, false))),
-        ("hard-down", DaemonMode::Stop(opts(true, false))),
-        ("soft-down", DaemonMode::Stop(opts(false, true))),
-        ("restart", DaemonMode::Restart(opts(false, false))),
-        ("hard-restart", DaemonMode::Restart(opts(true, false))),
-        ("soft-restart", DaemonMode::Restart(opts(false, true))),
-        ("status", DaemonMode::Status),
-        ("STOP", DaemonMode::STOP),
-        ("CONT", DaemonMode::CONT),
-        ("KILL", DaemonMode::KILL),
+        (
+            "run",
+            DaemonMode::Run,
+            "Do not put into background, just run forever in the foreground.",
+        ),
+        ("start", DaemonMode::Start, "Start daemon into background."),
+        ("up", DaemonMode::Start, "Alias for `start`."),
+        (
+            "stop",
+            DaemonMode::Stop(opts(false, false)),
+            "Stop a daemon running in background (does not stop daemons running\n\
+             via `run`). Alias for hard-stop or soft-stop, depending on the application.",
+        ),
+        (
+            "hard-stop",
+            DaemonMode::Stop(opts(true, false)),
+            "Stop daemon by sending it and its children signals (SIGINT then SIGKILL).\n\
+             Returns only after the daemon has ended.",
+        ),
+        (
+            "soft-stop",
+            DaemonMode::Stop(opts(false, true)),
+            "Stop daemon gracefully by sending the daemon a plea to exit. Returns\n\
+             immediately, the daemon will stop at its own leisure.",
+        ),
+        (
+            "down",
+            DaemonMode::Stop(opts(false, false)),
+            "Alias for `stop`.",
+        ),
+        (
+            "hard-down",
+            DaemonMode::Stop(opts(true, false)),
+            "Alias for `hard-stop`.",
+        ),
+        (
+            "soft-down",
+            DaemonMode::Stop(opts(false, true)),
+            "Alias for `soft-stop`.",
+        ),
+        (
+            "restart",
+            DaemonMode::Restart(opts(false, false)),
+            "Alias for `hard-restart` or `soft-restart`, depending on the application.",
+        ),
+        (
+            "hard-restart",
+            DaemonMode::Restart(opts(true, false)),
+            "`hard-stop` then `start` the daemon; picks up new command line flags and\n\
+             environment changes.",
+        ),
+        (
+            "soft-restart",
+            DaemonMode::Restart(opts(false, true)),
+            "Sends the daemon a plea to re-execute itself, with its original command line\n\
+             flags and environment.",
+        ),
+        (
+            "status",
+            DaemonMode::Status,
+            "Show if a (start/stop based) daemon is running, and what pid.",
+        ),
+        (
+            "STOP",
+            DaemonMode::STOP,
+            "Send a STOP signal to the daemon and its children.",
+        ),
+        (
+            "CONT",
+            DaemonMode::CONT,
+            "Send a CONT signal to the daemon and its children.",
+        ),
+        (
+            "KILL",
+            DaemonMode::KILL,
+            "Send a KILL signal to the daemon and its children.",
+        ),
     ]
 };
 
 fn errmsg() -> String {
     // Cannot do join() since not using itertools in this crate.
-    let mut s = String::from(
-        "('start' and 'up', and 'stop' and 'down' (and their hard and soft variants) \
-         are aliases; actions with all-uppercase names are sending the signals \
-         with the same names): ",
-    );
-    for (k, _m) in FROM_STR_CASES {
+    let mut s = String::from("please give one of the following arguments:\n\n");
+    for (k, _m, doc) in FROM_STR_CASES {
         use std::fmt::Write;
-        _ = write!(&mut s, "`{k}`, ");
+        _ = write!(&mut s, "    `{k}`:\n");
+        for line in doc.split('\n') {
+            _ = write!(&mut s, "        {line}\n");
+        }
+        s.push('\n');
     }
+
     s.truncate(s.len() - 2);
     s
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("please give one of the strings {}", errmsg())]
+#[error("{}", errmsg())]
 pub struct DaemonModeError;
 
 impl FromStr for DaemonMode {
     type Err = DaemonModeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        for (k, v) in FROM_STR_CASES {
+        for (k, v, _doc) in FROM_STR_CASES {
             if s == *k {
                 return Ok(v.clone());
             }
