@@ -205,6 +205,7 @@ impl FromStr for DaemonMode {
     }
 }
 
+/// These settings may be useful to expose to the user.
 #[derive(Debug, Clone, clap::Args)]
 pub struct DaemonOpts {
     /// If true, write log time stamps in the local time zone.
@@ -226,8 +227,26 @@ pub struct DaemonOpts {
     pub max_log_files: Option<u32>,
 }
 
+/// These settings might better be set statically by the app, rather
+/// than exposed to the user.
+#[derive(Debug, Clone, clap::Args)]
+pub struct TimestampOpts {
+    /// Whether rfc3339 format is to be used (default: whatever chrono
+    /// uses for `Display`).
+    #[clap(long)]
+    pub use_rfc3339: bool,
+
+    /// Whether a "," is appended to timestamps that the logger daemon
+    /// adds (could be useful if the app itself (usually) also adds
+    /// timestamps, to be able to distinguish, since there is a time
+    /// delay for the times from the logger daemon).
+    #[clap(long)]
+    pub mark_added_timestamps: bool,
+}
+
 pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     pub opts: DaemonOpts,
+    pub timestamp_opts: TimestampOpts,
     /// Where the lock/pid files should be written to (is created if missing).
     pub state_dir: Arc<Path>,
     /// Where the log files should be written to (is created if missing).
@@ -937,11 +956,34 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             let daemon_ended = nread == 0;
             let starts_with_timestamp = starts_with_timestamp(&input_line);
             if !starts_with_timestamp {
-                if self.opts.local_time {
-                    write!(&mut output_line, "{}\t", Local::now())?;
+                let s = if self.opts.local_time {
+                    let t = Local::now();
+                    if self.timestamp_opts.use_rfc3339 {
+                        t.to_rfc3339()
+                    } else {
+                        t.to_string()
+                    }
                 } else {
-                    write!(&mut output_line, "{}\t", Utc::now())?;
+                    let t = Utc::now();
+                    if self.timestamp_opts.use_rfc3339 {
+                        t.to_rfc3339()
+                    } else {
+                        t.to_string()
+                    }
+                };
+                _ = output_line.write_all(s.as_bytes());
+                if self.timestamp_opts.mark_added_timestamps {
+                    // The comma is used (and not e.g. the dot) since
+                    // it isn't part of double click auto-selection in
+                    // my terminal, and because it may be treated as a
+                    // column separator (together with '\t'), and
+                    // shifting column in a spreadsheet is perhaps
+                    // better for seeing the difference while allowing
+                    // the timestamps to be identical to the normal
+                    // ones for parsing.
+                    output_line.push(b',');
                 }
+                output_line.push(b'\t');
             }
             {
                 let tmp;
