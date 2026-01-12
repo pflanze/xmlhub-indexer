@@ -87,6 +87,9 @@ impl LoopWithBackoff {
             } else {
                 sleep_seconds = (sleep_seconds * 0.99).max(self.min_sleep_seconds);
             }
+            if until() {
+                return;
+            }
             let verbose_print = || {
                 eprintln!(
                     "loop iteration {iteration_count}, \
@@ -125,9 +128,6 @@ impl LoopWithBackoff {
                 }
             }
             sleep(Duration::from_secs_f64(sleep_seconds));
-            if until() {
-                return;
-            }
             iteration_count += 1;
         }
     }
