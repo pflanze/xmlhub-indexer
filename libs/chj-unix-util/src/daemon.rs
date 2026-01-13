@@ -4,6 +4,7 @@
 //! See [daemon](../docs/daemon.md) for more info.
 
 use std::{
+    ffi::CString,
     fs::{create_dir, remove_file, rename, File},
     io::{stderr, stdout, BufRead, BufReader, ErrorKind, Write},
     num::{NonZeroU32, ParseIntError},
@@ -19,7 +20,7 @@ use anyhow::{anyhow, bail, Context};
 use chrono::{Local, Utc};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
-    libc::getsid,
+    libc::{getsid, prctl, PR_SET_NAME},
     sys::signal::{
         kill,
         Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
@@ -887,6 +888,18 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 Ok(ExecutionResult::daemon(DaemonResult { daemon_state }))
             } else {
                 // In the logging process.
+
+                // Make it visible that this is the logger. ('ps'
+                // doesn't show it, but `head -1 /proc/$pid/status `
+                // does.)
+                {
+                    // Leak it to ensure it stays around? XX Is this necessary?
+                    let name = Box::leak(Box::new(CString::new("logger").expect("compatible")));
+                    unsafe {
+                        // Safe as long as `name` stays around?
+                        prctl(PR_SET_NAME, (&**name).as_ptr(), 0, 0, 0);
+                    }
+                }
 
                 // Never writing from this process, close so that
                 // we will detect when the daemon ends.
