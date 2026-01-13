@@ -90,6 +90,7 @@ impl LoopWithBackoff {
             if until() {
                 return;
             }
+            iteration_count += 1;
             let verbose_print = || {
                 eprintln!(
                     "loop iteration {iteration_count}, \
@@ -128,7 +129,6 @@ impl LoopWithBackoff {
                 }
             }
             sleep(Duration::from_secs_f64(sleep_seconds));
-            iteration_count += 1;
         }
     }
 }
