@@ -15,7 +15,10 @@ use ahtml_from_markdown::markdown::markdown_to_html;
 use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
-    daemon::{Daemon, DaemonMode, DaemonOpts, DaemonStateReader, ExecutionResult, TimestampOpts},
+    daemon::{
+        Daemon, DaemonMode, DaemonOpts, DaemonStateReader, ExecutionResult, TimestampMode,
+        TimestampOpts,
+    },
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
 };
@@ -1780,7 +1783,7 @@ fn build_command(
             opts: daemon_opts,
             timestamp_opts: TimestampOpts {
                 use_rfc3339: true,
-                mark_added_timestamps: false,
+                mode: TimestampMode::Always,
             },
             state_dir,
             log_dir,

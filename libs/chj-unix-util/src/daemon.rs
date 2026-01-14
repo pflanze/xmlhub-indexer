@@ -295,21 +295,33 @@ pub struct DaemonOpts {
     pub max_log_files: Option<u32>,
 }
 
-/// These settings might better be set statically by the app, rather
-/// than exposed to the user.
-#[derive(Debug, Clone, clap::Args)]
+#[derive(Debug, Clone)]
+pub enum TimestampMode {
+    /// Always add a timestamp
+    Always,
+    /// Add a timestamp if none is found, checking each line
+    Automatic {
+        /// Whether a "," is appended to timestamps that the logger
+        /// daemon adds (could be useful if the app itself (usually)
+        /// also adds timestamps, to be able to distinguish, since
+        /// there is a time delay for the times from the logger
+        /// daemon).
+        mark_added_timestamps: bool,
+    },
+    /// Never add timestamps, assumes the application reliably adds
+    /// them
+    Never,
+}
+
+/// These settings will better be set statically by the app, rather
+/// than exposed to the user, thus not deriving clap::Args.
+#[derive(Debug, Clone)]
 pub struct TimestampOpts {
     /// Whether rfc3339 format is to be used (default: whatever chrono
     /// uses for `Display`).
-    #[clap(long)]
     pub use_rfc3339: bool,
 
-    /// Whether a "," is appended to timestamps that the logger daemon
-    /// adds (could be useful if the app itself (usually) also adds
-    /// timestamps, to be able to distinguish, since there is a time
-    /// delay for the times from the logger daemon).
-    #[clap(long)]
-    pub mark_added_timestamps: bool,
+    pub mode: TimestampMode,
 }
 
 pub struct Daemon<F: FnOnce(DaemonStateReader)> {
@@ -1034,7 +1046,13 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             output_line.clear();
             let nread = messagesfh.read_line(&mut input_line)?;
             let daemon_ended = nread == 0;
-            let starts_with_timestamp = starts_with_timestamp(&input_line);
+            let (starts_with_timestamp, mark_added_timestamps) = match &self.timestamp_opts.mode {
+                TimestampMode::Always => (false, false),
+                TimestampMode::Automatic {
+                    mark_added_timestamps,
+                } => (starts_with_timestamp(&input_line), *mark_added_timestamps),
+                TimestampMode::Never => (true, false),
+            };
             if !starts_with_timestamp {
                 let s = if self.opts.local_time {
                     let t = Local::now();
@@ -1052,7 +1070,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                     }
                 };
                 _ = output_line.write_all(s.as_bytes());
-                if self.timestamp_opts.mark_added_timestamps {
+                if mark_added_timestamps {
                     // The comma is used (and not e.g. the dot) since
                     // it isn't part of double click auto-selection in
                     // my terminal, and because it may be treated as a
