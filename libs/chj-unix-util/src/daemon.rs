@@ -5,10 +5,14 @@
 
 use std::{
     ffi::CString,
+    fmt::Debug,
     fs::{create_dir, remove_file, rename, File},
     io::{stderr, stdout, BufRead, BufReader, ErrorKind, Write},
     num::{NonZeroU32, ParseIntError},
-    os::{fd::FromRawFd, unix::prelude::MetadataExt},
+    os::{
+        fd::FromRawFd,
+        unix::{ffi::OsStrExt, prelude::MetadataExt},
+    },
     path::{Path, PathBuf},
     str::FromStr,
     sync::{atomic::Ordering, Arc},
@@ -16,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Local, Utc};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
@@ -25,7 +29,7 @@ use nix::{
         kill,
         Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
     },
-    unistd::{close, dup2, pipe, setsid, Pid},
+    unistd::{close, dup2, execvp, pipe, setsid, Pid},
 };
 
 use crate::{
@@ -36,6 +40,10 @@ use crate::{
     retry::{retry, retry_n},
     unix::easy_fork,
 };
+
+pub fn cstring<T: AsRef<[u8]> + Debug>(s: T) -> Result<CString> {
+    CString::new(s.as_ref()).with_context(|| anyhow!("converting string-like to C string: {s:?}"))
+}
 
 // Expecting a tab between timestamp and the rest of the line! Also,
 // expecting no slashes.
@@ -133,6 +141,12 @@ pub enum DaemonMode {
 
     /// Send a KILL signal to (i.e. terminate right away) the daemon.
     KILL,
+
+    /// Open the current log file in the pager ($PAGER or less)
+    Log,
+
+    /// Run `tail -f` on the current log file
+    Logf,
 }
 
 const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
@@ -156,6 +170,8 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
             STOP => (),
             CONT => (),
             KILL => (),
+            Log => (),
+            Logf => (),
         }
     }
 
@@ -236,6 +252,16 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
             "KILL",
             DaemonMode::KILL,
             "Send a KILL signal to the daemon and its children.",
+        ),
+        (
+            "log",
+            DaemonMode::Log,
+            "Open the current log file in the pager ($PAGER or less)",
+        ),
+        (
+            "logf",
+            DaemonMode::Logf,
+            "Run `tail -f` on the current log file",
         ),
     ]
 };
@@ -1007,6 +1033,35 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
             DaemonMode::KILL => {
                 self.send_signal(Some(SIGKILL))?;
                 Ok(ExecutionResult::initiator())
+            }
+            DaemonMode::Log => {
+                // Once again.
+                let cmd = match std::env::var_os("PAGER") {
+                    Some(path) => cstring(path.as_bytes())?,
+                    None => cstring("less")?,
+                };
+                execvp(
+                    &cmd,
+                    &[
+                        &cmd,
+                        &cstring(self.current_log_path().into_os_string().as_bytes())?,
+                    ],
+                )
+                .with_context(|| anyhow!("exec'ing {cmd:?} command"))?;
+                unreachable!("execv never returns Ok")
+            }
+            DaemonMode::Logf => {
+                let cmd = cstring("tail")?;
+                execvp(
+                    &cmd,
+                    &[
+                        &cmd,
+                        &cstring("-f")?,
+                        &cstring(self.current_log_path().into_os_string().as_bytes())?,
+                    ],
+                )
+                .context("exec'ing `tail` command")?;
+                unreachable!("execv never returns Ok")
             }
         }
     }
