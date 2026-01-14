@@ -960,8 +960,8 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         Ok(())
     }
 
-    /// Note: must be run while there are no running threads--panics
-    /// otherwise!
+    /// Note: actions involving forking a new instance must be run
+    /// while there are no running threads--they panic otherwise!
     pub fn execute(
         self,
         mode: DaemonMode,
