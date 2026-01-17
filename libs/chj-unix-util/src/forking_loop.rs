@@ -8,9 +8,9 @@ use crate::{
 };
 
 /// Runs `job` repeatedly forever by forking off a child, running the
-/// `job` in the child once, in the parent wait for the child and
-/// treat both error returns and crashes / non-0 exits as errors that
-/// make it back off before retrying, using the given
+/// `job` in the child once. In the parent, wait for the child to end,
+/// then treat both error returns and crashes / non-0 exits as errors.
+/// Restart but back off before retrying, using the given
 /// `LoopWithBackoff` config. Runs `until` after every run, and
 /// returns if it returns true.
 ///
