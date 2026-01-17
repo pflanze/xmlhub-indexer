@@ -43,7 +43,8 @@ pub fn forking_loop<E: Display, F: FnOnce() -> Result<(), E>>(
                     }
                 }
             } else {
-                // Detach from the parent, type system wise at least.
+                // Detach from the parent, type system wise at least,
+                // to allow for `job` to be FnOnce.
                 let mut perhaps_job = unsafe {
                     // Safety: Uh, not very sure at all. It's as if
                     // each child created the same state from scratch,
