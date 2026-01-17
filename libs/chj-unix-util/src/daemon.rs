@@ -104,7 +104,7 @@ fn t_starts_with_timestamp() {
         ("src/run/working_directory_pool.rs:552:17	process_working_directory D40 (None for test-running versioned dataset search at_2026-01-11T15:25:11.936345998+01:00) succeeded.", false),
     ];
     for (s, expected) in &cases {
-        assert!(starts_with_timestamp(s) == *expected, "{s}, {expected}");
+        assert!(starts_with_timestamp(s) == *expected, "{s:?} to yield {expected:?}");
     }
 }
 
