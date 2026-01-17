@@ -33,8 +33,10 @@ use nix::{
 };
 
 use crate::{
+    backoff::LoopWithBackoff,
     file_lock::{file_lock_nonblocking, FileLockError},
     file_util::open_append,
+    forking_loop::forking_loop,
     polling_signals::{IPCAtomicError, IPCAtomicU64},
     re_exec::re_exec,
     retry::{retry, retry_n},
@@ -104,7 +106,10 @@ fn t_starts_with_timestamp() {
         ("src/run/working_directory_pool.rs:552:17	process_working_directory D40 (None for test-running versioned dataset search at_2026-01-11T15:25:11.936345998+01:00) succeeded.", false),
     ];
     for (s, expected) in &cases {
-        assert!(starts_with_timestamp(s) == *expected, "{s:?} to yield {expected:?}");
+        assert!(
+            starts_with_timestamp(s) == *expected,
+            "{s:?} to yield {expected:?}"
+        );
     }
 }
 
@@ -299,6 +304,41 @@ impl FromStr for DaemonMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, clap::Args)]
+#[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
+pub struct RestartOnFailures {
+    // Adding `, help = None` does not help to avoid the empty paragraph
+    #[clap(long)]
+    restart_on_failures: bool,
+
+    /// Whether to restart the daemon or not when it crashes (in
+    /// start/up mode).  Restarting works by forking before running
+    /// the work, then re-forking when the child ends in a non-normal
+    /// way (exit with an error or by signal). Between restarts, the
+    /// parent sleeps a bit, with exponential back-off within a time
+    /// range configured by the application. The default restart
+    /// behaviour is set by the application; the two options cancel
+    /// each other out. Note: debugging crashes will be easiest using
+    /// the `run` mode, which ignores the restart setting (never
+    /// restarts).
+    #[clap(long)]
+    no_restart_on_failures: bool,
+}
+
+impl RestartOnFailures {
+    pub fn eval(self, default: bool) -> bool {
+        let Self {
+            restart_on_failures,
+            no_restart_on_failures,
+        } = self;
+        match (restart_on_failures, no_restart_on_failures) {
+            (true, false) => true,
+            (false, true) => false,
+            (false, false) | (true, true) => default,
+        }
+    }
+}
+
 /// These settings may be useful to expose to the user.
 #[derive(Debug, Clone, clap::Args)]
 pub struct DaemonOpts {
@@ -319,6 +359,9 @@ pub struct DaemonOpts {
     /// all)! None means, no files are ever deleted.
     #[clap(long)]
     pub max_log_files: Option<u32>,
+
+    #[clap(flatten)]
+    pub restart_on_failures: RestartOnFailures,
 }
 
 #[derive(Debug, Clone)]
@@ -352,6 +395,11 @@ pub struct TimestampOpts {
 
 pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     pub opts: DaemonOpts,
+    /// The default value for opts.restart_on_failures.eval()
+    pub restart_on_failures_default: bool,
+    /// The settings for the restarting; if not provided, uses its
+    /// Default values.
+    pub restart_opts: Option<LoopWithBackoff>,
     pub timestamp_opts: TimestampOpts,
     /// Where the lock/pid files should be written to (is created if missing).
     pub state_dir: Arc<Path>,
@@ -816,6 +864,60 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
     /// otherwise panics! Returns the result of the `run` procedure in
     /// the child, but nothing in the parent.
     fn start(self) -> Result<ExecutionResult, DaemonError> {
+        if self
+            .opts
+            .restart_on_failures
+            .eval(self.restart_on_failures_default)
+        {
+            // Wrap `run`
+            let Daemon {
+                opts,
+                restart_on_failures_default: _,
+                restart_opts,
+                timestamp_opts,
+                state_dir,
+                log_dir,
+                run,
+            } = self;
+
+            let run = |daemon_state_reader: DaemonStateReader| {
+                forking_loop(
+                    restart_opts.unwrap_or_else(Default::default),
+                    || -> Result<()> {
+                        run(daemon_state_reader.clone());
+                        Ok(())
+                    },
+                    || daemon_state_reader.want_exit(),
+                )
+            };
+
+            // The wrapper does not need yet another layer for
+            // restarting (although, the `_start` method ignores that
+            // anyway)
+            let opts = DaemonOpts {
+                restart_on_failures: RestartOnFailures {
+                    restart_on_failures: false,
+                    no_restart_on_failures: true,
+                },
+                ..opts
+            };
+
+            Daemon {
+                opts,
+                restart_on_failures_default: false,
+                restart_opts: None,
+                timestamp_opts,
+                state_dir,
+                log_dir,
+                run,
+            }
+            ._start()
+        } else {
+            self._start()
+        }
+    }
+
+    fn _start(self) -> Result<ExecutionResult, DaemonError> {
         let daemon_state = self.daemon_state()?;
         let (current_want, current_pid) = daemon_state.read();
 
@@ -1170,6 +1272,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
     }
 }
 
+#[derive(Debug)]
 pub struct DaemonStateAccessor {
     path: Arc<Path>,
     access: IPCAtomicU64,
@@ -1212,6 +1315,15 @@ impl DaemonWant {
             DaemonWant::Restart => b'r',
         } as u32;
         (want as u64) << 32
+    }
+
+    /// Whether the value warrants exiting from a daemon
+    pub fn wants_exit(self) -> bool {
+        match self {
+            DaemonWant::Down => true,
+            DaemonWant::Up => false,
+            DaemonWant::Restart => true,
+        }
     }
 }
 
@@ -1270,11 +1382,13 @@ impl DaemonStateAccessor {
     }
 }
 
+#[derive(Debug, Clone)]
 enum InnerDaemonStateReader<'t> {
     DaemonStateAccessor(&'t DaemonStateAccessor),
     None,
 }
 
+#[derive(Debug, Clone)]
 pub struct DaemonStateReader<'t>(InnerDaemonStateReader<'t>);
 
 impl<'t> DaemonStateReader<'t> {
@@ -1289,10 +1403,6 @@ impl<'t> DaemonStateReader<'t> {
 
     /// Whether the daemon should exit due to wanted Stop or Restart.
     pub fn want_exit(&self) -> bool {
-        match self.want() {
-            DaemonWant::Down => true,
-            DaemonWant::Up => false,
-            DaemonWant::Restart => true,
-        }
+        self.want().wants_exit()
     }
 }

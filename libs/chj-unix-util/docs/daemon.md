@@ -20,24 +20,29 @@
   function after everything relevant has been cleaned up (Drop actions
   ran).
 
-- There is currently no service observer daemon. If the daemon process
-  crashes, it is not automatically restarted. To minimize that risk,
-  use `forking_loop` within a small and reliable parent.
+- There is a feature to restart the daemon on failures (settings via
+  `RestartOnFailures`). This does another fork before running the
+  workload--i.e. it creates a service observer daemon at the same time
+  as the daemon itself, and is torn down again at the same time as the
+  daemon, too (in either soft or hard mode).
 
-- Likewise, there is currently no master (cygote) process: we start
-  the daemon from the current environment, with the tradeoff that this
-  implies (can set up the environment, but also *have* to control
-  it). Note that with graceful restarts, the daemon does *not* pick up
-  the environment or command line argument changes of the process that
-  calls for the restart: the daemon re-exec's itself with its existing
-  environment and command line arguments. If that's problematic,
-  consider making forced actions the default, and document that the
-  explicit soft actions have this behaviour. (Future: add option to
-  disable soft actions altogether?)
+- There is currently no master (cygote) process: we start the daemon
+  from the current environment, with the tradeoff that this implies
+  (you can set up the environment that the daemon sees, but also
+  *have* to control it). Note that with graceful restarts, the daemon
+  does *not* pick up the environment or command line argument changes
+  of the process that calls for the restart: the daemon re-exec's
+  itself with its existing environment and command line arguments. If
+  that's problematic, consider making forced actions the default, and
+  document that the explicit soft actions have this
+  behaviour. (Future: add option to disable soft actions altogether?)
 
 - There is one file, `daemon_state.mmap`, that serves both to record
   the pid and wanted state, as well as to put the flock on that
-  indicates that a daemon is running.
+  indicates that a daemon is running. Note: `run` mode does not take
+  that lock (it does not use that file at all; the assumption is that
+  whatever daemon service starts the process also controls that only
+  one is running)!
 
 - There is a separate path to a directory where logs (with log
   rotation) are written to. There is (currently) no log compression.

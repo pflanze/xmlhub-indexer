@@ -1781,6 +1781,11 @@ fn build_command(
         let state_dir = daemon_base_dir.into();
         let daemon = Daemon {
             opts: daemon_opts,
+            // We are using forking_loop ourselves explicitly (in a
+            // different way), thus disable additional restarting by
+            // default
+            restart_on_failures_default: false,
+            restart_opts: None,
             timestamp_opts: TimestampOpts {
                 use_rfc3339: true,
                 mode: TimestampMode::Always,
