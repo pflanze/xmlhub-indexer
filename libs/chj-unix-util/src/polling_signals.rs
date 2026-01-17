@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     fs::OpenOptions,
     io::Write,
     mem::transmute,
@@ -14,6 +15,12 @@ type PollingSignalsAtomic = AtomicU64;
 /// A filesystem path based cross-process atomic counter
 pub struct IPCAtomicU64 {
     mmap: MmapMut,
+}
+
+impl Debug for IPCAtomicU64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IPCAtomicU64").finish()
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
