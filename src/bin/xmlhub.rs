@@ -16,8 +16,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
     daemon::{
-        Daemon, DaemonMode, DaemonOpts, DaemonStateReader, ExecutionResult, TimestampMode,
-        TimestampOpts,
+        Daemon, DaemonMode, DaemonOpts, DaemonPaths, DaemonStateReader, ExecutionResult,
+        TimestampMode, TimestampOpts,
     },
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
@@ -1777,8 +1777,11 @@ fn build_command(
     };
 
     if let Some(daemon_mode) = daemon {
-        let log_dir = (&daemon_base_dir).append("logs").into();
-        let state_dir = daemon_base_dir.into();
+        let paths = {
+            let log_dir = (&daemon_base_dir).append("logs").into();
+            let state_dir = daemon_base_dir.into();
+            DaemonPaths { state_dir, log_dir }
+        };
         let daemon = Daemon {
             opts: daemon_opts,
             // We are using forking_loop ourselves explicitly (in a
@@ -1790,8 +1793,7 @@ fn build_command(
                 use_rfc3339: true,
                 mode: TimestampMode::Always,
             },
-            state_dir,
-            log_dir,
+            paths,
             run: {
                 let quietness = quietness.clone();
                 move |daemon_state_reader: DaemonStateReader| -> () {

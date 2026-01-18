@@ -393,6 +393,14 @@ pub struct TimestampOpts {
     pub mode: TimestampMode,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DaemonPaths {
+    /// Where the lock/pid files should be written to (is created if missing).
+    pub state_dir: Arc<Path>,
+    /// Where the log files should be written to (is created if missing).
+    pub log_dir: Arc<Path>,
+}
+
 pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     pub opts: DaemonOpts,
     /// The default value for opts.restart_on_failures.eval()
@@ -401,14 +409,11 @@ pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     /// Default values.
     pub restart_opts: Option<LoopWithBackoff>,
     pub timestamp_opts: TimestampOpts,
-    /// Where the lock/pid files should be written to (is created if missing).
-    pub state_dir: Arc<Path>,
-    /// Where the log files should be written to (is created if missing).
-    pub log_dir: Arc<Path>,
     /// The code to run; the daemon ends/stops when this function
     /// returns. The function should periodically call `want()` on its
     /// argument and stop processing when it doesn't give
     /// `DaemonWant::Up`.
+    pub paths: DaemonPaths,
     pub run: F,
 }
 
@@ -629,11 +634,11 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
     }
 
     pub fn state_dir(&self) -> Arc<Path> {
-        self.state_dir.clone()
+        self.paths.state_dir.clone()
     }
 
     pub fn log_dir(&self) -> Arc<Path> {
-        self.log_dir.clone()
+        self.paths.log_dir.clone()
     }
 
     /// Path to a file that is used as a 8-byte mmap file, and for
@@ -875,8 +880,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 restart_on_failures_default: _,
                 restart_opts,
                 timestamp_opts,
-                state_dir,
-                log_dir,
+                paths,
                 run,
             } = self;
 
@@ -907,8 +911,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 restart_on_failures_default: false,
                 restart_opts: None,
                 timestamp_opts,
-                state_dir,
-                log_dir,
+                paths,
                 run,
             }
             ._start()
