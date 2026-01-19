@@ -34,6 +34,7 @@ use nix::{
 
 use crate::{
     backoff::LoopWithBackoff,
+    eval_with_default::EvalWithDefault,
     file_lock::{file_lock_nonblocking, FileLockError},
     file_util::open_append,
     forking_loop::forking_loop,
@@ -325,17 +326,13 @@ pub struct RestartOnFailures {
     no_restart_on_failures: bool,
 }
 
-impl RestartOnFailures {
-    pub fn eval(self, default: bool) -> bool {
+impl EvalWithDefault for RestartOnFailures {
+    fn explicit_yes_and_no(&self) -> (bool, bool) {
         let Self {
             restart_on_failures,
             no_restart_on_failures,
         } = self;
-        match (restart_on_failures, no_restart_on_failures) {
-            (true, false) => true,
-            (false, true) => false,
-            (false, false) | (true, true) => default,
-        }
+        (*restart_on_failures, *no_restart_on_failures)
     }
 }
 
@@ -872,7 +869,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         if self
             .opts
             .restart_on_failures
-            .eval(self.restart_on_failures_default)
+            .eval_with_default(self.restart_on_failures_default)
         {
             // Wrap `run`
             let Daemon {
