@@ -1373,7 +1373,17 @@ impl DaemonStateAccessor {
         let old = atomic.load(ordering);
         let new = (old & (u32::MAX as u64)) | wantu64;
         let got = atomic.compare_exchange(old, new, ordering, ordering)?;
-        assert_eq!(got, old); // just testing my understanding--always guaranteed, right?
+        // just testing my understanding--always guaranteed, right?
+        if !(got == old) {
+            _ = write!(
+                &mut stderr(),
+                "got != old, {} vs. {} at {}:{}",
+                got,
+                old,
+                file!(),
+                line!()
+            );
+        }
         Ok((old, new))
     }
 
