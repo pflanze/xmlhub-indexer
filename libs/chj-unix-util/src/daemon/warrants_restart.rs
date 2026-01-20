@@ -117,12 +117,16 @@ impl RestartForExecutableChange {
         restart_for_config_change: RestartForConfigChange,
     ) -> RestartForExecutableOrConfigChange<RestartForConfigChange> {
         let restart_for_executable_change = self;
-        let do_restart_for_config_change =
-            restart_for_config_change_opts.eval_with_default(default_restart_for_config_change);
+        let restart_for_config_change = if restart_for_config_change_opts
+            .eval_with_default(default_restart_for_config_change)
+        {
+            Some(restart_for_config_change)
+        } else {
+            None
+        };
 
         RestartForExecutableOrConfigChange {
             restart_for_executable_change,
-            do_restart_for_config_change,
             restart_for_config_change,
         }
     }
@@ -166,8 +170,7 @@ pub struct RestartForExecutableOrConfigChange<
     RestartForConfigChange: Deref<Target: WarrantsRestart>,
 > {
     restart_for_executable_change: RestartForExecutableChange,
-    do_restart_for_config_change: bool,
-    restart_for_config_change: RestartForConfigChange,
+    restart_for_config_change: Option<RestartForConfigChange>,
 }
 
 impl<RestartForConfigChange: Deref<Target: WarrantsRestart>> WarrantsRestart
@@ -175,8 +178,11 @@ impl<RestartForConfigChange: Deref<Target: WarrantsRestart>> WarrantsRestart
 {
     fn warrants_restart(&self) -> bool {
         (&self.restart_for_executable_change).warrants_restart()
-            || (self.do_restart_for_config_change
-                && self.restart_for_config_change.warrants_restart())
+            || if let Some(restart_for_config_change) = &self.restart_for_config_change {
+                restart_for_config_change.warrants_restart()
+            } else {
+                false
+            }
     }
 }
 
