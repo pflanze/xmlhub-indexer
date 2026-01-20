@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
+use chj_unix_util::re_exec::current_exe;
 
 use crate::{
     installation::{
@@ -21,8 +22,7 @@ pub struct InstallOpts {
 pub fn install_command(command_opts: InstallOpts) -> Result<()> {
     let InstallOpts { confirm } = command_opts;
 
-    let own_path = std::env::current_exe()
-        .with_context(|| anyhow!("getting the path to the running executable"))?;
+    let own_path = current_exe()?;
 
     carry_out_install_action_with_log(InstallActionWithLog {
         install_action: InstallAction {
