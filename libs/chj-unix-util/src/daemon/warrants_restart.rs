@@ -1,11 +1,11 @@
 //! Trait and helpers to create restart need checkers for
 //! `Daemon.other_restart_checks`.
 
-use std::{ops::Deref, path::Path, sync::Arc, time::SystemTime};
+use std::{io::ErrorKind, ops::Deref, time::SystemTime};
 
 use anyhow::Result;
 
-use crate::eval_with_default::EvalWithDefault;
+use crate::{eval_with_default::EvalWithDefault, re_exec::current_exe};
 
 /// The base trait for all "other" restart checkers.
 pub trait WarrantsRestart {
@@ -43,57 +43,68 @@ impl RestartForExecutableChangeOpts {
         default_want_restarting: bool,
     ) -> Result<RestartForExecutableChange> {
         let restart_on_upgrades = self.eval_with_default(default_want_restarting);
-        let opt_binary_and_mtime = if restart_on_upgrades {
+        let (do_check, opt_binary_mtime) = if restart_on_upgrades {
+            // Consciously *not* using the 'fixed' `current_exe`: it's
+            // *good* if we get the mangled path because our real path
+            // is gone, so that we don't use the wrong mtime.
             let path = std::env::current_exe()?;
             match path.metadata() {
                 Ok(m) => {
                     if let Ok(mtime) = m.modified() {
-                        Some((path.into(), mtime))
+                        (true, Some(mtime))
                     } else {
-                        None
+                        (false, None)
                     }
                 }
-                Err(_) => None,
+                Err(e) => {
+                    let restart_if_path_shows_up_later = e.kind() == ErrorKind::NotFound;
+                    (restart_if_path_shows_up_later, None)
+                }
             }
         } else {
-            None
+            (false, None)
         };
         Ok(RestartForExecutableChange {
-            opt_binary_and_mtime,
+            do_check,
+            opt_binary_mtime,
         })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RestartForExecutableChange {
-    opt_binary_and_mtime: Option<(Arc<Path>, SystemTime)>,
+    do_check: bool,
+    opt_binary_mtime: Option<SystemTime>,
 }
 
 impl WarrantsRestart for &RestartForExecutableChange {
     fn warrants_restart(&self) -> bool {
-        if let Some((binary, mtime)) = &self.opt_binary_and_mtime {
-            if let Ok(metadata) = binary.metadata() {
-                if let Ok(new_mtime) = metadata.modified() {
-                    // if new_mtime > *mtime {  ? or allow downgrades, too:
-                    if new_mtime != *mtime {
-                        // info!(
-                        //     "this binary at {binary:?} has updated, \
-                        //      from {} to {}, going to re-exec",
-                        //     SystemTimeWithDisplay(*mtime),
-                        //     SystemTimeWithDisplay(new_mtime)
-                        // );
-                        true
+        self.do_check && {
+            match current_exe() {
+                Ok(binary) => {
+                    if let Ok(metadata) = binary.metadata() {
+                        if let Ok(new_mtime) = metadata.modified() {
+                            // if new_mtime > *mtime {  ? or allow downgrades, too:
+                            if Some(new_mtime) != self.opt_binary_mtime {
+                                // info!(
+                                //     "this binary at {binary:?} has updated, \
+                                //      from {} to {}, going to re-exec",
+                                //     SystemTimeWithDisplay(*mtime),
+                                //     SystemTimeWithDisplay(new_mtime)
+                                // );
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
-                } else {
-                    false
                 }
-            } else {
-                false
+                Err(_) => false,
             }
-        } else {
-            false
         }
     }
 }
