@@ -7,6 +7,7 @@
 //! might be 0, even).
 
 use std::{
+    borrow::Cow,
     fmt::Display,
     thread::sleep,
     time::{Duration, SystemTime},
@@ -29,6 +30,9 @@ pub enum LoopVerbosity {
 /// instance setting only the fields that you want to change (most
 /// likely only the `*_sleep_seconds` values).
 pub struct LoopWithBackoff {
+    /// Prefix for the "loop iteration" and other "loop" messages;
+    /// e.g. say what is being looped.
+    pub prefix: Cow<'static, str>,
     /// Whether to enable additional diagnostic messages to stderr
     /// (default: `LoopVerbosity::LogSleepTimeEveryIteration`).
     pub verbosity: LoopVerbosity,
@@ -51,6 +55,7 @@ pub struct LoopWithBackoff {
 impl Default for LoopWithBackoff {
     fn default() -> Self {
         Self {
+            prefix: "".into(),
             verbosity: LoopVerbosity::LogEveryIteration,
             quiet: false,
             error_sleep_factor: 1.05,
@@ -70,6 +75,7 @@ impl LoopWithBackoff {
         mut job: impl FnMut() -> Result<(), E>,
         until: impl Fn() -> bool,
     ) {
+        let prefix = self.prefix.as_ref();
         let mut sleep_seconds = self.min_sleep_seconds;
         let mut iteration_count: u64 = 0;
         let mut last_lai_time: Option<SystemTime> = None;
@@ -80,7 +86,7 @@ impl LoopWithBackoff {
                 // std::error::Error since anyhow::Error (in the
                 // version that I'm using) is not implementing that.
                 if !self.quiet {
-                    eprintln!("control loop: got error: {e:#}");
+                    eprintln!("{prefix}loop: got error: {e:#}");
                 }
                 sleep_seconds =
                     (sleep_seconds * self.error_sleep_factor).min(self.max_sleep_seconds);
@@ -93,7 +99,7 @@ impl LoopWithBackoff {
             iteration_count += 1;
             let verbose_print = || {
                 eprintln!(
-                    "loop iteration {iteration_count}, \
+                    "{prefix}loop iteration {iteration_count}, \
                      sleeping {sleep_seconds} seconds"
                 )
             };
@@ -114,7 +120,7 @@ impl LoopWithBackoff {
                             }
                             Err(_) => {
                                 eprintln!(
-                                    "error calculating duration, erroneous clock? \
+                                    "{prefix}loop: error calculating duration, erroneous clock? \
                                      last: {last:?} vs. now {now:?}"
                                 );
                                 // Set it in hopes of it recovering
