@@ -290,7 +290,8 @@ pub struct Daemon<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(Daemo
     /// The default value for opts.restart_on_failures.eval()
     pub restart_on_failures_default: bool,
     /// The settings for the restarting; if not provided, uses its
-    /// Default values.
+    /// Default values. The `daemon` field is overwritten with the
+    /// string "daemon service process restart ".
     pub restart_opts: Option<LoopWithBackoff>,
     pub timestamp_opts: TimestampOpts,
     /// The code to run; the daemon ends/stops when this function
@@ -726,8 +727,10 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
             } = self;
 
             let run = |daemon_check_exit: DaemonCheckExit<Other>| {
+                let mut opts = restart_opts.unwrap_or_else(Default::default);
+                opts.prefix = "daemon service process restart ".into();
                 forking_loop(
-                    restart_opts.unwrap_or_else(Default::default),
+                    opts,
                     || -> Result<()> {
                         run(daemon_check_exit.clone());
                         Ok(())
