@@ -20,9 +20,8 @@ pub fn retry<R, E>(f: impl Fn() -> Result<R, E>) -> R {
     let mut tries_left: u32 = 200;
     let mut random = None;
     loop {
-        match f() {
-            Ok(r) => return r,
-            Err(_) => (),
+        if let Ok(r) = f() {
+            return r;
         }
         tries_left -= 1;
         if tries_left == 0 {
