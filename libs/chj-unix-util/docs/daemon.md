@@ -4,29 +4,39 @@
 
 - Choice of graceful and forced stopping modes: graceful just informs
   the daemon that it should stop at the next checkpoint. Forced is via
-  unix signals (first TERM then KILL). The choice can be given via
-  clap subcommand options, or action prefixes in FromStr; without
-  explicitly naming one of the choices (or when naming both,
-  cancelling each other), the application-provided default is used.
+  unix signals (first TERM then KILL). The choice can be given (via
+  clap subcommand options--currently ~broken, or) action prefixes in
+  FromStr; without explicitly naming one of the choices (or when
+  naming both, cancelling each other), the application-provided
+  default is used.
 
 - Graceful stopping and restarting works via a want state in a mmap'ed
   state file (that also contains the pid and is also used for the
   forced mode). The application (in the daemon callback function) must
-  periodically check if it should stop, and if so just return from the
-  callback. The application receives a ExecutionResult, on which it
-  must call `daemon_cleanup()` (or it will panic in Drop!). This
-  method carries out the re-exec in case of a restart action. Thus the
-  application must place this call high up, ideally in the main
-  function after everything relevant has been cleaned up (Drop actions
-  ran).
+  periodically check via the `DaemonCheckExit` object that the `run`
+  callback received (`want_exit` method) if it should stop, and if so
+  return with `Ok` from the daemon run callback. The application then
+  receives a ExecutionResult, on which it must call `daemon_cleanup()`
+  (or it will panic in Drop!). This method carries out the re-exec in
+  case of a restart action. Thus the application must place this call
+  high up, ideally in the main function after everything relevant has
+  been cleaned up (Drop actions ran). If `run` returns an `Err`, it
+  either bubbles up and terminates the daemon (no automatic restarts),
+  or is logged and the service process automatically re-forked (with
+  automatic restarts).
 
-- There is a feature to restart the daemon on failures (settings via
-  `RestartOnFailures`). This does another fork before running the
-  workload--i.e. it creates a service observer daemon at the same time
-  as the daemon itself, and is torn down again at the same time as the
-  daemon, too (in either soft or hard mode).
+- As just mentioned, there is a feature to restart the daemon on
+  failures (settings via `RestartOnFailures`). This does another fork
+  before running the workload--i.e. it creates a service observer
+  daemon at the same time as the daemon itself, and is torn down again
+  at the same time as the daemon, too (in either soft or hard mode).
 
-- There is currently no master (cygote) process: we start the daemon
+- Applications can put their own requirements for restart checking
+  into the `Daemon.other_restart_checks` field, which is then included
+  in the `DaemonCheckExit` that the application callback receives;
+  checking is thus always just `want_exit` on that value.
+
+- There is currently no master (cygote) process: the daemon is started
   from the current environment, with the tradeoff that this implies
   (you can set up the environment that the daemon sees, but also
   *have* to control it). Note that with graceful restarts, the daemon
@@ -39,10 +49,10 @@
 
 - There is one file, `daemon_state.mmap`, that serves both to record
   the pid and wanted state, as well as to put the flock on that
-  indicates that a daemon is running. Note: `run` mode does not take
-  that lock (it does not use that file at all; the assumption is that
+  indicates that a daemon is running. Note: "run" mode does not take
+  that lock--it does not use that file at all; the assumption is that
   whatever daemon service starts the process also controls that only
-  one is running)!
+  one is running!
 
 - There is a separate path to a directory where logs (with log
   rotation) are written to. There is (currently) no log compression.
@@ -90,3 +100,5 @@ Thus:
   the oldest (lowest-numbered) if so configured (or never, by
   default).
 
+- Even soft-restarting starts a new logger process, which hence picks
+  up any possible logging configuration changes.
