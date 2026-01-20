@@ -1075,16 +1075,14 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
         let is_running = self.is_running()?;
         let (want, pid) = daemon_state.read();
         let is = if is_running { "running" } else { "stopped" };
-        let mut out = stdout().lock();
-        let pid_string;
-        let pid_str = match pid {
+        let pid_string = match pid {
             Some(pid) => {
-                pid_string = format!("pid: {pid}, ");
-                &pid_string
+                format!("pid: {pid}, ")
             }
-            None => "",
+            None => "".into(),
         };
-        writeln!(&mut out, "{is} ({pid_str}want: {want:?})")?;
+        writeln!(&mut stdout(), "{is} ({pid_string}want: {want:?})")
+            .context("printing to stderr")?;
         Ok(())
     }
 
