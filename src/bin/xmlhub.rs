@@ -1798,16 +1798,9 @@ fn build_command(
             other_restart_checks: NoOtherRestarts,
             run: {
                 let quietness = quietness.clone();
-                move |daemon_check_exit: DaemonCheckExit<NoOtherRestarts>| -> () {
-                    let _main_lock = match get_main_lock() {
-                        Ok(lock) => lock,
-                        Err(e) => {
-                            eprintln!(
-                                "daemon: terminating because of error getting main lock: {e:#}"
-                            );
-                            return;
-                        }
-                    };
+                move |daemon_check_exit: DaemonCheckExit<NoOtherRestarts>| -> Result<()> {
+                    let _main_lock = get_main_lock()
+                        .context("daemon: terminating because of error getting main lock")?;
 
                     // Daemon: repeatedly carry out the work by starting a new
                     // child process to do it (so that the child crashing or being
@@ -1878,7 +1871,8 @@ fn build_command(
                         },
                         // When to exit
                         || daemon_check_exit.want_exit(),
-                    )
+                    );
+                    Ok(())
                 }
             },
         };

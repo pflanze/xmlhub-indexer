@@ -284,8 +284,10 @@ pub struct DaemonPaths {
     pub log_dir: Arc<Path>,
 }
 
-pub struct Daemon<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Other>)>
-{
+pub struct Daemon<
+    Other: Deref<Target: WarrantsRestart> + Clone,
+    F: FnOnce(DaemonCheckExit<Other>) -> Result<()>,
+> {
     pub opts: DaemonOpts,
     /// The default value for opts.restart_on_failures.eval()
     pub restart_on_failures_default: bool,
@@ -501,8 +503,10 @@ pub struct StopReport {
     pub crashed: bool,
 }
 
-impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Other>)>
-    Daemon<Other, F>
+impl<
+        Other: Deref<Target: WarrantsRestart> + Clone,
+        F: FnOnce(DaemonCheckExit<Other>) -> Result<()>,
+    > Daemon<Other, F>
 {
     pub fn create_dirs(&self) -> Result<(), PathIOError> {
         create_dir_if_not_exists(&self.state_dir())?;
@@ -726,17 +730,15 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
                 run,
             } = self;
 
-            let run = |daemon_check_exit: DaemonCheckExit<Other>| {
+            let run = |daemon_check_exit: DaemonCheckExit<Other>| -> Result<()> {
                 let mut opts = restart_opts.unwrap_or_else(Default::default);
                 opts.prefix = "daemon service process restart ".into();
                 forking_loop(
                     opts,
-                    || -> Result<()> {
-                        run(daemon_check_exit.clone());
-                        Ok(())
-                    },
+                    || -> Result<()> { run(daemon_check_exit.clone()) },
                     || daemon_check_exit.want_exit(),
-                )
+                );
+                Ok(())
             };
 
             // The wrapper does not need yet another layer for
@@ -846,7 +848,7 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
             (self.run)(DaemonCheckExit(Some((
                 DaemonStateReader(&daemon_state),
                 self.other_restart_checks,
-            ))));
+            ))))?;
 
             Ok(ExecutionResult::daemon(DaemonResult { daemon_state }))
         }
@@ -877,7 +879,7 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
     ) -> Result<ExecutionResult, DaemonError> {
         match mode {
             DaemonMode::Run => {
-                (self.run)(DaemonCheckExit(None));
+                (self.run)(DaemonCheckExit(None))?;
                 Ok(ExecutionResult::run())
             }
             DaemonMode::Start => Ok(self.start()?),
