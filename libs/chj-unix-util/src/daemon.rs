@@ -462,6 +462,8 @@ pub enum DaemonError {
     #[error("{0}")]
     IPCAtomicError(#[from] IPCAtomicError),
     #[error("{0}")]
+    PathIOError(#[from] PathIOError),
+    #[error("{0}")]
     Anyhow(#[from] anyhow::Error),
 }
 
@@ -935,6 +937,8 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
     }
 
     fn _start(self) -> Result<ExecutionResult, DaemonError> {
+        self.create_dirs()?;
+
         let daemon_state = self.daemon_state()?;
         let (current_want, current_pid) = daemon_state.read();
 
@@ -1194,8 +1198,6 @@ impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Ot
         // XX add a fall back to copying to stderr if
         // logging fails (which may also happen due to
         // disk full!)
-
-        self.create_dirs()?;
 
         // (Instead of BufReader and read_line, just read
         // chunks? No, since the sending side doesn't
