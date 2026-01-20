@@ -17,10 +17,11 @@ use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
     daemon::{
         warrants_restart::NoOtherRestarts, Daemon, DaemonCheckExit, DaemonMode, DaemonOpts,
-        DaemonPaths, ExecutionResult, TimestampMode, TimestampOpts,
+        DaemonPaths, ExecutionResult,
     },
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
+    logging::{TimestampMode, TimestampOpts},
 };
 use cj_path_util::path_util::AppendToPath;
 use clap::Parser;

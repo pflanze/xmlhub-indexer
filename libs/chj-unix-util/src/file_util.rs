@@ -1,10 +1,14 @@
 use std::{
     fmt::Debug,
     fs::{File, OpenOptions},
+    io::ErrorKind,
     path::Path,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, Context};
+
+use crate::daemon::InOutError;
 
 /// Open a file for reading and writing, without truncating it if it
 /// exists, but creating it if it doesn't exist. The filehandle is in
@@ -32,4 +36,26 @@ pub fn open_append<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<File> {
         .append(true)
         .open(path.as_ref())
         .with_context(|| anyhow!("opening {path:?} for appending"))
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("could not {what} at {path:?}: {error}")]
+pub struct PathIOError {
+    what: &'static str,
+    path: Arc<Path>,
+    error: InOutError,
+}
+
+pub fn create_dir_if_not_exists(path: &Arc<Path>) -> Result<(), PathIOError> {
+    match std::fs::create_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error) => match error.kind() {
+            ErrorKind::AlreadyExists => Ok(()),
+            _ => Err(PathIOError {
+                what: "create dir",
+                path: path.clone(),
+                error: error.into(),
+            }),
+        },
+    }
 }

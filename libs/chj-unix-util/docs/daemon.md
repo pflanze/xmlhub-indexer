@@ -73,7 +73,7 @@ Thus:
 ## Logging design
 
 - Have a `logs` folder with files named `current.log` or numbered like
-  `00001.log`, that lies inside the log directory.
+  `000001.log`, that lies inside the log directory.
 
 - Do not use compression, keep it simple.
 
