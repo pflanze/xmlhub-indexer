@@ -16,8 +16,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use chj_unix_util::{
     backoff::{LoopVerbosity, LoopWithBackoff},
     daemon::{
-        Daemon, DaemonMode, DaemonOpts, DaemonPaths, DaemonStateReader, ExecutionResult,
-        TimestampMode, TimestampOpts,
+        warrants_restart::NoOtherRestarts, Daemon, DaemonCheckExit, DaemonMode, DaemonOpts,
+        DaemonPaths, ExecutionResult, TimestampMode, TimestampOpts,
     },
     file_lock::{file_lock_nonblocking, FileLockError},
     forking_loop::forking_loop,
@@ -1794,9 +1794,10 @@ fn build_command(
                 mode: TimestampMode::Always,
             },
             paths,
+            other_restart_checks: NoOtherRestarts,
             run: {
                 let quietness = quietness.clone();
-                move |daemon_state_reader: DaemonStateReader| -> () {
+                move |daemon_check_exit: DaemonCheckExit<NoOtherRestarts>| -> () {
                     let _main_lock = match get_main_lock() {
                         Ok(lock) => lock,
                         Err(e) => {
@@ -1875,7 +1876,7 @@ fn build_command(
                             build_index_once().map(|_exit_code| ())
                         },
                         // When to exit
-                        || daemon_state_reader.want_exit(),
+                        || daemon_check_exit.want_exit(),
                     )
                 }
             },

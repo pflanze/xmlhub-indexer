@@ -3,12 +3,15 @@
 
 //! See [daemon](../docs/daemon.md) for more info.
 
+pub mod warrants_restart;
+
 use std::{
     ffi::CString,
     fmt::Debug,
     fs::{create_dir, remove_file, rename, File},
     io::{stderr, stdout, BufRead, BufReader, ErrorKind, Write},
     num::{NonZeroU32, ParseIntError},
+    ops::Deref,
     os::{
         fd::FromRawFd,
         unix::{ffi::OsStrExt, prelude::MetadataExt},
@@ -34,6 +37,7 @@ use nix::{
 
 use crate::{
     backoff::LoopWithBackoff,
+    daemon::warrants_restart::WarrantsRestart,
     eval_with_default::EvalWithDefault,
     file_lock::{file_lock_nonblocking, FileLockError},
     file_util::open_append,
@@ -398,7 +402,8 @@ pub struct DaemonPaths {
     pub log_dir: Arc<Path>,
 }
 
-pub struct Daemon<F: FnOnce(DaemonStateReader)> {
+pub struct Daemon<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Other>)>
+{
     pub opts: DaemonOpts,
     /// The default value for opts.restart_on_failures.eval()
     pub restart_on_failures_default: bool,
@@ -411,6 +416,14 @@ pub struct Daemon<F: FnOnce(DaemonStateReader)> {
     /// argument and stop processing when it doesn't give
     /// `DaemonWant::Up`.
     pub paths: DaemonPaths,
+    /// A value that implements `WarrantsRestart`, checking *other*
+    /// conditions warranting restart than the daemon state indicating
+    /// it. Used as part of the argument to `run`. See
+    /// `chj_unix_util::daemon::warrants_restart` for reusable
+    /// implementations.
+    pub other_restart_checks: Other,
+    /// The code to run in the daemon. Should return when calling
+    /// `want_exit()` on the argument returns true.
     pub run: F,
 }
 
@@ -611,7 +624,9 @@ pub struct StopReport {
     pub crashed: bool,
 }
 
-impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
+impl<Other: Deref<Target: WarrantsRestart> + Clone, F: FnOnce(DaemonCheckExit<Other>)>
+    Daemon<Other, F>
+{
     pub fn create_dirs(&self) -> Result<(), PathIOError> {
         // XX add to file_util, including PathIOError perhaps?
         let create = |path: &Arc<Path>| match create_dir(&path) {
@@ -878,17 +893,18 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 restart_opts,
                 timestamp_opts,
                 paths,
+                other_restart_checks,
                 run,
             } = self;
 
-            let run = |daemon_state_reader: DaemonStateReader| {
+            let run = |daemon_check_exit: DaemonCheckExit<Other>| {
                 forking_loop(
                     restart_opts.unwrap_or_else(Default::default),
                     || -> Result<()> {
-                        run(daemon_state_reader.clone());
+                        run(daemon_check_exit.clone());
                         Ok(())
                     },
-                    || daemon_state_reader.want_exit(),
+                    || daemon_check_exit.want_exit(),
                 )
             };
 
@@ -909,6 +925,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
                 restart_opts: None,
                 timestamp_opts,
                 paths,
+                other_restart_checks,
                 run,
             }
             ._start()
@@ -1021,9 +1038,10 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
 
                 eprintln!("daemon {session_pid} started");
 
-                (self.run)(DaemonStateReader(
-                    InnerDaemonStateReader::DaemonStateAccessor(&daemon_state),
-                ));
+                (self.run)(DaemonCheckExit(Some((
+                    DaemonStateReader(&daemon_state),
+                    self.other_restart_checks,
+                ))));
 
                 Ok(ExecutionResult::daemon(DaemonResult { daemon_state }))
             } else {
@@ -1095,7 +1113,7 @@ impl<F: FnOnce(DaemonStateReader)> Daemon<F> {
     ) -> Result<ExecutionResult, DaemonError> {
         match mode {
             DaemonMode::Run => {
-                (self.run)(DaemonStateReader(InnerDaemonStateReader::None));
+                (self.run)(DaemonCheckExit(None));
                 Ok(ExecutionResult::run())
             }
             DaemonMode::Start => Ok(self.start()?),
@@ -1391,26 +1409,30 @@ impl DaemonStateAccessor {
 }
 
 #[derive(Debug, Clone)]
-enum InnerDaemonStateReader<'t> {
-    DaemonStateAccessor(&'t DaemonStateAccessor),
-    None,
-}
-
-#[derive(Debug, Clone)]
-pub struct DaemonStateReader<'t>(InnerDaemonStateReader<'t>);
+pub struct DaemonStateReader<'t>(&'t DaemonStateAccessor);
 
 impl<'t> DaemonStateReader<'t> {
     pub fn want(&self) -> DaemonWant {
-        match self.0 {
-            InnerDaemonStateReader::DaemonStateAccessor(daemon_state_accessor) => {
-                daemon_state_accessor.want()
-            }
-            InnerDaemonStateReader::None => DaemonWant::Up,
-        }
+        self.0.want()
     }
 
     /// Whether the daemon should exit due to wanted Stop or Restart.
     pub fn want_exit(&self) -> bool {
         self.want().wants_exit()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DaemonCheckExit<'t, Other: Deref<Target: WarrantsRestart> + Clone>(
+    Option<(DaemonStateReader<'t>, Other)>,
+);
+
+impl<'t, Other: Deref<Target: WarrantsRestart> + Clone> DaemonCheckExit<'t, Other> {
+    pub fn want_exit(&self) -> bool {
+        if let Some((daemon_state_reader, other)) = &self.0 {
+            daemon_state_reader.want_exit() || other.warrants_restart()
+        } else {
+            false
+        }
     }
 }
