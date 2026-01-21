@@ -22,10 +22,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
     libc::getsid,
-    sys::signal::{
-        kill,
-        Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
-    },
+    sys::signal::Signal::{self, SIGCONT, SIGKILL, SIGSTOP},
     unistd::{execvp, setsid, Pid},
 };
 
@@ -40,6 +37,7 @@ use crate::{
     polling_signals::{IPCAtomicError, IPCAtomicU64},
     re_exec::re_exec,
     retry::{retry, retry_n},
+    signal::send_signal_to_all_processes_of_session,
     unix::easy_fork,
     util::cstring,
 };
@@ -584,42 +582,16 @@ impl<
         }
     }
 
-    fn _send_signal(&self, pid: i32, signal: Option<Signal>) -> anyhow::Result<bool> {
-        let process_group_id: i32 = pid
-            .checked_neg()
-            .ok_or_else(|| anyhow!("pid {pid} can't be negated"))?;
-
-        match kill(Pid::from_raw(process_group_id), signal) {
-            Ok(()) => Ok(true),
-            Err(e) => match e {
-                nix::errno::Errno::EPERM => {
-                    // Can't happen because there's "no way"
-                    // that between us checking is_running()
-                    // and reading the pid and signalling
-                    // another process group would be there
-                    // than ours.  XX except, what if a member
-                    // of the process group exec's a setuid
-                    // binary?
-                    panic!(
-                        "don't have permission to send signal to \
-                                     process group {process_group_id}"
-                    )
-                }
-                nix::errno::Errno::ESRCH => {
-                    // Process does not exist
-                    Ok(false)
-                }
-                _ => unreachable!(),
-            },
-        }
-    }
-
+    /// Send the signal once or twice (once via the process group,
+    /// then individually if still around) to all processes belonging
+    /// to the session that the daemon is running in.
     pub fn send_signal(&self, signal: Option<Signal>) -> anyhow::Result<bool> {
         let daemon_state = self.daemon_state()?;
         let (_old_want, was_pid) = daemon_state.read();
-        if let Some(pid) = was_pid {
+        if let Some(session_pid) = was_pid {
             retry(|| daemon_state.store_want(DaemonWant::Down));
-            self._send_signal(pid, signal)
+            let session_pid = Pid::from_raw(session_pid);
+            send_signal_to_all_processes_of_session(session_pid, signal)
         } else {
             Ok(false)
         }
@@ -654,18 +626,22 @@ impl<
 
         if was_running {
             if opts.hard(default_is_hard) {
-                if let Some(pid) = was_pid {
-                    if self._send_signal(pid, Some(Signal::SIGINT))? {
+                if let Some(session_pid) = was_pid {
+                    let session_pid = Pid::from_raw(session_pid);
+                    if send_signal_to_all_processes_of_session(session_pid, Some(Signal::SIGINT))? {
                         sent_sigint = true;
                         let num_sleeps = timeout_before_sigkill * 5;
                         'outer: {
                             for _ in 0..num_sleeps {
                                 sleep(Duration::from_millis(200));
-                                if !self._send_signal(pid, None)? {
+                                if !send_signal_to_all_processes_of_session(session_pid, None)? {
                                     break 'outer;
                                 }
                             }
-                            self._send_signal(pid, Some(Signal::SIGKILL))?;
+                            send_signal_to_all_processes_of_session(
+                                session_pid,
+                                Some(Signal::SIGKILL),
+                            )?;
                             sent_sigkill = true;
                         }
                         // Remove the pid

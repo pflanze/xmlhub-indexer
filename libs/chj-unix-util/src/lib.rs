@@ -9,6 +9,7 @@ pub mod polling_signals;
 pub mod processes;
 pub mod re_exec;
 pub mod retry;
+pub mod signal;
 pub mod unix;
 pub mod util;
 pub mod xorshift;
