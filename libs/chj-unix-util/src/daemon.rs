@@ -83,7 +83,7 @@ pub enum DaemonMode {
     /// Send a KILL signal to (i.e. terminate right away) the daemon.
     KILL,
 
-    /// Open the current log file in the pager ($PAGER or less)
+    /// Open the current log file in the pager ($PAGER or 'less')
     Log,
 
     /// Run `tail -f` on the current log file
@@ -204,7 +204,7 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
         (
             "log",
             DaemonMode::Log,
-            "Open the current log file in the pager ($PAGER or less)",
+            "Open the current log file in the pager ($PAGER or 'less')",
         ),
         (
             "logf",
