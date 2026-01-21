@@ -630,10 +630,12 @@ impl<
                     let session_pid = Pid::from_raw(session_pid);
                     if send_signal_to_all_processes_of_session(session_pid, Some(Signal::SIGINT))? {
                         sent_sigint = true;
-                        let num_sleeps = timeout_before_sigkill * 5;
+                        let sleep_duration_ms: u64 = 1000;
+                        let num_sleeps =
+                            u64::from(timeout_before_sigkill) * 1000 / sleep_duration_ms;
                         'outer: {
                             for _ in 0..num_sleeps {
-                                sleep(Duration::from_millis(200));
+                                sleep(Duration::from_millis(sleep_duration_ms));
                                 if !send_signal_to_all_processes_of_session(session_pid, None)? {
                                     break 'outer;
                                 }
