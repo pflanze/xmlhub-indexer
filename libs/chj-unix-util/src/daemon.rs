@@ -66,8 +66,13 @@ pub enum DaemonMode {
     /// options.
     Restart(StopOpts),
 
-    /// Report if there is a daemon in `start` or `run` mode.
+    /// Report if there is a daemon in `start` or `run` mode, together
+    /// with pid if running and what the desired status is.
     Status,
+
+    /// Report if there is a daemon in `start` or `run` mode (without
+    /// additional information).
+    ShortStatus,
 
     /// Send a STOP signal to (i.e. suspend) the daemon.
     STOP,
@@ -103,6 +108,7 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
             Stop(_) => (),
             Restart(_) => (),
             Status => (),
+            ShortStatus => (),
             STOP => (),
             CONT => (),
             KILL => (),
@@ -172,7 +178,13 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
         (
             "status",
             DaemonMode::Status,
-            "Show if a (start/stop based) daemon is running, and what pid.",
+            "Show if a (start/stop based) daemon is running, with pid (if running) and the\n\
+             desired status.",
+        ),
+        (
+            "short-status",
+            DaemonMode::ShortStatus,
+            "Show if a (start/stop based) daemon is running in one word.",
         ),
         (
             "STOP",
@@ -854,19 +866,23 @@ impl<
         }
     }
 
-    pub fn print_status(&self) -> anyhow::Result<()> {
+    pub fn print_status(&self, additional_info: bool) -> anyhow::Result<()> {
         let daemon_state = self.daemon_state()?;
         let is_running = self.is_running()?;
         let (want, pid) = daemon_state.read();
         let is = if is_running { "running" } else { "stopped" };
-        let pid_string = match pid {
-            Some(pid) => {
-                format!("pid: {pid}, ")
-            }
-            None => "".into(),
-        };
-        writeln!(&mut stdout(), "{is} ({pid_string}want: {want:?})")
-            .context("printing to stderr")?;
+        if additional_info {
+            let pid_string = match pid {
+                Some(pid) => {
+                    format!("pid: {pid}, ")
+                }
+                None => "".into(),
+            };
+            writeln!(&mut stdout(), "{is} ({pid_string}want: {want:?})")
+                .context("printing to stdout")?;
+        } else {
+            writeln!(&mut stdout(), "{is}").context("printing to stdout")?;
+        }
         Ok(())
     }
 
@@ -903,7 +919,11 @@ impl<
                 }
             }
             DaemonMode::Status => {
-                self.print_status()?;
+                self.print_status(true)?;
+                Ok(ExecutionResult::initiator())
+            }
+            DaemonMode::ShortStatus => {
+                self.print_status(false)?;
                 Ok(ExecutionResult::initiator())
             }
             DaemonMode::STOP => {
