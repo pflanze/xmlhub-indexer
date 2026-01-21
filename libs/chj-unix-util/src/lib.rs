@@ -6,6 +6,7 @@ pub mod file_util;
 pub mod forking_loop;
 pub mod logging;
 pub mod polling_signals;
+pub mod processes;
 pub mod re_exec;
 pub mod retry;
 pub mod unix;
