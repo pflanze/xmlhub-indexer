@@ -85,3 +85,72 @@ fn t_xorshift128plus() {
     assert_eq!(s.get(), 13170528539071654594);
     assert_eq!(s.get(), 16110659944319132175);
 }
+
+/* Yields the same results as:
+
+#include <cassert>
+
+// https://handwiki.org/wiki/Xorshift
+
+#include <stdint.h>
+
+struct splitmix64_state {
+    uint64_t s;
+};
+
+uint64_t splitmix64(struct splitmix64_state *state) {
+    uint64_t result = (state->s += 0x9E3779B97F4A7C15);
+    result = (result ^ (result >> 30)) * 0xBF58476D1CE4E5B9;
+    result = (result ^ (result >> 27)) * 0x94D049BB133111EB;
+    return result ^ (result >> 31);
+}
+
+
+struct xorshift128p_state {
+    uint64_t x[2];
+};
+
+/* The state must be seeded so that it is not all zero */
+uint64_t xorshift128p(struct xorshift128p_state *state)
+{
+    uint64_t t = state->x[0];
+    uint64_t const s = state->x[1];
+    state->x[0] = s;
+    t ^= t << 23;       // a
+    t ^= t >> 18;       // b -- Again, the shifts and the multipliers are tunable
+    t ^= s ^ (s >> 5);  // c
+    state->x[1] = t;
+    return t + s;
+}
+
+int main() {
+
+    struct splitmix64_state smstate = {0};
+
+    uint64_t tmp1 = splitmix64(&smstate);
+    uint64_t tmp2 = splitmix64(&smstate);
+
+    assert(tmp1 == 16294208416658607535ull);
+    assert(tmp2 == 7960286522194355700ull);
+
+    struct xorshift128p_state pstate = {{tmp1, tmp2}};
+
+    uint64_t a;
+    a = xorshift128p(&pstate); assert(a == 148304652509113927ull);
+    a = xorshift128p(&pstate); assert(a == 6897519897668720478ull);
+    a = xorshift128p(&pstate); assert(a == 8466708535677759538ull);
+    a = xorshift128p(&pstate); assert(a == 4573841993332567017ull);
+
+    for (int i = 0; i < 1000000 - 4; i++) {
+        xorshift128p(&pstate);
+    }
+
+    a = xorshift128p(&pstate); assert(a == 7831888472505485542ull);
+    a = xorshift128p(&pstate); assert(a == 9546132825291831751ull);
+    a = xorshift128p(&pstate); assert(a == 10667650326493356499ull);
+    a = xorshift128p(&pstate); assert(a == 13170528539071654594ull);
+    a = xorshift128p(&pstate); assert(a == 16110659944319132175ull);
+
+    return 0;
+}
+ */
