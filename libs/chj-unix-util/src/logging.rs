@@ -359,7 +359,7 @@ impl Logger {
                 Err(e) => {
                     // Will fail because we closed stderr. XX have
                     // some fail over logging location?
-                    _ = write!(
+                    _ = writeln!(
                         &mut stderr(),
                         "logger process: ending because of error: {e:#}"
                     );

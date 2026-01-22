@@ -217,9 +217,9 @@ fn errmsg() -> String {
     let mut s = String::from("please give one of the following arguments:\n\n");
     for (k, _m, doc) in FROM_STR_CASES {
         use std::fmt::Write;
-        _ = write!(&mut s, "    `{k}`:\n");
+        _ = writeln!(&mut s, "    `{k}`:");
         for line in doc.split('\n') {
-            _ = write!(&mut s, "        {line}\n");
+            _ = writeln!(&mut s, "        {line}");
         }
         s.push('\n');
     }
@@ -1062,7 +1062,7 @@ impl DaemonStateAccessor {
         let got = atomic.compare_exchange(old, new, ordering, ordering)?;
         // just testing my understanding--always guaranteed, right?
         if !(got == old) {
-            _ = write!(
+            _ = writeln!(
                 &mut stderr(),
                 "got != old, {} vs. {} at {}:{}",
                 got,
