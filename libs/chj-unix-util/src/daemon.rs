@@ -1101,7 +1101,20 @@ pub struct DaemonCheckExit<'t, Other: Deref<Target: WarrantsRestart> + Clone>(
 impl<'t, Other: Deref<Target: WarrantsRestart> + Clone> DaemonCheckExit<'t, Other> {
     pub fn want_exit(&self) -> bool {
         if let Some((daemon_state_reader, other)) = &self.0 {
-            daemon_state_reader.want_exit() || other.warrants_restart()
+            daemon_state_reader.want_exit() || {
+                if other.warrants_restart() {
+                    // Already store the change in want, so that
+                    // forking_loop or whichever upper levels don't
+                    // have to re-evaluate secondary checks again (and
+                    // trigger duplicate notifications). (Also, maybe
+                    // this is better in case the app crashes while
+                    // restarting?)
+                    retry(|| daemon_state_reader.0.store_want(DaemonWant::Restart));
+                    true
+                } else {
+                    false
+                }
+            }
         } else {
             false
         }
