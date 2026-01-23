@@ -10,6 +10,7 @@ pub mod processes;
 pub mod re_exec;
 pub mod retry;
 pub mod signal;
+pub mod timestamp_formatter;
 pub mod unix;
 pub mod util;
 pub mod xorshift;

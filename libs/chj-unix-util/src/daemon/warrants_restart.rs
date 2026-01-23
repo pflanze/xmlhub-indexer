@@ -1,11 +1,18 @@
 //! Trait and helpers to create restart need checkers for
 //! `Daemon.other_restart_checks`.
 
-use std::{io::ErrorKind, ops::Deref, time::SystemTime};
+use std::{
+    io::{stderr, ErrorKind},
+    ops::Deref,
+    time::SystemTime,
+};
 
 use anyhow::Result;
 
-use crate::{eval_with_default::EvalWithDefault, re_exec::current_exe};
+use crate::{
+    eval_with_default::EvalWithDefault, re_exec::current_exe,
+    timestamp_formatter::TimestampFormatter,
+};
 
 /// The base trait for all "other" restart checkers.
 pub trait WarrantsRestart {
@@ -41,6 +48,7 @@ impl RestartForExecutableChangeOpts {
     pub fn to_restarter(
         &self,
         default_want_restarting: bool,
+        timestamp_formatter: TimestampFormatter,
     ) -> Result<RestartForExecutableChange> {
         let restart_on_upgrades = self.eval_with_default(default_want_restarting);
         let (do_check, opt_binary_mtime) = if restart_on_upgrades {
@@ -65,6 +73,7 @@ impl RestartForExecutableChangeOpts {
             (false, None)
         };
         Ok(RestartForExecutableChange {
+            timestamp_formatter,
             do_check,
             opt_binary_mtime,
         })
@@ -73,6 +82,7 @@ impl RestartForExecutableChangeOpts {
 
 #[derive(Debug, Clone)]
 pub struct RestartForExecutableChange {
+    timestamp_formatter: TimestampFormatter,
     do_check: bool,
     opt_binary_mtime: Option<SystemTime>,
 }
@@ -84,14 +94,23 @@ impl WarrantsRestart for &RestartForExecutableChange {
                 Ok(binary) => {
                     if let Ok(metadata) = binary.metadata() {
                         if let Ok(new_mtime) = metadata.modified() {
+                            let old_mtime = self.opt_binary_mtime;
                             // if new_mtime > *mtime {  ? or allow downgrades, too:
-                            if Some(new_mtime) != self.opt_binary_mtime {
-                                // info!(
-                                //     "this binary at {binary:?} has updated, \
-                                //      from {} to {}, going to re-exec",
-                                //     SystemTimeWithDisplay(*mtime),
-                                //     SystemTimeWithDisplay(new_mtime)
-                                // );
+                            if Some(new_mtime) != old_mtime {
+                                use std::io::Write;
+                                let tmp;
+                                _ = writeln!(
+                                    &mut stderr(),
+                                    "the binary at {binary:?} has updated, from \
+                                     {} to {}, going to restart",
+                                    if let Some(old_mtime) = old_mtime {
+                                        tmp = self.timestamp_formatter.format_systemtime(old_mtime);
+                                        &tmp
+                                    } else {
+                                        "(none)"
+                                    },
+                                    self.timestamp_formatter.format_systemtime(new_mtime)
+                                );
                                 true
                             } else {
                                 false
@@ -179,7 +198,16 @@ impl<RestartForConfigChange: Deref<Target: WarrantsRestart>> WarrantsRestart
     fn warrants_restart(&self) -> bool {
         (&self.restart_for_executable_change).warrants_restart()
             || if let Some(restart_for_config_change) = &self.restart_for_config_change {
-                restart_for_config_change.warrants_restart()
+                if restart_for_config_change.warrants_restart() {
+                    use std::io::Write;
+                    _ = writeln!(
+                        &mut stderr(),
+                        "the configuration has updated, going to restart",
+                    );
+                    true
+                } else {
+                    false
+                }
             } else {
                 false
             }

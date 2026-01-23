@@ -6,17 +6,20 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::SystemTime,
 };
 
 use anyhow::{anyhow, Context};
-use chrono::{Local, Utc};
 use cj_path_util::path_util::AppendToPath;
 use nix::{
     libc::{prctl, PR_SET_NAME},
     unistd::{close, dup2, pipe, setsid, Pid},
 };
 
-use crate::{daemon::DaemonError, file_util::open_append, unix::easy_fork};
+use crate::{
+    daemon::DaemonError, file_util::open_append, timestamp_formatter::TimestampFormatter,
+    unix::easy_fork,
+};
 
 // Expecting a tab between timestamp and the rest of the line! Also,
 // expecting no slashes.
@@ -195,6 +198,11 @@ impl Logger {
         // logging fails (which may also happen due to
         // disk full!)
 
+        let timestamp_formatter = TimestampFormatter {
+            use_rfc3339: self.timestamp_opts.use_rfc3339,
+            local_time: self.logging_opts.local_time,
+        };
+
         // (Instead of BufReader and read_line, just read
         // chunks? No, since the sending side doesn't
         // actually buffer ~at all by default!)
@@ -225,21 +233,7 @@ impl Logger {
                 TimestampMode::Never => (true, false),
             };
             if !starts_with_timestamp {
-                let s = if self.logging_opts.local_time {
-                    let t = Local::now();
-                    if self.timestamp_opts.use_rfc3339 {
-                        t.to_rfc3339()
-                    } else {
-                        t.to_string()
-                    }
-                } else {
-                    let t = Utc::now();
-                    if self.timestamp_opts.use_rfc3339 {
-                        t.to_rfc3339()
-                    } else {
-                        t.to_string()
-                    }
-                };
+                let s = timestamp_formatter.format_systemtime(SystemTime::now());
                 _ = output_line.write_all(s.as_bytes());
                 if mark_added_timestamps {
                     // The comma is used (and not e.g. the dot) since
