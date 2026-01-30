@@ -24,14 +24,14 @@ pub trait WarrantsRestart {
 #[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForExecutableChangeOpts {
     #[clap(long)]
-    restart_on_upgrades: bool,
+    pub restart_on_upgrades: bool,
 
     /// Whether to restart the daemon when its executable is changed
     /// (upgraded). Restarts only happen at safe checkpoints. The
     /// options cancel each other out; the default is determined by
     /// the application (see help text higher up).
     #[clap(long)]
-    no_restart_on_upgrades: bool,
+    pub no_restart_on_upgrades: bool,
 }
 
 impl EvalWithDefault for RestartForExecutableChangeOpts {
@@ -164,14 +164,14 @@ impl RestartForExecutableChange {
 #[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForConfigChangeOpts {
     #[clap(long)]
-    restart_on_config_change: bool,
+    pub restart_on_config_change: bool,
 
     /// Whether to restart the daemon when its configuration is
     /// changed. Restarts only happen at safe checkpoints. The options
     /// cancel each other out; the default is determined by the
     /// application (see help text higher up).
     #[clap(long)]
-    no_restart_on_config_change: bool,
+    pub no_restart_on_config_change: bool,
 }
 
 impl EvalWithDefault for RestartForConfigChangeOpts {

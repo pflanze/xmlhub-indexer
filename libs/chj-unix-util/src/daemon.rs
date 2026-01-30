@@ -251,7 +251,7 @@ impl FromStr for DaemonMode {
 pub struct RestartOnFailures {
     // Adding `, help = None` does not help to avoid the empty paragraph
     #[clap(long)]
-    restart_on_failures: bool,
+    pub restart_on_failures: bool,
 
     /// Whether to restart the daemon or not when it crashes (in
     /// start/up mode).  Restarting works by forking before running
@@ -264,7 +264,7 @@ pub struct RestartOnFailures {
     /// the `run` mode, which ignores the restart setting (never
     /// restarts).
     #[clap(long)]
-    no_restart_on_failures: bool,
+    pub no_restart_on_failures: bool,
 }
 
 impl EvalWithDefault for RestartOnFailures {
