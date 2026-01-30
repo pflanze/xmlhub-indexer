@@ -6,6 +6,7 @@
 pub mod warrants_restart;
 
 use std::{
+    borrow::Cow,
     fmt::Debug,
     io::{stderr, stdout, Write},
     num::{NonZeroU32, ParseIntError},
@@ -844,7 +845,7 @@ impl<
         }
     }
 
-    pub fn print_status(&self, additional_info: bool) -> anyhow::Result<()> {
+    pub fn status_string(&self, additional_info: bool) -> anyhow::Result<Cow<'static, str>> {
         let daemon_state = self.daemon_state()?;
         let is_running = self.is_running()?;
         let (want, pid) = daemon_state.read();
@@ -856,12 +857,22 @@ impl<
                 }
                 None => "".into(),
             };
-            writeln!(&mut stdout(), "{is} ({pid_string}want: {want:?})")
-                .context("printing to stdout")?;
+            Ok(format!("{is} ({pid_string}want: {want:?})").into())
         } else {
-            writeln!(&mut stdout(), "{is}").context("printing to stdout")?;
+            Ok(is.into())
         }
-        Ok(())
+    }
+
+    pub fn print_status(&self, additional_info: bool) -> anyhow::Result<()> {
+        let s = self.status_string(additional_info)?;
+        (|| -> Result<()> {
+            let mut out = stdout().lock();
+            out.write_all(s.as_bytes())?;
+            out.write_all(b"\n")?;
+            out.flush()?;
+            Ok(())
+        })()
+        .context("printing to stdout")
     }
 
     /// Note: actions involving forking a new instance must be run
