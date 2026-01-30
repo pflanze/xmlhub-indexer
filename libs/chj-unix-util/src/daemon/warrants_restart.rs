@@ -20,7 +20,7 @@ pub trait WarrantsRestart {
     fn warrants_restart(&self) -> bool;
 }
 
-#[derive(Debug, Clone, Copy, clap::Args)]
+#[derive(Debug, Clone, Copy, Default, clap::Args)]
 #[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForExecutableChangeOpts {
     #[clap(long)]
@@ -160,7 +160,7 @@ impl RestartForExecutableChange {
 //     }
 // }
 
-#[derive(Debug, Clone, Copy, clap::Args)]
+#[derive(Debug, Clone, Copy, Default, clap::Args)]
 #[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForConfigChangeOpts {
     #[clap(long)]

@@ -116,7 +116,7 @@ pub struct TimestampOpts {
     pub mode: TimestampMode,
 }
 
-#[derive(Debug, Clone, clap::Args)]
+#[derive(Debug, Clone, Default, clap::Args)]
 pub struct LoggingOpts {
     /// If true, write log time stamps in the local time zone.
     /// Default: in UTC.

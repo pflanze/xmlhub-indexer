@@ -246,7 +246,7 @@ impl FromStr for DaemonMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, clap::Args)]
+#[derive(Debug, Clone, Copy, Default, clap::Args)]
 #[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartOnFailures {
     // Adding `, help = None` does not help to avoid the empty paragraph
@@ -278,7 +278,7 @@ impl EvalWithDefault for RestartOnFailures {
 }
 
 /// These settings may be useful to expose to the user.
-#[derive(Debug, Clone, clap::Args)]
+#[derive(Debug, Clone, Default, clap::Args)]
 pub struct DaemonOpts {
     #[clap(flatten)]
     pub logging_opts: LoggingOpts,
