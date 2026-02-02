@@ -24,7 +24,7 @@ use chj_unix_util::{
     logging::{TimestampMode, TimestampOpts},
 };
 use cj_path_util::path_util::AppendToPath;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use nix::sys::resource::{setrlimit, Resource};
@@ -229,6 +229,12 @@ enum Command {
     /// edit the file and run the `check` subcommand until there are
     /// no errors.
     AddTo(AddToOpts),
+    /// Generate a shell completions file
+    Completions {
+        /// The shell to generate the completions for
+        #[arg(value_enum)]
+        shell: clap_complete_command::Shell,
+    },
 }
 
 #[derive(clap::Parser, Debug)]
@@ -2550,7 +2556,8 @@ fn run() -> Result<Option<ExecutionResult>> {
             | Command::HelpContributing
             | Command::HelpAttributes(_)
             | Command::Check(_)
-            | Command::Changelog(_) => Opts {
+            | Command::Changelog(_)
+            | Command::Completions { shell: _ } => Opts {
                 v,
                 version_only,
                 command,
@@ -2574,12 +2581,9 @@ fn run() -> Result<Option<ExecutionResult>> {
             ur(help_attributes_command(command_opts, program_version))
         }
         Command::Changelog(command_opts) => ur(changelog_command(command_opts)),
-
         Command::Install(command_opts) => ur(install_command(command_opts)),
         Command::Upgrade(command_opts) => ur(upgrade_command(program_version, command_opts)),
-
         Command::CloneTo(command_opts) => ur(clone_to_command(program_version, command_opts)),
-
         Command::Prepare(command_opts) => {
             // `prepare` can't check `program_version` as it is not
             // given the path to the repository
@@ -2588,6 +2592,10 @@ fn run() -> Result<Option<ExecutionResult>> {
         Command::AddTo(command_opts) => ur(add_to_command(program_version, command_opts)),
         Command::Check(command_opts) => ur(check_command(program_version, command_opts)),
         Command::Build(command_opts) => Ok(Some(build_command(program_version, command_opts)?)),
+        Command::Completions { shell } => {
+            shell.generate(&mut Opts::command(), &mut std::io::stdout());
+            Ok(None)
+        }
     }
 }
 
