@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 
 use xmlhub_indexer::{
+    clap_styles::clap_styles,
     get_terminal_width::get_terminal_width,
     installation::app_signature::{
         AppSignature, AppSignatureKeyPair, AppSignaturePrivateKey, AppSignaturePublicKey,
@@ -12,8 +13,12 @@ use xmlhub_indexer::{
 };
 
 #[derive(clap::Parser, Debug)]
-#[clap(next_line_help = true)]
-#[clap(term_width = get_terminal_width())]
+#[command(
+    next_line_help = true,
+    styles = clap_styles(),
+    term_width = get_terminal_width(4),
+    bin_name = "xmlhub-indexer-signature",
+)]
 /// Tool to work with app signature keys and app signatures, when this
 /// should be necessary (normally the `xmlhub` tool will do it all
 /// internally).

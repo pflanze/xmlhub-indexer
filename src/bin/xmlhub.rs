@@ -41,6 +41,7 @@ use xmlhub_indexer::{
     checkout_context::{
         CheckExpectedSubpathsExist, CheckedCheckoutContext1, CheckedCheckoutContext2,
     },
+    clap_styles::clap_styles,
     const_util::file_name,
     fixup_path::CURRENT_DIRECTORY,
     folder::Folder,
@@ -59,8 +60,7 @@ use xmlhub_indexer::{
     section::{Highlight, NumberPath, Section},
     string_tree::StringTree,
     tuple_transpose::TupleTranspose,
-    util::format_string_list,
-    util::{append, strip_prefixes, with_output_to_file, InsertValue},
+    util::{append, format_string_list, strip_prefixes, with_output_to_file, InsertValue},
     utillib::{
         file_util_with_trash::write_file_moving_to_trash_if_exists,
         setpriority::{possibly_setpriority, PriorityWhich},
@@ -157,8 +157,12 @@ lazy_static! {
 // library crate.
 
 #[derive(clap::Parser, Debug)]
-#[clap(next_line_help = true)]
-#[clap(term_width = get_terminal_width())]
+#[command(
+    next_line_help = true,
+    styles = clap_styles(),
+    term_width = get_terminal_width(4),
+    bin_name = "xmlhub",
+)]
 /// A tool to work with XML Hub, a Git repository of BEAST2 files.
 /// Start with the "docs" subcommand, it will tell you how to use
 /// this program!

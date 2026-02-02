@@ -6,13 +6,17 @@ use std::{
 use anyhow::{Context, Result};
 use clap::Parser;
 use xmlhub_indexer::{
+    clap_styles::clap_styles,
     get_terminal_width::get_terminal_width,
     webget::{Request, WebGet, WebGetCommand},
 };
 
 #[derive(clap::Parser, Debug)]
-#[clap(next_line_help = true)]
-#[clap(term_width = get_terminal_width())]
+#[command(
+    next_line_help = true,
+    styles = clap_styles(),
+    term_width = get_terminal_width(4),
+)]
 /// Tool to test the webget library
 struct Opts {
     /// Which command to use, must be one of the supported ones.
