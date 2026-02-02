@@ -39,4 +39,4 @@ thiserror = "1.0.37"
 
 # Don't *WANT* to have this as the dependency for the lib. But how to
 # get around it?
-clap = { version = "3", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
