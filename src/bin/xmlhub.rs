@@ -178,7 +178,7 @@ struct Opts {
     /// The subcommand to run. Use `--help` after the sub-command to
     /// get a list of the allowed options there.
     #[clap(subcommand)]
-    command: Option<Command>,
+    command: Command,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -2439,123 +2439,118 @@ fn run() -> Result<Option<ExecutionResult>> {
         }
 
         match command {
-            Some(command) => match command {
-                Command::Build(BuildOpts {
-                    dryness,
-                    verbosity,
-                    versioncheck: VersionCheckOpt { no_version_check },
-                    quietness: quietness_,
-                    write_errors: write_errors_,
-                    no_commit_errors: no_commit_errors_,
-                    ok_on_written_errors,
-                    silent_on_written_errors: silent_on_written_errors_,
-                    open,
-                    open_if_changed,
-                    pull: pull_,
-                    no_commit: no_commit_,
-                    push: push_,
-                    batch: batch_,
-                    no_branch_check,
-                    daemon,
-                    daemon_sleep_time,
-                    base_path,
-                    ignore_untracked,
-                    no_repo_check,
-                    daemon_opts,
-                    limit_as,
-                }) => {
-                    // Create uninitialized variables without the underscores,
-                    // then initialize them differently depending on some of the
-                    // options (--batch, --daemon).
-                    let (
-                        pull,
-                        push,
-                        no_commit,
-                        write_errors,
-                        no_commit_errors,
-                        silent_on_written_errors,
-                        batch,
-                        quietness,
-                    );
-                    if daemon.is_some() {
-                        batch = true;
-                    } else {
-                        batch = batch_;
-                    }
-                    if batch {
-                        pull = false;
-                        push = true;
-                        no_commit = false;
-                        write_errors = true;
-                        no_commit_errors = false;
-                        silent_on_written_errors = true;
-                        quietness = quietness_.interpret_for_batch_mode();
-                        // Should we force `ignore_untracked` false?
-                        // No, rather, would want it to be true
-                        // because stale files from crashed git runs,
-                        // if they are .xml files, would lead to
-                        // spurious result. *But*, planning to use
-                        // setup for website where there is no
-                        // toplevel Git repository, thus wouldn't
-                        // work. => Issue to solve in the future.
-                    } else {
-                        pull = pull_;
-                        push = push_;
-                        no_commit = no_commit_;
-                        write_errors = write_errors_;
-                        no_commit_errors = no_commit_errors_;
-                        silent_on_written_errors = silent_on_written_errors_;
-                        quietness = quietness_;
-                    }
-
-                    // Pack the variables into a new struct
-                    Opts {
-                        v,
-                        version_only,
-                        command: Some(Command::Build(BuildOpts {
-                            dryness,
-                            verbosity,
-                            versioncheck: VersionCheckOpt { no_version_check },
-                            quietness,
-                            write_errors,
-                            no_commit_errors,
-                            ok_on_written_errors,
-                            silent_on_written_errors,
-                            open,
-                            open_if_changed,
-                            pull,
-                            no_commit,
-                            push,
-                            batch,
-                            daemon,
-                            daemon_sleep_time,
-                            no_branch_check,
-                            ignore_untracked,
-                            base_path,
-                            no_repo_check,
-                            daemon_opts,
-                            limit_as,
-                        })),
-                    }
+            Command::Build(BuildOpts {
+                dryness,
+                verbosity,
+                versioncheck: VersionCheckOpt { no_version_check },
+                quietness: quietness_,
+                write_errors: write_errors_,
+                no_commit_errors: no_commit_errors_,
+                ok_on_written_errors,
+                silent_on_written_errors: silent_on_written_errors_,
+                open,
+                open_if_changed,
+                pull: pull_,
+                no_commit: no_commit_,
+                push: push_,
+                batch: batch_,
+                no_branch_check,
+                daemon,
+                daemon_sleep_time,
+                base_path,
+                ignore_untracked,
+                no_repo_check,
+                daemon_opts,
+                limit_as,
+            }) => {
+                // Create uninitialized variables without the underscores,
+                // then initialize them differently depending on some of the
+                // options (--batch, --daemon).
+                let (
+                    pull,
+                    push,
+                    no_commit,
+                    write_errors,
+                    no_commit_errors,
+                    silent_on_written_errors,
+                    batch,
+                    quietness,
+                );
+                if daemon.is_some() {
+                    batch = true;
+                } else {
+                    batch = batch_;
                 }
-                Command::Install(_)
-                | Command::Upgrade(_)
-                | Command::CloneTo(_)
-                | Command::Prepare(_)
-                | Command::AddTo(_)
-                | Command::Docs
-                | Command::HelpContributing
-                | Command::HelpAttributes(_)
-                | Command::Check(_)
-                | Command::Changelog(_) => Opts {
+                if batch {
+                    pull = false;
+                    push = true;
+                    no_commit = false;
+                    write_errors = true;
+                    no_commit_errors = false;
+                    silent_on_written_errors = true;
+                    quietness = quietness_.interpret_for_batch_mode();
+                    // Should we force `ignore_untracked` false?
+                    // No, rather, would want it to be true
+                    // because stale files from crashed git runs,
+                    // if they are .xml files, would lead to
+                    // spurious result. *But*, planning to use
+                    // setup for website where there is no
+                    // toplevel Git repository, thus wouldn't
+                    // work. => Issue to solve in the future.
+                } else {
+                    pull = pull_;
+                    push = push_;
+                    no_commit = no_commit_;
+                    write_errors = write_errors_;
+                    no_commit_errors = no_commit_errors_;
+                    silent_on_written_errors = silent_on_written_errors_;
+                    quietness = quietness_;
+                }
+
+                // Pack the variables into a new struct
+                Opts {
                     v,
                     version_only,
-                    command: Some(command),
-                },
-            },
-            None => {
-                bail!("missing command argument. Please run with the `--help` option for help.")
+                    command: Command::Build(BuildOpts {
+                        dryness,
+                        verbosity,
+                        versioncheck: VersionCheckOpt { no_version_check },
+                        quietness,
+                        write_errors,
+                        no_commit_errors,
+                        ok_on_written_errors,
+                        silent_on_written_errors,
+                        open,
+                        open_if_changed,
+                        pull,
+                        no_commit,
+                        push,
+                        batch,
+                        daemon,
+                        daemon_sleep_time,
+                        no_branch_check,
+                        ignore_untracked,
+                        base_path,
+                        no_repo_check,
+                        daemon_opts,
+                        limit_as,
+                    }),
+                }
             }
+            Command::Install(_)
+            | Command::Upgrade(_)
+            | Command::CloneTo(_)
+            | Command::Prepare(_)
+            | Command::AddTo(_)
+            | Command::Docs
+            | Command::HelpContributing
+            | Command::HelpAttributes(_)
+            | Command::Check(_)
+            | Command::Changelog(_) => Opts {
+                v,
+                version_only,
+                command,
+            },
         }
     };
 
@@ -2568,7 +2563,7 @@ fn run() -> Result<Option<ExecutionResult>> {
     }
 
     // Run the requested command
-    match opts.command.expect("`None` dispatched already above") {
+    match opts.command {
         Command::Docs => ur(docs_command(program_version)),
         Command::HelpContributing => ur(help_contributing_command()),
         Command::HelpAttributes(command_opts) => {
