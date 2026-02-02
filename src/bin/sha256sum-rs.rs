@@ -7,7 +7,7 @@ use xmlhub_indexer::sha256::sha256sum;
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// Tool to test the sha256 function.
 struct Opts {
     file_paths: Vec<PathBuf>,

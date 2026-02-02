@@ -21,7 +21,6 @@ pub trait WarrantsRestart {
 }
 
 #[derive(Debug, Clone, Copy, Default, clap::Args)]
-#[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForExecutableChangeOpts {
     #[clap(long)]
     pub restart_on_upgrades: bool,
@@ -161,7 +160,6 @@ impl RestartForExecutableChange {
 // }
 
 #[derive(Debug, Clone, Copy, Default, clap::Args)]
-#[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartForConfigChangeOpts {
     #[clap(long)]
     pub restart_on_config_change: bool,

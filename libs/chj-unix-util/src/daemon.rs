@@ -247,7 +247,6 @@ impl FromStr for DaemonMode {
 }
 
 #[derive(Debug, Clone, Copy, Default, clap::Args)]
-#[clap(global_setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct RestartOnFailures {
     // Adding `, help = None` does not help to avoid the empty paragraph
     #[clap(long)]

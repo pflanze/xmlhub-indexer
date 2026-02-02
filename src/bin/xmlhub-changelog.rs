@@ -6,7 +6,7 @@ use xmlhub_indexer::git_version::{GitVersion, SemVersion};
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// Tool to test the changelog functionality.
 struct Opts {
     /// Whether to include the starting release (if any) in the output

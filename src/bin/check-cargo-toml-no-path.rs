@@ -7,7 +7,7 @@ use xmlhub_indexer::{cargo::check_cargo_toml_no_path, get_terminal_width::get_te
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// Just testing cargo.rs library interactively
 struct Opts {
     /// Paths to test

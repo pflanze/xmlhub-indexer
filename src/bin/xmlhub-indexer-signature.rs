@@ -13,7 +13,7 @@ use xmlhub_indexer::{
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// Tool to work with app signature keys and app signatures, when this
 /// should be necessary (normally the `xmlhub` tool will do it all
 /// internally).

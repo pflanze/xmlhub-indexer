@@ -654,7 +654,7 @@ impl<'t> Effect for ReleaseBinaries<'t> {
 }
 
 fn main() -> Result<()> {
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
 
     let sign = if opts.sign && opts.no_sign {
         bail!("conflicting sign options given")

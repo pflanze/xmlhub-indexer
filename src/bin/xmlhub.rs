@@ -158,7 +158,7 @@ lazy_static! {
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// A tool to work with XML Hub, a Git repository of BEAST2 files.
 /// Start with the "docs" subcommand, it will tell you how to use
 /// this program!

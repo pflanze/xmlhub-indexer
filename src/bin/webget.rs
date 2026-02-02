@@ -12,7 +12,7 @@ use xmlhub_indexer::{
 
 #[derive(clap::Parser, Debug)]
 #[clap(next_line_help = true)]
-#[clap(set_term_width = get_terminal_width())]
+#[clap(term_width = get_terminal_width())]
 /// Tool to test the webget library
 struct Opts {
     /// Which command to use, must be one of the supported ones.
