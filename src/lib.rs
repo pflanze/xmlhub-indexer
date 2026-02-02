@@ -3,6 +3,7 @@ pub mod browser;
 pub mod cargo;
 pub mod changelog;
 pub mod checkout_context;
+pub mod clap_styles;
 pub mod const_util;
 pub mod doi;
 pub mod dry_run;
