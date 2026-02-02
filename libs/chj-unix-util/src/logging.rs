@@ -17,8 +17,8 @@ use nix::{
 };
 
 use crate::{
-    daemon::DaemonError, file_util::open_append, timestamp_formatter::TimestampFormatter,
-    unix::easy_fork,
+    daemon::DaemonError, eval_with_default::EvalWithDefault, file_util::open_append,
+    timestamp_formatter::TimestampFormatter, unix::easy_fork,
 };
 
 // Expecting a tab between timestamp and the rest of the line! Also,
@@ -117,11 +117,32 @@ pub struct TimestampOpts {
 }
 
 #[derive(Debug, Clone, Default, clap::Args)]
-pub struct LoggingOpts {
-    /// If true, write log time stamps in the local time zone.
-    /// Default: in UTC.
+pub struct LocalTimeOpts {
+    /// If true, write log time stamps in the local time zone (the
+    /// default depends on the application)
     #[clap(long)]
     pub local_time: bool,
+
+    /// If true, write log time stamps in UTC (the default depends on
+    /// the application)
+    #[clap(long)]
+    pub utc_time: bool,
+}
+
+impl EvalWithDefault for LocalTimeOpts {
+    fn explicit_yes_and_no(&self) -> (bool, bool) {
+        let Self {
+            local_time,
+            utc_time,
+        } = self;
+        (*local_time, *utc_time)
+    }
+}
+
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct LoggingOpts {
+    #[clap(flatten)]
+    pub local_time_opts: LocalTimeOpts,
 
     /// The maximum size of the 'current.log' file in bytes before it
     /// is renamed and a new one opened.
@@ -137,8 +158,17 @@ pub struct LoggingOpts {
     pub max_log_files: Option<u32>,
 }
 
+impl LoggingOpts {
+    pub fn local_time(&self, default: bool) -> bool {
+        self.local_time_opts.eval_with_default(default)
+    }
+}
+
 pub struct Logger {
     pub logging_opts: LoggingOpts,
+    /// What the default should be if `logging_opts` does not specify
+    /// a local_time setting (or specifies both ambiguously)
+    pub local_time_default: bool,
     pub timestamp_opts: TimestampOpts,
     pub dir_path: Arc<Path>,
 }
@@ -200,7 +230,7 @@ impl Logger {
 
         let timestamp_formatter = TimestampFormatter {
             use_rfc3339: self.timestamp_opts.use_rfc3339,
-            local_time: self.logging_opts.local_time,
+            local_time: self.logging_opts.local_time(self.local_time_default),
         };
 
         // (Instead of BufReader and read_line, just read

@@ -1875,6 +1875,7 @@ fn build_command(
                     Ok(())
                 }
             },
+            local_time_default: true,
         };
         Ok(daemon.execute(daemon_mode, true)?)
     } else {

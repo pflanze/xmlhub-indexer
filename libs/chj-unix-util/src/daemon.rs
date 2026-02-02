@@ -300,8 +300,12 @@ pub struct Daemon<
     F: FnOnce(DaemonCheckExit<Other>) -> Result<()>,
 > {
     pub opts: DaemonOpts,
-    /// The default value for opts.restart_on_failures.eval()
+    /// The default value for
+    /// opts.restart_on_failures.eval_with_default()
     pub restart_on_failures_default: bool,
+    /// The default value for
+    /// opts.logging_opts.local_time_default.eval_with_default()
+    pub local_time_default: bool,
     /// The settings for the restarting; if not provided, uses its
     /// Default values. The `daemon` field is overwritten with the
     /// string "daemon service process restart ".
@@ -536,6 +540,7 @@ impl<
     pub fn to_logger(&self) -> Logger {
         Logger {
             logging_opts: self.opts.logging_opts.clone(),
+            local_time_default: self.local_time_default,
             timestamp_opts: self.timestamp_opts.clone(),
             dir_path: self.log_dir(),
         }
@@ -719,6 +724,7 @@ impl<
                 paths,
                 other_restart_checks,
                 run,
+                local_time_default,
             } = self;
 
             let run = |daemon_check_exit: DaemonCheckExit<Other>| -> Result<()> {
@@ -751,6 +757,7 @@ impl<
                 paths,
                 other_restart_checks,
                 run,
+                local_time_default,
             }
             ._start()
         } else {
