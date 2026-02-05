@@ -1,5 +1,4 @@
 use std::{
-    ffi::CString,
     fs::{remove_file, rename, File},
     io::{stderr, BufRead, BufReader, Write},
     os::{fd::FromRawFd, unix::fs::MetadataExt},
@@ -11,10 +10,7 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use cj_path_util::path_util::AppendToPath;
-use nix::{
-    libc::{prctl, PR_SET_NAME},
-    unistd::{close, dup2, pipe, setsid, Pid},
-};
+use nix::unistd::{close, dup2, pipe, setsid, Pid};
 
 use crate::{
     daemon::DaemonError, eval_with_default::EvalWithDefault, file_util::open_append,
@@ -352,18 +348,6 @@ impl Logger {
             Ok(())
         } else {
             // In the logging process.
-
-            // Make it visible that this is the logger. ('ps'
-            // doesn't show it, but `head -1 /proc/$pid/status `
-            // does.)
-            {
-                // Leak it to ensure it stays around? XX Is this necessary?
-                let name = Box::leak(Box::new(CString::new("logger").expect("compatible")));
-                unsafe {
-                    // Safe as long as `name` stays around?
-                    prctl(PR_SET_NAME, (&**name).as_ptr(), 0, 0, 0);
-                }
-            }
 
             // Never writing from this process, close so that
             // we will detect when the daemon ends.
