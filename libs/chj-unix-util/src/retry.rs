@@ -29,7 +29,8 @@ pub fn retry<R, E>(f: impl Fn() -> Result<R, E>) -> R {
         }
         if tries_left < 100 {
             if random.is_none() {
-                random = Some(Xorshift128plus::new(pthread_self()));
+                let tid = pthread_self() as u64;
+                random = Some(Xorshift128plus::new(tid));
             }
             let r = random.as_mut().expect("initialized above").get();
             sleep(Duration::from_micros(r & 16383));
