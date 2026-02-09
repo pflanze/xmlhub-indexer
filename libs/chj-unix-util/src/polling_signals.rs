@@ -123,6 +123,12 @@ impl PollingSignals {
         d
     }
 
+    /// Check whether there were any signals (just
+    /// `get_number_of_signals() > 0`)
+    pub fn got_signals(&mut self) -> bool {
+        self.get_number_of_signals() > 0
+    }
+
     /// Send one signal. This is excluded from this `PollingSignals`
     /// instance, i.e. `get_number_of_signals()` will not report
     /// it. Returns the previous value.
