@@ -5,7 +5,10 @@ use std::{
     mem::transmute,
     os::unix::fs::OpenOptionsExt,
     path::Path,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 use memmap2::{MmapMut, MmapOptions};
@@ -84,15 +87,25 @@ impl IPCAtomicU64 {
     }
 }
 
-/// A filesystem path based way to poll for 'signals';
+/// A filesystem path based way to poll for 'signals'. Cloning makes
+/// another receiver that checks independently from the original (but
+/// both receive the same 'signals').
+#[derive(Debug, Clone)]
 pub struct PollingSignals {
     seen: u64,
-    atomic: IPCAtomicU64,
+    atomic: Arc<IPCAtomicU64>,
+}
+
+/// Sending-only 'end' of a `PollingSignals`. Can be cloned to give
+/// yet another sending end.
+#[derive(Debug, Clone)]
+pub struct PollingSignalsSender {
+    atomic: Arc<IPCAtomicU64>,
 }
 
 impl PollingSignals {
     pub fn open(path: &Path, initial_value: u64) -> Result<Self, IPCAtomicError> {
-        let atomic = IPCAtomicU64::open(path, initial_value)?;
+        let atomic = IPCAtomicU64::open(path, initial_value)?.into();
         let mut s = Self {
             seen: initial_value,
             atomic,
@@ -119,10 +132,15 @@ impl PollingSignals {
         atomic.inc()
     }
 
-    /// Send one signal. This is *not* excluded from this
-    /// `PollingSignals` instance, i.e. `get_number_of_signals()` will
-    /// report it. Returns the previous value.
-    pub fn send_signal_out(&self) -> u64 {
+    pub fn sender(&self) -> PollingSignalsSender {
+        let atomic = self.atomic.clone();
+        PollingSignalsSender { atomic }
+    }
+}
+
+impl PollingSignalsSender {
+    /// Send one signal. Returns the previous value.
+    pub fn send_signal(&self) -> u64 {
         self.atomic.inc()
     }
 }
