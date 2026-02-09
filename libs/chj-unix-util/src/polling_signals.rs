@@ -118,4 +118,11 @@ impl PollingSignals {
         *seen = seen.wrapping_add(1);
         atomic.inc()
     }
+
+    /// Send one signal. This is *not* excluded from this
+    /// `PollingSignals` instance, i.e. `get_number_of_signals()` will
+    /// report it. Returns the previous value.
+    pub fn send_signal_out(&self) -> u64 {
+        self.atomic.inc()
+    }
 }
