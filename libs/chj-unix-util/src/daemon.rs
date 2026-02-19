@@ -960,7 +960,7 @@ impl<
                     &cmd,
                     &[
                         &cmd,
-                        &cstring("-f")?,
+                        &cstring("-F")?,
                         &cstring(
                             self.to_logger()
                                 .current_log_path()
