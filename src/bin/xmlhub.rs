@@ -1886,6 +1886,7 @@ fn build_command(
                 }
             },
             local_time_default: true,
+            daemon_state_accessor: Default::default(),
         };
         Ok(daemon.execute(daemon_mode, true)?)
     } else {

@@ -7,6 +7,7 @@ pub mod warrants_restart;
 
 use std::{
     borrow::Cow,
+    cell::OnceCell,
     fmt::Debug,
     io::{stderr, stdout, Write},
     num::{NonZeroU32, ParseIntError},
@@ -50,15 +51,24 @@ use crate::{
 /// etc. aliases, thus pretty unusable.
 #[derive(Debug, Clone, Copy, clap::Subcommand)]
 pub enum DaemonMode {
-    /// Do not put into background, just run forever in the foreground.
+    /// Do not put into background, just run forever in the foreground
+    /// and log to stdout/stderr. Use for running under other service
+    /// runner systems like systemd.
     Run,
 
-    /// Start daemon into background.
+    /// Start daemon into background using the built-in service
+    /// runner
     Start,
 
+    /// Start daemon into background unless there was an explicit
+    /// `stop` action before (i.e. want status is "down"). To be used
+    /// after host reboots, for starting while respecting the status
+    /// before reboot.
+    StartIfWanted,
+
     /// Stop daemon running in background (does not stop daemons in
-    /// `run` mode, only those in `start` mode). This subcommand has
-    /// options.
+    /// `run` mode, only those using the built-in service
+    /// runner). This subcommand has options.
     Stop(StopOpts),
 
     /// `stop` (ignoring errors) then `start`. This subcommand has
@@ -100,10 +110,12 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
     }
     {
         use DaemonMode::*;
-        // reminder to adapt the code below when the enum changes
+        // This is a reminder to adapt the code below when the enum
+        // changes!
         match DaemonMode::Run {
             Run => (),
             Start => (),
+            StartIfWanted => (),
             Stop(_) => (),
             Restart(_) => (),
             Status => (),
@@ -124,6 +136,11 @@ const FROM_STR_CASES: &[(&str, DaemonMode, &str)] = {
         ),
         ("start", DaemonMode::Start, "Start daemon into background."),
         ("up", DaemonMode::Start, "Alias for `start`."),
+        (
+            "start-if-wanted",
+            DaemonMode::StartIfWanted,
+            "Start only if not explicitly `stop`ped.",
+        ),
         (
             "stop",
             DaemonMode::Stop(opts(false, false)),
@@ -324,6 +341,8 @@ pub struct Daemon<
     /// The code to run in the daemon. Should return when calling
     /// `want_exit()` on the argument returns true.
     pub run: F,
+    /// Cached daemon state accessor, filled-in automatically
+    pub daemon_state_accessor: OnceCell<DaemonStateAccessor>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -359,13 +378,15 @@ pub enum DaemonError {
 }
 
 pub struct DaemonResult {
-    daemon_state: DaemonStateAccessor,
+    daemon_state_accessor: DaemonStateAccessor,
 }
 
 impl DaemonResult {
     pub fn daemon_cleanup(self) {
-        let DaemonResult { daemon_state } = self;
-        let (want, old_pid) = daemon_state.read();
+        let DaemonResult {
+            daemon_state_accessor,
+        } = self;
+        let (want, old_pid) = daemon_state_accessor.read();
         // Should not need to change the pid, right?
         let current_sid = unsafe {
             // There's actually no safety issue with getside?
@@ -379,10 +400,10 @@ impl DaemonResult {
         }
         match want {
             DaemonWant::Down => {
-                daemon_state.store(DaemonWant::Down, None);
+                daemon_state_accessor.store(DaemonWant::Down, None);
             }
             DaemonWant::Up | DaemonWant::Restart => {
-                daemon_state.store(DaemonWant::Up, Some(current_sid));
+                daemon_state_accessor.store(DaemonWant::Up, Some(current_sid));
                 // (Ah, the new instance will overwrite daemon_state
                 // again, with a new sid.)
                 let e = re_exec();
@@ -557,10 +578,25 @@ impl<
         self.daemon_state_path()
     }
 
-    fn daemon_state(&self) -> anyhow::Result<DaemonStateAccessor> {
-        let daemon_state_path = self.daemon_state_path();
-        DaemonStateAccessor::open(daemon_state_path.clone())
-            .with_context(|| anyhow!("opening {daemon_state_path:?}"))
+    /// (Create &) get from cache DaemonStateAccessor
+    fn daemon_state_accessor(&self) -> anyhow::Result<&DaemonStateAccessor> {
+        if let Some(rf) = self.daemon_state_accessor.get() {
+            Ok(rf)
+        } else {
+            let daemon_state_path = self.daemon_state_path();
+            let dsa = DaemonStateAccessor::open(daemon_state_path.clone())
+                .with_context(|| anyhow!("opening {daemon_state_path:?}"))?;
+            Ok(self.daemon_state_accessor.get_or_init(|| dsa))
+        }
+    }
+
+    /// (Create &) take out from cache
+    fn take_daemon_state_accessor(&mut self) -> anyhow::Result<DaemonStateAccessor> {
+        self.daemon_state_accessor()?;
+        Ok(self
+            .daemon_state_accessor
+            .take()
+            .expect("just created it above"))
     }
 
     /// Check via flock (sufficient, although the `DaemonState` should
@@ -591,7 +627,7 @@ impl<
     /// then individually if still around) to all processes belonging
     /// to the session that the daemon is running in.
     pub fn send_signal(&self, signal: Option<Signal>) -> anyhow::Result<bool> {
-        let daemon_state = self.daemon_state()?;
+        let daemon_state = self.daemon_state_accessor()?;
         let (_old_want, was_pid) = daemon_state.read();
         if let Some(session_pid) = was_pid {
             retry(|| daemon_state.store_want(DaemonWant::Down));
@@ -616,7 +652,7 @@ impl<
             timeout_before_sigkill,
         } = opts;
 
-        let daemon_state = self.daemon_state()?;
+        let daemon_state = self.daemon_state_accessor()?;
         let (_old_want, was_pid) = daemon_state.read();
 
         let was_running = self.is_running()?;
@@ -707,14 +743,15 @@ impl<
 
     /// Note: must be run while there are no running threads,
     /// otherwise panics! Returns the result of the `run` procedure in
-    /// the child, but nothing in the parent.
+    /// the child process when it returns, but returns immediately and
+    /// returns an empty `ExecutionResult` in the parent.
     fn start(self) -> Result<ExecutionResult, DaemonError> {
         if self
             .opts
             .restart_on_failures
             .eval_with_default(self.restart_on_failures_default)
         {
-            // Wrap `run`
+            // Wrap `self.run` to restart it when it crashes
             let Daemon {
                 opts,
                 restart_on_failures_default: _,
@@ -724,6 +761,7 @@ impl<
                 other_restart_checks,
                 run,
                 local_time_default,
+                daemon_state_accessor,
             } = self;
 
             let run = |daemon_check_exit: DaemonCheckExit<Other>| -> Result<()> {
@@ -757,6 +795,7 @@ impl<
                 other_restart_checks,
                 run,
                 local_time_default,
+                daemon_state_accessor,
             }
             ._start()
         } else {
@@ -764,11 +803,11 @@ impl<
         }
     }
 
-    fn _start(self) -> Result<ExecutionResult, DaemonError> {
+    fn _start(mut self) -> Result<ExecutionResult, DaemonError> {
         self.create_dirs()?;
 
-        let daemon_state = self.daemon_state()?;
-        let (current_want, current_pid) = daemon_state.read();
+        let daemon_state_accessor = self.take_daemon_state_accessor()?;
+        let (current_want, current_pid) = daemon_state_accessor.read();
 
         // Try to get exclusive `is_running` lock. This can fail if
         // unlucky and a concurrent process tests with the shared
@@ -795,7 +834,7 @@ impl<
                                 // up; still have it effect the
                                 // restart that would have happened
                                 // anyway given more time.
-                                retry(|| daemon_state.store_want(DaemonWant::Restart));
+                                retry(|| daemon_state_accessor.store_want(DaemonWant::Restart));
                             }
                             DaemonWant::Up => (),
                             DaemonWant::Restart => (),
@@ -813,7 +852,7 @@ impl<
             }
         };
 
-        daemon_state.want_starting();
+        daemon_state_accessor.want_starting();
 
         if let Some(_pid) = easy_fork().map_err(|error| DaemonError::ErrnoError {
             context: "fork",
@@ -835,7 +874,7 @@ impl<
 
             // Now write the new pid / session group leader to the
             // state file
-            daemon_state.store(DaemonWant::Up, Some(session_pid.into()));
+            daemon_state_accessor.store(DaemonWant::Up, Some(session_pid.into()));
 
             let logger = self.to_logger();
             logger.redirect_to_logger(session_pid)?;
@@ -843,16 +882,18 @@ impl<
             eprintln!("daemon {session_pid} started");
 
             (self.run)(DaemonCheckExit(Some((
-                DaemonStateReader(&daemon_state),
+                DaemonStateReader(&daemon_state_accessor),
                 self.other_restart_checks,
             ))))?;
 
-            Ok(ExecutionResult::daemon(DaemonResult { daemon_state }))
+            Ok(ExecutionResult::daemon(DaemonResult {
+                daemon_state_accessor,
+            }))
         }
     }
 
     pub fn status_string(&self, additional_info: bool) -> anyhow::Result<Cow<'static, str>> {
-        let daemon_state = self.daemon_state()?;
+        let daemon_state = self.daemon_state_accessor()?;
         let is_running = self.is_running()?;
         let (want, pid) = daemon_state.read();
         let is = if is_running { "running" } else { "stopped" };
@@ -894,6 +935,13 @@ impl<
                 Ok(ExecutionResult::run())
             }
             DaemonMode::Start => Ok(self.start()?),
+            DaemonMode::StartIfWanted => {
+                let daemon_state_accessor = self.daemon_state_accessor()?;
+                match daemon_state_accessor.want() {
+                    DaemonWant::Down => Ok(ExecutionResult::initiator()),
+                    DaemonWant::Up | DaemonWant::Restart => Ok(self.start()?),
+                }
+            }
             DaemonMode::Stop(opts) => {
                 let _report = self.stop_or_restartstop(DaemonWant::Down, opts, default_is_hard)?;
                 Ok(ExecutionResult::initiator())
